@@ -3,4 +3,8 @@ managed_components/
 sdk_dist/
 dependencies.lock
 sdkconfig.old
+
 *.swp
+.vscode
+.clangd
+.cache
