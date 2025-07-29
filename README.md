@@ -22,6 +22,7 @@ To build BadgeVMS you need to have esp-idf 5.5 installed. For installation instr
 Then build and run on the badge with:
 
 ```
+idf.py set-target esp32p4 # This needs to be done only once
 idf.py build flash monitor
 ```
 
