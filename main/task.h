@@ -102,7 +102,7 @@ typedef struct task_info {
     struct malloc_state  malloc_state;
     struct malloc_params malloc_params;
 
-    void              *pad; // For debugging
+    void *pad; // For debugging
 } task_info_t;
 
 __attribute__((always_inline)) inline static task_info_t *get_task_info() {

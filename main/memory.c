@@ -627,6 +627,10 @@ static IRAM_ATTR bool test_psram(intptr_t v_start, size_t size) {
             uintptr_t page    = ((address - VADDR_START) & ~(SOC_MMU_PAGE_SIZE - 1));
             bool      found   = false;
 
+            spi_flash_enable_interrupts_caches_and_other_cpu();
+            ESP_LOGE("memory_test", "Bad pages detected, rebooting");
+            esp_restart();
+
             for (int k = 0; k < 8; ++k) {
                 if (bad_pages[k] == page) {
                     found = true;

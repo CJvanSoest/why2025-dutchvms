@@ -70,6 +70,6 @@ add_dependencies(fatfs_storage_bin prepare_fatfs_staging)
 
 add_custom_target(sdk
     COMMAND ${CMAKE_COMMAND} -E copy_directory ${CMAKE_BINARY_DIR}/sdk_staging ${CMAKE_SOURCE_DIR}/sdk_dist
-    DEPENDS build_sdk
+    DEPENDS build_sdk ${CMAKE_SOURCE_DIR}/include/
     COMMENT "Creating SDK distribution in sdk_dist/"
 )

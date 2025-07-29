@@ -113,10 +113,12 @@ int app_main(void) {
     //    xTaskCreate(run_elf, "Task1", 16384, test_elf_a_start, 5, &elf_a);
     //
 
-    char **argv = malloc(sizeof(char *) * 3);
+    char **argv = malloc(sizeof(char *) * 5);
     argv[0]     = strdup("doom.eld");
     argv[1]     = strdup("-iwad");
     argv[2]     = strdup("FLASH0:doom1.wad");
+    argv[3]     = strdup("-TIMEDEMO");
+    argv[4]     = strdup("DEMO3");
 
     pid_t pida, pidb;
 
@@ -138,10 +140,11 @@ int app_main(void) {
 
     while (1) {
         while (get_num_tasks() < 1) {
-            //pidb = run_task_path("FLASH0:bench_basic_b.elf", 4096, TASK_TYPE_ELF, 2, argv);
-            // pidb = run_task_path("FLASH0:doom.elf", 4096, TASK_TYPE_ELF, 3, argv);
-            pidb = run_task_path("FLASH0:framebuffer_test.elf", 4096, TASK_TYPE_ELF, 2, argv);
-            pidb = run_task_path("FLASH0:hardware_test.elf", 4096, TASK_TYPE_ELF, 2, argv);
+            // pidb = run_task_path("FLASH0:bench_basic_b.elf", 4096, TASK_TYPE_ELF, 2, argv);
+            // pidb = run_task_path("FLASH0:doom.elf", 4096, TASK_TYPE_ELF, 5, argv);
+            pidb = run_task_path("FLASH0:doom.elf", 4096, TASK_TYPE_ELF, 3, argv);
+            // pidb = run_task_path("FLASH0:framebuffer_test.elf", 4096, TASK_TYPE_ELF, 2, argv);
+            // pidb = run_task_path("FLASH0:hardware_test.elf", 4096, TASK_TYPE_ELF, 2, argv);
             // pidb = run_task_path("FLASH0:sdl_test.elf", 4096, TASK_TYPE_ELF, 2, argv);
             vTaskDelay(10 / portTICK_PERIOD_MS);
         }

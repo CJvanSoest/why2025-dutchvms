@@ -33,6 +33,7 @@
 
 #include <stdatomic.h>
 
+#include <math.h>
 #include <sys/time.h>
 
 #define TAG "compositor"
@@ -145,9 +146,19 @@ out:
     xSemaphoreGive(window_stack_lock);
 }
 
-framebuffer_t *framebuffer_allocate(uint32_t w, uint32_t h) {
+framebuffer_t *framebuffer_allocate(uint32_t w, uint32_t h, pixel_format_t format) {
+    short framebuffer_bpp = 2;
+
+    switch (format) {
+        case BADGEVMS_PIXELFORMAT_RGBA8888: // fallthrough
+        case BADGEVMS_PIXELFORMAT_BGRA8888: framebuffer_bpp = 4; break;
+        case BADGEVMS_PIXELFORMAT_RGB565: // fallthrough
+        case BADGEVMS_PIXELFORMAT_BGR565: break;
+        default: format = BADGEVMS_PIXELFORMAT_RGB565;
+    }
+
     size_t    num_pages        = 0;
-    size_t    framebuffer_size = w * h * FRAMEBUFFER_BPP;
+    size_t    framebuffer_size = w * h * framebuffer_bpp;
     uintptr_t vaddr_start      = framebuffer_vaddr_allocate(framebuffer_size, &num_pages);
 
     if (!vaddr_start) {
@@ -183,11 +194,11 @@ framebuffer_t *framebuffer_allocate(uint32_t w, uint32_t h) {
 
     framebuffer->framebuffer.w      = w;
     framebuffer->framebuffer.h      = h;
-    framebuffer->framebuffer.format = BADGEVMS_PIXELFORMAT_RGB565;
+    framebuffer->framebuffer.format = format;
     // Keep a copy that the user can't easily change
     framebuffer->w                  = w;
     framebuffer->h                  = h;
-    framebuffer->format             = BADGEVMS_PIXELFORMAT_RGB565;
+    framebuffer->format             = format;
     framebuffer->ready              = xSemaphoreCreateBinary();
     atomic_flag_test_and_set(&framebuffer->clean);
     atomic_store_explicit(&framebuffer->active, true, memory_order_release);
@@ -291,8 +302,8 @@ static void IRAM_ATTR NOINLINE_ATTR compositor(void *ignored) {
         c.type      = EVENT_NONE;
         ssize_t res = keyboard_device->_read(keyboard_device, 0, &c, sizeof(event_t));
         if (res) {
-            if (c.e.keyboard.scancode == KEY_SCANCODE_FN) {
-                if (c.e.keyboard.down) {
+            if (c.keyboard.scancode == KEY_SCANCODE_FN) {
+                if (c.keyboard.down) {
                     fn_down = true;
                 } else {
                     fn_down = false;
@@ -302,9 +313,8 @@ static void IRAM_ATTR NOINLINE_ATTR compositor(void *ignored) {
         }
 
         if (res && window_stack) {
-            ESP_LOGV(TAG, "Got scancode %02X mods %02X", c.e.keyboard.scancode, c.e.keyboard.mod);
-            if (c.e.keyboard.scancode == KEY_SCANCODE_TAB && c.e.keyboard.mod & BADGEVMS_KMOD_LALT &&
-                c.e.keyboard.down) {
+            ESP_LOGV(TAG, "Got scancode %02X mods %02X", c.keyboard.scancode, c.keyboard.mod);
+            if (c.keyboard.scancode == KEY_SCANCODE_TAB && c.keyboard.mod & BADGEVMS_KMOD_LALT && c.keyboard.down) {
                 if (window_stack->next->title) {
                     ESP_LOGW(TAG, "ALT-TAB switching to window %p (%s)", window_stack->next, window_stack->next->title);
                 } else {
@@ -315,9 +325,9 @@ static void IRAM_ATTR NOINLINE_ATTR compositor(void *ignored) {
             }
 
             if (fn_down) {
-                if (c.e.keyboard.down) {
+                if (c.keyboard.down) {
                     window_coords_t cur_pos = window_stack->position;
-                    switch (c.e.keyboard.scancode) {
+                    switch (c.keyboard.scancode) {
                         case KEY_SCANCODE_UP: cur_pos.y -= 10; break;
                         case KEY_SCANCODE_DOWN: cur_pos.y += 10; break;
                         case KEY_SCANCODE_LEFT: cur_pos.x -= 10; break;
@@ -362,22 +372,40 @@ static void IRAM_ATTR NOINLINE_ATTR compositor(void *ignored) {
                 int content_x = window->position.x + BORDER_PX;
                 int content_y = window->position.y + BORDER_TOP_PX;
 
+                int size_w = window->size.w;
+                int size_h = window->size.h;
+
                 if (window->flags & WINDOW_FLAG_FULLSCREEN) {
                     content_x = 0;
                     content_y = 0;
-                }
-
-                int rotated_w, rotated_h;
-                if (rotation == ROTATION_ANGLE_90 || rotation == ROTATION_ANGLE_270) {
-                    rotated_w = window->size.h;
-                    rotated_h = window->size.w;
-                } else {
-                    rotated_w = window->size.w;
-                    rotated_h = window->size.h;
+                    size_w    = FRAMEBUFFER_MAX_W;
+                    size_h    = FRAMEBUFFER_MAX_H;
                 }
 
                 int fb_x = 0, fb_y = 0;
                 rotate_coordinates(content_x, content_y, rotation, &fb_x, &fb_y);
+
+                // Fill the window entirely, preserving aspect ratio and centering
+                float scale_x = ((float)size_w / (float)framebuffer->w);
+                float scale_y = ((float)size_h / (float)framebuffer->h);
+
+                float scale = fminf(scale_x, scale_y);
+
+                float scaled_w = framebuffer->w * scale;
+                float scaled_h = framebuffer->h * scale;
+
+                int rotated_w, rotated_h, rotated_size_w, rotated_size_h;
+                if (rotation == ROTATION_ANGLE_90 || rotation == ROTATION_ANGLE_270) {
+                    rotated_w      = scaled_h;
+                    rotated_h      = scaled_w;
+                    rotated_size_w = size_h;
+                    rotated_size_h = size_w;
+                } else {
+                    rotated_w      = scaled_w;
+                    rotated_h      = scaled_h;
+                    rotated_size_w = size_w;
+                    rotated_size_h = size_w;
+                }
 
                 int final_fb_x = fb_x;
                 int final_fb_y = fb_y;
@@ -397,8 +425,23 @@ static void IRAM_ATTR NOINLINE_ATTR compositor(void *ignored) {
                     ppa_rotation = PPA_SRM_ROTATION_ANGLE_270;
                 }
 
-                float scale_x = ((float)window->size.w / (float)framebuffer->w);
-                float scale_y = ((float)window->size.h / (float)framebuffer->h);
+                final_fb_x += ((rotated_size_w / 2) - (rotated_w / 2));
+                final_fb_y += ((rotated_size_h / 2) - (rotated_h / 2));
+
+                bool                 rgb_swap  = false;
+                bool                 byte_swap = false;
+                ppa_srm_color_mode_t mode      = PPA_SRM_COLOR_MODE_RGB565;
+
+                switch (framebuffer->format) {
+                    case BADGEVMS_PIXELFORMAT_RGB565: rgb_swap = true; // Fallthrough
+                    case BADGEVMS_PIXELFORMAT_BGR565: break;
+                    case BADGEVMS_PIXELFORMAT_RGBA8888: rgb_swap = true; // Fallthrough
+                    case BADGEVMS_PIXELFORMAT_BGRA8888:
+                        byte_swap = true;
+                        mode      = PPA_SRM_COLOR_MODE_ARGB8888;
+                        break;
+                    default:
+                }
 
                 ppa_srm_oper_config_t oper_config = {
                     .in.buffer         = framebuffer->framebuffer.pixels,
@@ -408,7 +451,7 @@ static void IRAM_ATTR NOINLINE_ATTR compositor(void *ignored) {
                     .in.block_h        = framebuffer->h,
                     .in.block_offset_x = 0,
                     .in.block_offset_y = 0,
-                    .in.srm_cm         = PPA_SRM_COLOR_MODE_RGB565,
+                    .in.srm_cm         = mode,
 
                     .out.buffer         = framebuffers[cur_fb],
                     .out.buffer_size    = FRAMEBUFFER_BYTES,
@@ -419,10 +462,10 @@ static void IRAM_ATTR NOINLINE_ATTR compositor(void *ignored) {
                     .out.srm_cm         = PPA_SRM_COLOR_MODE_RGB565,
 
                     .rotation_angle = ppa_rotation,
-                    .scale_x        = scale_x,
-                    .scale_y        = scale_y,
-                    .rgb_swap       = (framebuffer->format == BADGEVMS_PIXELFORMAT_RGB565),
-                    .byte_swap      = 0,
+                    .scale_x        = scale,
+                    .scale_y        = scale,
+                    .rgb_swap       = rgb_swap,
+                    .byte_swap      = byte_swap,
                     .mode           = PPA_TRANS_MODE_BLOCKING,
                 };
 
@@ -437,7 +480,7 @@ static void IRAM_ATTR NOINLINE_ATTR compositor(void *ignored) {
                     if (ppa_result != ESP_OK) {
                         printf("PPA operation failed: %s\n", esp_err_to_name(ppa_result));
                         printf(
-                            "Trying: at %ux%u size %ux%u -> %ux%u size %ux%u scale %fx%f\n",
+                            "Trying: at %ux%u size %ux%u -> %ux%u size %ux%u scale %f\n",
                             window->position.x,
                             window->position.y,
                             window->size.w,
@@ -446,8 +489,7 @@ static void IRAM_ATTR NOINLINE_ATTR compositor(void *ignored) {
                             final_fb_y,
                             framebuffer->w,
                             framebuffer->h,
-                            scale_x,
-                            scale_y
+                            scale
                         );
                     } else {
                         changes = true;
@@ -599,7 +641,7 @@ window_flag_t window_flags_set(window_t *window, window_flag_t flags) {
 }
 
 framebuffer_t *
-    window_framebuffer_allocate(window_handle_t window, pixel_format_t pixel_format, window_size_t size, int *num) {
+    window_framebuffer_allocate(window_handle_t window, pixel_format_t format, window_size_t size, int *num) {
     if (window->num_fb == WINDOW_MAX_FRAMEBUFFER) {
         ESP_LOGW(TAG, "Window already has the max number of framebuffers");
         return NULL;
@@ -608,17 +650,11 @@ framebuffer_t *
     size.w = size.w > FRAMEBUFFER_MAX_W ? FRAMEBUFFER_MAX_W : size.w;
     size.h = size.h > FRAMEBUFFER_MAX_H ? FRAMEBUFFER_MAX_H : size.h;
 
-    size                       = window_clamp_size(window, size);
-    framebuffer_t         *fb  = framebuffer_allocate(size.w, size.h);
-    managed_framebuffer_t *mfb = (managed_framebuffer_t *)fb;
+    size              = window_clamp_size(window, size);
+    framebuffer_t *fb = framebuffer_allocate(size.w, size.h, format);
     if (!fb) {
         ESP_LOGW(TAG, "Unable to allocate framebuffer");
         return NULL;
-    }
-
-    if (pixel_format == BADGEVMS_PIXELFORMAT_RGB565 || pixel_format == BADGEVMS_PIXELFORMAT_BGR565) {
-        fb->format  = pixel_format;
-        mfb->format = pixel_format;
     }
 
     window->framebuffers[window->num_fb] = (managed_framebuffer_t *)fb;

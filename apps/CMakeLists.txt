@@ -81,7 +81,7 @@ function(build_app app_name)
             ${ABSOLUTE_SOURCES}
             ${LIBRARY_FLAGS}
             ${DEFINE_FLAGS}
-        DEPENDS ${ABSOLUTE_SOURCES} ${LIBRARY_DEPENDENCIES}
+        DEPENDS ${ABSOLUTE_SOURCES} ${LIBRARY_DEPENDENCIES} ${SDK_INCLUDE_DIR}
         COMMENT "Building app ELF: ${app_name}"
         VERBATIM
     )

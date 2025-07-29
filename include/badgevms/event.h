@@ -43,5 +43,5 @@ typedef struct {
     event_type_t type;
     union {
         keyboard_event_t keyboard;
-    } e;
+    };
 } event_t;

@@ -136,7 +136,7 @@ event_t scancode_to_event(tca8418_device_t *device, uint8_t scancode) {
     }
 
     event_t event;
-    event.e.keyboard.down = scancode >> 7; // high bit set means pressed
+    event.keyboard.down = scancode >> 7; // high bit set means pressed
 
     key_mod_t mod;
     switch (s) {
@@ -151,25 +151,25 @@ event_t scancode_to_event(tca8418_device_t *device, uint8_t scancode) {
     }
 
     if (mod != BADGEVMS_KMOD_NONE) {
-        if (event.e.keyboard.down) {
+        if (event.keyboard.down) {
             device->mod_state |= mod;
         } else {
             device->mod_state &= ~mod;
         }
     }
 
-    if (event.e.keyboard.down) {
+    if (event.keyboard.down) {
         event.type = EVENT_KEY_DOWN;
     } else {
         event.type = EVENT_KEY_UP;
     }
 
-    event.e.keyboard.timestamp = (int64_t)tv_now.tv_sec * 1000000L + (int64_t)tv_now.tv_usec;
-    event.e.keyboard.scancode  = s;
-    event.e.keyboard.key       = BADGEVMS_SCANCODE_TO_KEYCODE(s);
-    event.e.keyboard.repeat    = false;
-    event.e.keyboard.mod       = device->mod_state;
-    event.e.keyboard.text      = keyboard_get_ascii(s, device->mod_state);
+    event.keyboard.timestamp = (int64_t)tv_now.tv_sec * 1000000L + (int64_t)tv_now.tv_usec;
+    event.keyboard.scancode  = s;
+    event.keyboard.key       = BADGEVMS_SCANCODE_TO_KEYCODE(s);
+    event.keyboard.repeat    = false;
+    event.keyboard.mod       = device->mod_state;
+    event.keyboard.text      = keyboard_get_ascii(s, device->mod_state);
 
     return event;
 }

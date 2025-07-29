@@ -49,10 +49,10 @@ int main(int argc, char *argv[]) {
 
         event_t e = window_event_poll(window, false, 0);
         if (e.type == EVENT_KEY_DOWN) {
-            if (e.e.keyboard.scancode == KEY_SCANCODE_TAB) {
+            if (e.keyboard.scancode == KEY_SCANCODE_TAB) {
                 vis = !vis;
             }
-            if (e.e.keyboard.scancode == KEY_SCANCODE_ESCAPE) {
+            if (e.keyboard.scancode == KEY_SCANCODE_ESCAPE) {
                 break;
             }
         }

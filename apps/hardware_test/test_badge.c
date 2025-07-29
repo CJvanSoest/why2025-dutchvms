@@ -846,7 +846,7 @@ int main() {
                 case EVENT_QUIT: running = false; break;
 
                 case EVENT_KEY_DOWN:
-                case EVENT_KEY_UP: handle_keyboard_event(&app, &event.e.keyboard); break;
+                case EVENT_KEY_UP: handle_keyboard_event(&app, &event.keyboard); break;
 
                 default: break;
             }

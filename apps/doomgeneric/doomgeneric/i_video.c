@@ -165,10 +165,7 @@ void cmap_to_fb(uint8_t *out, uint8_t *in, int in_pixels)
 
         if (s_Fb.bits_per_pixel == 16)
         {
-            // RGB565 packing
-            uint16_t p = ((c.r & 0xF8) << 8) |
-                         ((c.g & 0xFC) << 3) |
-                         (c.b >> 3);
+	    uint16_t p = rgb565_palette[*in];
 
 #ifdef SYS_BIG_ENDIAN
             p = swapeLE16(p); // can't use SHORT() because this needs to stay unsigned
@@ -208,8 +205,8 @@ void I_InitGraphics (void)
     char *mode;
 
 	memset(&s_Fb, 0, sizeof(struct FB_ScreenInfo));
-	s_Fb.xres = DOOMGENERIC_RESX;
-	s_Fb.yres = DOOMGENERIC_RESY;
+	s_Fb.xres = SCREENWIDTH;
+	s_Fb.yres = SCREENHEIGHT;
 	s_Fb.xres_virtual = s_Fb.xres;
 	s_Fb.yres_virtual = s_Fb.yres;
 
@@ -227,7 +224,7 @@ void I_InitGraphics (void)
 	else {
 		// default to rgba8888 like the old behavior, for compatibility
 		// maybe could warn here?
-		mode = "rgba8888";
+		mode = "rgb565";
 	}
 
 	if (strcmp(mode, "rgba8888") == 0) {
@@ -279,9 +276,9 @@ void I_InitGraphics (void)
         fb_scaling = i;
         printf("I_InitGraphics: Scaling factor: %d\n", fb_scaling);
     } else {
-        fb_scaling = s_Fb.xres / SCREENWIDTH;
-        if (s_Fb.yres / SCREENHEIGHT < fb_scaling)
-            fb_scaling = s_Fb.yres / SCREENHEIGHT;
+        // fb_scaling = s_Fb.xres / SCREENWIDTH;
+        //if (s_Fb.yres / SCREENHEIGHT < fb_scaling)
+        //    fb_scaling = s_Fb.yres / SCREENHEIGHT;
         printf("I_InitGraphics: Auto-scaling factor: %d\n", fb_scaling);
     }
 
@@ -387,36 +384,39 @@ void I_ReadScreen (byte* scr)
 
 void I_SetPalette (byte* palette)
 {
-	int i;
-	//col_t* c;
+    int i;
 
-	//for (i = 0; i < 256; i++)
-	//{
-	//	c = (col_t*)palette;
+    if (s_Fb.bits_per_pixel == 16) {
+        for (i = 0; i < 256; i++) {
+            col_t c;
+            c.r = gammatable[usegamma][*palette++];
+            c.g = gammatable[usegamma][*palette++];
+            c.b = gammatable[usegamma][*palette++];
 
-	//	rgb565_palette[i] = GFX_RGB565(gammatable[usegamma][c->r],
-	//								   gammatable[usegamma][c->g],
-	//								   gammatable[usegamma][c->b]);
+            uint16_t r = (c.r + 4) >> 3;  // Round to 5 bits (add half of 8)
+            uint16_t g = (c.g + 2) >> 2;  // Round to 6 bits (add half of 4)
+            uint16_t b = (c.b + 4) >> 3;  // Round to 5 bits (add half of 8)
 
-	//	palette += 3;
-	//}
-    
+            r = (r > 31) ? 31 : r;
+            g = (g > 63) ? 63 : g;
+            b = (b > 31) ? 31 : b;
 
-    /* performance boost:
-     * map to the right pixel format over here! */
-
-    for (i=0; i<256; ++i ) {
-        colors[i].a = 0;
-        colors[i].r = gammatable[usegamma][*palette++];
-        colors[i].g = gammatable[usegamma][*palette++];
-        colors[i].b = gammatable[usegamma][*palette++];
+            rgb565_palette[i] = (r << s_Fb.red.offset) |
+                               (g << s_Fb.green.offset) |
+                               (b << s_Fb.blue.offset);
+        }
+    } else {
+        for (i = 0; i < 256; ++i) {
+            colors[i].a = 0;
+            colors[i].r = gammatable[usegamma][*palette++];
+            colors[i].g = gammatable[usegamma][*palette++];
+            colors[i].b = gammatable[usegamma][*palette++];
+        }
     }
 
 #ifdef CMAP256
-
     palette_changed = true;
-
-#endif  // CMAP256
+#endif
 }
 
 // Given an RGB value, find the closest matching palette index.

@@ -74,18 +74,18 @@ void BADGEVMS_PumpEvents(SDL_VideoDevice *_this)
 
             case EVENT_KEY_DOWN:
             case EVENT_KEY_UP:
-                sdl_event.type = badgevms_event.e.keyboard.down ? SDL_EVENT_KEY_DOWN : SDL_EVENT_KEY_UP;
+                sdl_event.type = badgevms_event.keyboard.down ? SDL_EVENT_KEY_DOWN : SDL_EVENT_KEY_UP;
                 sdl_event.key.windowID = SDL_GetWindowID(sdl_window);
-                sdl_event.key.scancode = badgevms_event.e.keyboard.scancode;
-                sdl_event.key.key = badgevms_event.e.keyboard.key;
-                sdl_event.key.mod = badgevms_event.e.keyboard.mod;
-                sdl_event.key.down = badgevms_event.e.keyboard.down;
-                sdl_event.key.repeat = badgevms_event.e.keyboard.repeat;
+                sdl_event.key.scancode = badgevms_event.keyboard.scancode;
+                sdl_event.key.key = badgevms_event.keyboard.key;
+                sdl_event.key.mod = badgevms_event.keyboard.mod;
+                sdl_event.key.down = badgevms_event.keyboard.down;
+                sdl_event.key.repeat = badgevms_event.keyboard.repeat;
                 sdl_event.key.timestamp = SDL_GetTicksNS();
                 SDL_PushEvent(&sdl_event);
 
-                if (badgevms_event.e.keyboard.down && badgevms_event.e.keyboard.text != 0) {
-                    char text[2] = { badgevms_event.e.keyboard.text, 0 };
+                if (badgevms_event.keyboard.down && badgevms_event.keyboard.text != 0) {
+                    char text[2] = { badgevms_event.keyboard.text, 0 };
                     SDL_SendKeyboardText(text);
                 }
                 break;

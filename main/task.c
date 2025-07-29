@@ -45,9 +45,9 @@ extern void __real_xt_unhandled_exception(void *frame);
 
 static char const *TAG = "task";
 
-IRAM_ATTR task_info_t       kernel_task = {
-          .heap_start = KERNEL_HEAP_START,
-          .heap_end   = KERNEL_HEAP_START,
+IRAM_ATTR task_info_t kernel_task = {
+    .heap_start = KERNEL_HEAP_START,
+    .heap_end   = KERNEL_HEAP_START,
 };
 
 typedef struct {
@@ -159,7 +159,7 @@ static task_info_t *task_info_init() {
         return NULL;
     }
 
-    task_info->current_files                  = 3;
+    task_info->current_files           = 3;
     task_info->file_handles[0].is_open = true;
     task_info->file_handles[0].device  = device_get("TT01");
     task_info->file_handles[1].is_open = true;
@@ -298,7 +298,7 @@ static void elf_task(task_info_t *task_info) {
     ESP_LOGI(TAG, "Writing back and invalidating our address space");
     writeback_and_invalidate_task(task_info);
 
-    ESP_LOGI(TAG, "Start ELF file entrypoint");
+    ESP_LOGW(TAG, "Start ELF file entrypoint at %p", elf->entry);
     esp_elf_request(elf, 0, task_info->argc, task_info->argv);
 
     ESP_LOGI(TAG, "Successfully exited from ELF file");

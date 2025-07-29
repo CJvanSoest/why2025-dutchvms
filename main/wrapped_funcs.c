@@ -233,12 +233,8 @@ ssize_t why_write(int fd, void const *buf, size_t count) {
     task_info_t *task_info = get_task_info();
     ESP_LOGD("why_write", "Calling write from task %p fd = %i count = %zi", task_info->handle, fd, count);
     if (task_info->file_handles[fd].device->_write) {
-        return task_info->file_handles[fd].device->_write(
-            task_info->file_handles[fd].device,
-            task_info->file_handles[fd].dev_fd,
-            buf,
-            count
-        );
+        return task_info->file_handles[fd]
+            .device->_write(task_info->file_handles[fd].device, task_info->file_handles[fd].dev_fd, buf, count);
     } else {
         ESP_LOGE("why_write", "fd %i has no valid write function", fd);
     }
@@ -257,12 +253,8 @@ ssize_t why_read(int fd, void *buf, size_t count) {
             buf,
             count
         );
-        return task_info->file_handles[fd].device->_read(
-            task_info->file_handles[fd].device,
-            task_info->file_handles[fd].dev_fd,
-            buf,
-            count
-        );
+        return task_info->file_handles[fd]
+            .device->_read(task_info->file_handles[fd].device, task_info->file_handles[fd].dev_fd, buf, count);
     } else {
         ESP_LOGE("why_read", "fd %i has no valid read function", fd);
     }
@@ -274,12 +266,8 @@ off_t why_lseek(int fd, off_t offset, int whence) {
     task_info_t *task_info = get_task_info();
     ESP_LOGI("why_lseek", "Calling lseek from task %p", task_info->handle);
     if (task_info->file_handles[fd].device->_lseek) {
-        return task_info->file_handles[fd].device->_lseek(
-            task_info->file_handles[fd].device,
-            task_info->file_handles[fd].dev_fd,
-            offset,
-            whence
-        );
+        return task_info->file_handles[fd]
+            .device->_lseek(task_info->file_handles[fd].device, task_info->file_handles[fd].dev_fd, offset, whence);
     } else {
         ESP_LOGE("why_lseek", "fd %i has no valid lseek function", fd);
     }
@@ -398,19 +386,19 @@ void why_exit(int status) {
     vTaskDelete(NULL);
 }
 
-int why_mkdir(const char *pathname, mode_t mode) {
+int why_mkdir(char const *pathname, mode_t mode) {
     return -1;
 }
 
-int why_system(const char *command) {
+int why_system(char const *command) {
     return 0;
 }
 
-int why_rename(const char *oldpath, const char *newpath) {
+int why_rename(char const *oldpath, char const *newpath) {
     return -1;
 }
 
-int why_remove(const char *pathname) {
+int why_remove(char const *pathname) {
     return -1;
 }
 

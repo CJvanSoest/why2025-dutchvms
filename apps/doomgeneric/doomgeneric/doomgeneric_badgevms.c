@@ -1,11 +1,13 @@
 //doomgeneric for cross-platform development library 'Simple DirectMedia Layer'
 
 #include "doomkeys.h"
+#include "i_video.h"
 #include "m_argv.h"
 #include "doomgeneric.h"
 
 #include <stdio.h>
 #include <unistd.h>
+#include <string.h>
 #include <time.h>
 
 #include <stdbool.h>
@@ -16,7 +18,8 @@
 #include <badgevms/event.h>
 
 window_handle_t window = NULL;
-framebuffer_t *framebuffer = NULL;
+framebuffer_t *framebuffer[2];
+int cur_fb;
 struct timespec start_time;
 
 #define KEYQUEUE_SIZE 16
@@ -25,20 +28,11 @@ static unsigned short s_KeyQueue[KEYQUEUE_SIZE];
 static unsigned int s_KeyQueueWriteIndex = 0;
 static unsigned int s_KeyQueueReadIndex = 0;
 
-static uint16_t rgb888_to_rgb565_lut[256];
-static bool lut_initialized = false;
+static unsigned char convertToDoomKey(keyboard_event_t event)
+{
+  char key;
 
-void init_conversion_lut() {
-    if (lut_initialized) return;
-
-    for (int i = 0; i < 256; i++) {
-        rgb888_to_rgb565_lut[i] = i >> 3;  // 8-bit to 5-bit for R and B
-    }
-    lut_initialized = true;
-}
-
-static unsigned char convertToDoomKey(keyboard_scancode_t key){
-  switch (key)
+  switch (event.scancode)
     {
     case KEY_SCANCODE_RETURN:
       key = KEY_ENTER;
@@ -110,15 +104,18 @@ static unsigned char convertToDoomKey(keyboard_scancode_t key){
       key = KEY_MINUS;
       break;
     default:
-      key = tolower(key);
+      if (event.text) {
+        key = tolower(event.text);
+      }
       break;
     }
 
   return key;
 }
 
-static void addKeyToQueue(int pressed, keyboard_scancode_t keyCode){
-  unsigned char key = convertToDoomKey(keyCode);
+static void addKeyToQueue(int pressed, keyboard_event_t event)
+{
+  unsigned char key = convertToDoomKey(event);
 
   unsigned short keyData = (pressed << 8) | key;
 
@@ -127,7 +124,8 @@ static void addKeyToQueue(int pressed, keyboard_scancode_t keyCode){
   s_KeyQueueWriteIndex %= KEYQUEUE_SIZE;
 }
 
-static void handleKeyInput(){
+static void handleKeyInput()
+{
   event_t e;
   do {
     e = window_event_poll(window, false, 0);
@@ -136,41 +134,38 @@ static void handleKeyInput(){
       exit(1);
     }
     if (e.type == EVENT_KEY_DOWN) {
-      //KeySym sym = XKeycodeToKeysym(s_Display, e.xkey.keycode, 0);
-      //printf("KeyPress:%d sym:%d\n", e.xkey.keycode, sym);
-      addKeyToQueue(1, e.e.keyboard.scancode);
+      if (e.keyboard.scancode == KEY_SCANCODE_RETURN && e.keyboard.mod & BADGEVMS_KMOD_LALT) {
+        window_flag_t flags = window_flags_get(window);
+        window_flags_set(window, flags ^ WINDOW_FLAG_FULLSCREEN);
+      } else {
+        addKeyToQueue(1, e.keyboard);
+      }
     } else if (e.type == EVENT_KEY_UP) {
-      //KeySym sym = XKeycodeToKeysym(s_Display, e.xkey.keycode, 0);
-      //printf("KeyRelease:%d sym:%d\n", e.xkey.keycode, sym);
-      addKeyToQueue(0, e.e.keyboard.scancode);
+      if (! (e.keyboard.scancode == KEY_SCANCODE_RETURN && e.keyboard.mod & BADGEVMS_KMOD_LALT)) {
+        addKeyToQueue(0, e.keyboard);
+      }
     }
   } while (e.type != EVENT_NONE);
 }
 
-
-void DG_Init(){
+void DG_Init()
+{
   window = window_create("DOOM", (window_size_t){DOOMGENERIC_RESX, DOOMGENERIC_RESY}, 0);
-  framebuffer = window_framebuffer_allocate(window, BADGEVMS_PIXELFORMAT_RGB565, (window_size_t){DOOMGENERIC_RESX, DOOMGENERIC_RESY}, NULL);
+  // Let BadgeVMS do hardware scaling for us
+  framebuffer[0] = window_framebuffer_allocate(window, BADGEVMS_PIXELFORMAT_BGR565, (window_size_t){SCREENWIDTH, SCREENHEIGHT}, NULL);
+  framebuffer[1] = window_framebuffer_allocate(window, BADGEVMS_PIXELFORMAT_BGR565, (window_size_t){SCREENWIDTH, SCREENHEIGHT}, NULL);
+  cur_fb = 0;
+  DG_ScreenBuffer = (void*)framebuffer[cur_fb]->pixels;
   clock_gettime(CLOCK_MONOTONIC, &start_time);
 }
 
 void DG_DrawFrame()
 {
-    init_conversion_lut();
-
     uint32_t* src = (uint32_t*)DG_ScreenBuffer;
-    uint16_t* dst = framebuffer->pixels;
 
-    for (int i = 0; i < DOOMGENERIC_RESX * DOOMGENERIC_RESY; i++) {
-        uint32_t pixel = src[i];
-        uint8_t r = (pixel >> 16) & 0xFF;
-        uint8_t g = (pixel >> 8) & 0xFF;
-        uint8_t b = pixel & 0xFF;
-
-        dst[i] = (rgb888_to_rgb565_lut[r] << 11) | ((g >> 2) << 5) | rgb888_to_rgb565_lut[b];
-    }
-
-    window_framebuffer_update(window, 0, true, NULL, 0);
+    window_framebuffer_update(window, cur_fb, false, NULL, 0);
+    cur_fb = !cur_fb;
+    DG_ScreenBuffer = (void*)framebuffer[cur_fb]->pixels;
     handleKeyInput();
 }
 
@@ -209,17 +204,18 @@ int DG_GetKey(int* pressed, unsigned char* doomKey)
 
 void DG_SetWindowTitle(const char * title)
 {
+  window_title_set(window, title);
 }
 
 int main(int argc, char **argv)
 {
-    doomgeneric_Create(argc, argv);
+  doomgeneric_Create(argc, argv);
 
-    for (int i = 0; ; i++)
-    {
-        doomgeneric_Tick();
-    }
-    
+  for (int i = 0; ; i++)
+  {
+      doomgeneric_Tick();
+  }
+  
 
-    return 0;
+  return 0;
 }

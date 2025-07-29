@@ -121,11 +121,23 @@ IRAM_ATTR void draw_window_box(uint16_t *fb, window_t *window, bool foreground) 
     }
 
     // Title text
-    char const *title           = foreground ? "FOREGROUND" : "BACKGROUND";
-    int         text_width      = strlen(title) * (FONT_WIDTH + 1) - 1;
-    int         title_bar_width = total_width - 4; // Account for borders
-    int         text_x          = x + 2 + (title_bar_width - text_width) / 2;
-    int         text_y          = y + (BORDER_TOP_PX - FONT_HEIGHT) / 2; // Center vertically in title bar
+    char title[21];
+    if (window->title) {
+        strncpy(title, window->title, 20);
+    } else {
+        strncpy(title, foreground ? "FOREGROUND" : "BACKGROUND", 20);
+    }
+    int max_text = strlen(title);
+    int text_width;
+    int title_bar_width = total_width - 4; // Account for borders
+
+    do {
+        title[max_text--] = '\0';
+        text_width        = strlen(title) * (FONT_WIDTH + 1) - 1;
+    } while (text_width > title_bar_width);
+
+    int text_x = x + 2 + (title_bar_width - text_width) / 2;
+    int text_y = y + (BORDER_TOP_PX - FONT_HEIGHT) / 2; // Center vertically in title bar
 
     if (foreground) {
         // Subtle drop shadow effect
