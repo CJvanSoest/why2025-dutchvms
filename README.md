@@ -26,6 +26,8 @@ idf.py set-target esp32p4 # This needs to be done only once
 idf.py build flash monitor
 ```
 
+_Note: When you do a `git pull` please run an `idf.py fullclean` before rebuilding so changes to sdkconfig.defaults are picked up_
+
 # Building applications
 
 BadgeVMS has a simple SDK with C, BadgeVMS headers, and SDL3. You can build the SDK with
