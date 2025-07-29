@@ -5,23 +5,24 @@ cmake_minimum_required(VERSION 3.16)
 include(ExternalProject)
 
 include($ENV{IDF_PATH}/tools/cmake/project.cmake)
+set(EXTRA_COMPONENT_DIRS compute_badgevms)
 project(why2025_firmware)
 
-add_subdirectory(sdk_libs)
+add_subdirectory(compute_badgevms_sdk_libs)
 
-add_subdirectory(apps)
+add_subdirectory(compute_badgevms_sdk_apps)
 
-ExternalProject_Add(host_tests
-    SOURCE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/host_tests
-    BINARY_DIR ${CMAKE_CURRENT_BINARY_DIR}/host_tests
+ExternalProject_Add(compute_badgevms_host_tests
+    SOURCE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/compute_badgevms_host_tests
+    BINARY_DIR ${CMAKE_CURRENT_BINARY_DIR}/compute_badgevms_host_tests
     BUILD_COMMAND ninja
     INSTALL_COMMAND ninja test
     CONFIGURE_HANDLED_BY_BUILD false
     BUILD_ALWAYS 1
 )
 
-set(FATFS_STAGING_DIR ${CMAKE_BINARY_DIR}/fatfs_staging)
-set(FATFS_STATIC_DIR ${CMAKE_SOURCE_DIR}/fatfs_image)
+set(FATFS_STAGING_DIR ${CMAKE_BINARY_DIR}/compute_storage_staging)
+set(FATFS_STATIC_DIR ${CMAKE_SOURCE_DIR}/compute_storage)
 file(MAKE_DIRECTORY ${FATFS_STAGING_DIR})
 
 function(prepare_fatfs_image)
@@ -70,6 +71,6 @@ add_dependencies(fatfs_storage_bin prepare_fatfs_staging)
 
 add_custom_target(sdk
     COMMAND ${CMAKE_COMMAND} -E copy_directory ${CMAKE_BINARY_DIR}/sdk_staging ${CMAKE_SOURCE_DIR}/sdk_dist
-    DEPENDS build_sdk ${CMAKE_SOURCE_DIR}/include/ ${CMAKE_SOURCE_DIR}/main/include
+    DEPENDS build_sdk ${CMAKE_SOURCE_DIR}/compute_badgevms_sdk_include/ ${CMAKE_SOURCE_DIR}/compute_badgevms/include
     COMMENT "Creating SDK distribution in sdk_dist/"
 )

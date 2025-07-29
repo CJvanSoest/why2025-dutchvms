@@ -2,7 +2,7 @@
 
 BadgeVMS is the most used Badge operating system on the WHY2025 camp.
 
-![BadgeVMS Logo](fatfs_image/BadgeVMS.png)
+![BadgeVMS Logo](compute_storage/BadgeVMS.png)
 
 Some feature highlights:
 
