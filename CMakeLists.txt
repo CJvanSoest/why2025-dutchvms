@@ -5,6 +5,7 @@ include($ENV{IDF_PATH}/tools/cmake/project.cmake)
 
 # Build compute_badgevms/ as compute_badgevms.bin
 set(EXTRA_COMPONENT_DIRS compute_badgevms)
+set(COMPONENTS compute_badgevms)
 project(compute_badgevms)
 
 # Build compute_badgevms_sdk_libs/
