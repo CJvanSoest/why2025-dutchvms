@@ -18,6 +18,16 @@ add_subdirectory(compute_badgevms_sdk_apps)
 # Build compute_storage/ as storage.bin
 add_subdirectory(compute_storage)
 
+# Build compute_factory/ as factory.bin
+ExternalProject_Add(compute_factory
+    SOURCE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/compute_factory
+    BINARY_DIR ${CMAKE_CURRENT_SOURCE_DIR}/compute_factory
+    CONFIGURE_COMMAND IDF_TARGET=esp32p4 idf.py reconfigure
+    BUILD_COMMAND     IDF_TARGET=esp32p4 idf.py app && cp build/factory.bin ../build/
+    BUILD_ALWAYS true
+    INSTALL_COMMAND ""
+)
+
 # Build and run compute_badgevms_host_tests/
 ExternalProject_Add(compute_badgevms_host_tests
     SOURCE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/compute_badgevms_host_tests
