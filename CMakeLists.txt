@@ -38,6 +38,16 @@ ExternalProject_Add(compute_badgevms_host_tests
     TEST_AFTER_INSTALL true
 )
 
+# Build connectivity_esp_hosted/ as network_adapter.bin
+ExternalProject_Add(compute_recovery_c6
+    SOURCE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/connectivity_esp_hosted/slave
+    BINARY_DIR ${CMAKE_CURRENT_SOURCE_DIR}/connectivity_esp_hosted/slave
+    CONFIGURE_COMMAND IDF_TARGET=esp32c6 idf.py reconfigure
+    BUILD_COMMAND     IDF_TARGET=esp32c6 idf.py app
+    BUILD_ALWAYS true
+    INSTALL_COMMAND ""
+)
+
 # Custom target for generating sdk_dist/
 add_custom_target(sdk
     COMMAND ${CMAKE_COMMAND} -E copy_directory ${CMAKE_BINARY_DIR}/sdk_staging ${CMAKE_SOURCE_DIR}/sdk_dist
