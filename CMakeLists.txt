@@ -21,10 +21,9 @@ add_subdirectory(compute_storage)
 ExternalProject_Add(compute_badgevms_host_tests
     SOURCE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/compute_badgevms_host_tests
     BINARY_DIR ${CMAKE_CURRENT_BINARY_DIR}/compute_badgevms_host_tests
-    BUILD_COMMAND ninja
-    INSTALL_COMMAND ninja test
-    CONFIGURE_HANDLED_BY_BUILD false
-    BUILD_ALWAYS 1
+    BUILD_ALWAYS true
+    INSTALL_COMMAND ""
+    TEST_AFTER_INSTALL true
 )
 
 # Generate sdk_dist/
