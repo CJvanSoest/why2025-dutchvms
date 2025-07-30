@@ -1,5 +1,7 @@
 cmake_minimum_required(VERSION 3.16)
 
+set(ENV{IDF_TARGET} esp32p4)
+
 include(ExternalProject)
 include($ENV{IDF_PATH}/tools/cmake/project.cmake)
 
