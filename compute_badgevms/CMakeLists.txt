@@ -28,7 +28,10 @@ idf_component_register(
      ${CMAKE_CURRENT_SOURCE_DIR}/thirdparty
     PRIV_REQUIRES
      "app_update"
+     "elf_loader"
      "esp_driver_ppa"
+     "esp_hw_support"
+     "esp_lcd"
      "esp_lcd_st7703"
      "esp_mm"
      "esp_psram"
@@ -36,10 +39,12 @@ idf_component_register(
      "esp_wifi"
      "esp_wifi_remote"
      "fatfs"
+     "freertos"
      "hal"
      "lwip"
      "nvs_flash"
      "vfs"
+     "why_stdio"
 )
 
 target_link_libraries(${COMPONENT_LIB} PRIVATE
