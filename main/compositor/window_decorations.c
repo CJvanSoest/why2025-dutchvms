@@ -51,10 +51,10 @@ IRAM_ATTR static window_colors_t window_colors = {
 };
 
 IRAM_ATTR void draw_window_box(uint16_t *fb, window_t *window, bool foreground) {
-    int x      = window->position.x;
-    int y      = window->position.y;
-    int width  = window->size.w;
-    int height = window->size.h;
+    int x      = window->rect.x;
+    int y      = window->rect.y;
+    int width  = window->rect.w;
+    int height = window->rect.h;
 
     int total_width  = width + 2 * BORDER_PX;
     int total_height = height + BORDER_TOP_PX;

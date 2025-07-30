@@ -16,6 +16,7 @@
 
 #pragma once
 
+#include "compositor_private.h"
 #include "badgevms_config.h"
 
 #include <stdint.h>
@@ -50,6 +51,38 @@ __attribute__((always_inline)) inline static void
             *fb_y = (FRAMEBUFFER_MAX_W - 1) - x;
             break;
     }
+}
+
+__attribute__((always_inline)) inline static window_rect_t rotate_rect(window_rect_t rect, rotation_angle_t rotation) {
+    window_rect_t ret;
+    switch (rotation) {
+        case ROTATION_ANGLE_0:
+            ret = rect;
+            break;
+
+        case ROTATION_ANGLE_90:
+            ret.w = rect.h;
+            ret.h = rect.w;
+            ret.x = (FRAMEBUFFER_MAX_H - 1) - (rect.y + rect.h - 1);
+            ret.y = rect.x;
+            break;
+
+        case ROTATION_ANGLE_180:
+            ret.w = rect.w;
+            ret.h = rect.h;
+            ret.x = (FRAMEBUFFER_MAX_W - 1) - (rect.x + rect.w - 1);
+            ret.y = (FRAMEBUFFER_MAX_H - 1) - (rect.y + rect.h - 1);
+            break;
+
+        case ROTATION_ANGLE_270:
+            ret.w = rect.h;
+            ret.h = rect.w;
+            ret.x = rect.y;
+            ret.y = (FRAMEBUFFER_MAX_W - 1) - (rect.x + rect.w - 1);
+            break;
+    }
+
+    return ret;
 }
 
 void draw_pixel_rotated(uint16_t *fb, int x, int y, uint16_t color);

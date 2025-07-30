@@ -56,6 +56,19 @@ rotation_angle_t rotation = ROTATION_ANGLE_270;
 #define WINDOW_MAX_W (FRAMEBUFFER_MAX_W - (2 * BORDER_PX) - SIDE_BAR_PX)
 #define WINDOW_MAX_H (FRAMEBUFFER_MAX_H - BORDER_TOP_PX - TOP_BAR_PX)
 
+__attribute__((always_inline)) static inline ppa_srm_rotation_angle_t rotation_to_srm(rotation_angle_t rotation) {
+    switch(rotation) {
+        case ROTATION_ANGLE_270:
+            return PPA_SRM_ROTATION_ANGLE_90;
+        case ROTATION_ANGLE_180:
+            return PPA_SRM_ROTATION_ANGLE_180;
+        case ROTATION_ANGLE_90:
+            return PPA_SRM_ROTATION_ANGLE_270;
+        default:
+    }
+    return PPA_SRM_ROTATION_ANGLE_0;
+}
+
 __attribute__((always_inline)) static inline window_size_t window_clamp_size(window_t *window, window_size_t size) {
     window_size_t ret;
 
@@ -84,8 +97,8 @@ __attribute__((always_inline)) static inline window_coords_t
         ret.x = 0;
         ret.y = 0;
     } else {
-        int max_x = FRAMEBUFFER_MAX_W - (window->size.w + (2 * BORDER_PX)) - 1;
-        int max_y = FRAMEBUFFER_MAX_H - (window->size.h + (BORDER_TOP_PX + BORDER_PX)) - 1;
+        int max_x = FRAMEBUFFER_MAX_W - (window->rect.w + (2 * BORDER_PX)) - 1;
+        int max_y = FRAMEBUFFER_MAX_H - (window->rect.h + (BORDER_TOP_PX + BORDER_PX)) - 1;
         ret.x     = position.x > max_x ? max_x : position.x;
         ret.y     = position.y > max_y ? max_y : position.y;
     }
@@ -274,10 +287,16 @@ __attribute__((always_inline)) static inline bool check_occluded(window_t *windo
 
 static void IRAM_ATTR NOINLINE_ATTR compositor(void *ignored) {
     static ppa_client_handle_t ppa_srm_handle = NULL;
+    static ppa_client_handle_t ppa_fill_handle = NULL;
 
     ppa_client_config_t ppa_srm_config = {
         .oper_type             = PPA_OPERATION_SRM,
-        .max_pending_trans_num = 2,
+        .max_pending_trans_num = 1,
+    };
+
+    ppa_client_config_t ppa_fill_config = {
+        .oper_type             = PPA_OPERATION_FILL,
+        .max_pending_trans_num = 1,
     };
 
     ppa_event_callbacks_t ppa_srm_callbacks = {
@@ -285,6 +304,7 @@ static void IRAM_ATTR NOINLINE_ATTR compositor(void *ignored) {
     };
 
     ppa_register_client(&ppa_srm_config, &ppa_srm_handle);
+    ppa_register_client(&ppa_fill_config, &ppa_fill_handle);
     ppa_client_register_event_callbacks(ppa_srm_handle, &ppa_srm_callbacks);
 
     bool fn_down = false;
@@ -326,7 +346,10 @@ static void IRAM_ATTR NOINLINE_ATTR compositor(void *ignored) {
 
             if (fn_down) {
                 if (c.keyboard.down) {
-                    window_coords_t cur_pos = window_stack->position;
+                    window_coords_t cur_pos = {
+                        .x = window_stack->rect.x,
+                        .y = window_stack->rect.y,
+                    };
                     switch (c.keyboard.scancode) {
                         case KEY_SCANCODE_UP: cur_pos.y -= 10; break;
                         case KEY_SCANCODE_DOWN: cur_pos.y += 10; break;
@@ -339,7 +362,9 @@ static void IRAM_ATTR NOINLINE_ATTR compositor(void *ignored) {
                             continue;
                         default:
                     }
-                    window_stack->position = window_clamp_position(window_stack, cur_pos);
+                    cur_pos = window_clamp_position(window_stack, cur_pos);
+                    window_stack->rect.x = cur_pos.x;
+                    window_stack->rect.y = cur_pos.y;
                 }
             }
 
@@ -369,64 +394,54 @@ static void IRAM_ATTR NOINLINE_ATTR compositor(void *ignored) {
                     continue;
                 }
 
-                int content_x = window->position.x + BORDER_PX;
-                int content_y = window->position.y + BORDER_TOP_PX;
-
-                int size_w = window->size.w;
-                int size_h = window->size.h;
-
+                window_rect_t content_rect;
                 if (window->flags & WINDOW_FLAG_FULLSCREEN) {
-                    content_x = 0;
-                    content_y = 0;
-                    size_w    = FRAMEBUFFER_MAX_W;
-                    size_h    = FRAMEBUFFER_MAX_H;
+                    content_rect = (window_rect_t){
+                        .x = 0,
+                        .y = 0,
+                        .w = FRAMEBUFFER_MAX_W,
+                        .h = FRAMEBUFFER_MAX_H,
+                    };
+                } else {
+                    content_rect = (window_rect_t){
+                        .x = window->rect.x + BORDER_PX,
+                        .y = window->rect.y + BORDER_TOP_PX,
+                        .w = window->rect.w,
+                        .h = window->rect.h,
+                    };
                 }
 
-                int fb_x = 0, fb_y = 0;
-                rotate_coordinates(content_x, content_y, rotation, &fb_x, &fb_y);
+                window_rect_t rotated_content = rotate_rect(content_rect, rotation);
 
                 // Fill the window entirely, preserving aspect ratio and centering
-                float scale_x = ((float)size_w / (float)framebuffer->w);
-                float scale_y = ((float)size_h / (float)framebuffer->h);
+                float scale_x = ((float)content_rect.w / (float)framebuffer->w);
+                float scale_y = ((float)content_rect.h / (float)framebuffer->h);
 
                 float scale = fminf(scale_x, scale_y);
 
-                float scaled_w = framebuffer->w * scale;
-                float scaled_h = framebuffer->h * scale;
-
-                int rotated_w, rotated_h, rotated_size_w, rotated_size_h;
-                if (rotation == ROTATION_ANGLE_90 || rotation == ROTATION_ANGLE_270) {
-                    rotated_w      = scaled_h;
-                    rotated_h      = scaled_w;
-                    rotated_size_w = size_h;
-                    rotated_size_h = size_w;
-                } else {
-                    rotated_w      = scaled_w;
-                    rotated_h      = scaled_h;
-                    rotated_size_w = size_w;
-                    rotated_size_h = size_w;
-                }
-
-                int final_fb_x = fb_x;
-                int final_fb_y = fb_y;
-
-                ppa_srm_rotation_angle_t ppa_rotation = PPA_SRM_ROTATION_ANGLE_0;
-                // Adjust for rotation anchor point
-                if (rotation == ROTATION_ANGLE_270) {
-                    final_fb_x   = fb_x;
-                    final_fb_y   = fb_y - rotated_h + 1;
-                    ppa_rotation = PPA_SRM_ROTATION_ANGLE_90;
-                } else if (rotation == ROTATION_ANGLE_180) {
-                    final_fb_x   = fb_x - rotated_w + 1;
-                    final_fb_y   = fb_y - rotated_h + 1;
-                    ppa_rotation = PPA_SRM_ROTATION_ANGLE_180;
-                } else if (rotation == ROTATION_ANGLE_90) {
-                    final_fb_x   = fb_x - rotated_h + 1;
-                    ppa_rotation = PPA_SRM_ROTATION_ANGLE_270;
-                }
-
+                ppa_srm_rotation_angle_t ppa_rotation = rotation_to_srm(rotation);
+                
+#if 0
+                int empty_rect_a_x = final_fb_x;
+                int empty_rect_a_y = final_fb_y;
                 final_fb_x += ((rotated_size_w / 2) - (rotated_w / 2));
                 final_fb_y += ((rotated_size_h / 2) - (rotated_h / 2));
+
+                // Fill window with black
+                ppa_fill_oper_config_t fill_oper_config = {
+                    .out.buffer         = framebuffers[cur_fb],
+                    .out.buffer_size    = FRAMEBUFFER_BYTES,
+                    .out.pic_w          = FRAMEBUFFER_MAX_W,
+                    .out.pic_h          = FRAMEBUFFER_MAX_H,
+                    .out.block_offset_x = empty_rect_a_x,
+                    .out.block_offset_y = empty_rect_a_y,
+                    .out.fill_cm        = PPA_FILL_COLOR_MODE_RGB565,
+                    .fill_block_w       = scaled_w - final_fb_x,
+                    .fill_block_h       = scaled_h - final_fb_y,
+                    .fill_argb_color.val    = 0,
+                    .mode               = PPA_TRANS_MODE_BLOCKING,
+                };
+#endif
 
                 bool                 rgb_swap  = false;
                 bool                 byte_swap = false;
@@ -457,8 +472,8 @@ static void IRAM_ATTR NOINLINE_ATTR compositor(void *ignored) {
                     .out.buffer_size    = FRAMEBUFFER_BYTES,
                     .out.pic_w          = FRAMEBUFFER_MAX_W,
                     .out.pic_h          = FRAMEBUFFER_MAX_H,
-                    .out.block_offset_x = final_fb_x,
-                    .out.block_offset_y = final_fb_y,
+                    .out.block_offset_x = rotated_content.x,
+                    .out.block_offset_y = rotated_content.y,
                     .out.srm_cm         = PPA_SRM_COLOR_MODE_RGB565,
 
                     .rotation_angle = ppa_rotation,
@@ -476,17 +491,26 @@ static void IRAM_ATTR NOINLINE_ATTR compositor(void *ignored) {
                 }
 
                 if (needs_redraw) {
-                    esp_err_t ppa_result = ppa_do_scale_rotate_mirror(ppa_srm_handle, &oper_config);
+                    esp_err_t ppa_result;
+#if 0
+                    ppa_result = ppa_do_fill(ppa_fill_handle, &fill_oper_config);
+                    if (ppa_result != ESP_OK) {
+                        printf("PPA operation failed: %s\n", esp_err_to_name(ppa_result));
+                        printf("Trying to fill a block of: %ux%u %ux%u\n", empty_rect_a_x, empty_rect_a_y, rotated_size_w, rotated_size_h);
+                    }
+#endif
+
+                    ppa_result = ppa_do_scale_rotate_mirror(ppa_srm_handle, &oper_config);
                     if (ppa_result != ESP_OK) {
                         printf("PPA operation failed: %s\n", esp_err_to_name(ppa_result));
                         printf(
                             "Trying: at %ux%u size %ux%u -> %ux%u size %ux%u scale %f\n",
-                            window->position.x,
-                            window->position.y,
-                            window->size.w,
-                            window->size.h,
-                            final_fb_x,
-                            final_fb_y,
+                            window->rect.x,
+                            window->rect.y,
+                            window->rect.w,
+                            window->rect.h,
+                            rotated_content.x,
+                            rotated_content.y,
                             framebuffer->w,
                             framebuffer->h,
                             scale
@@ -561,10 +585,11 @@ window_t *window_create(char const *title, window_size_t size, window_flag_t fla
 
     window->flags      = flags;
     window->task_info  = task_info;
-    window->position.x = 0;
-    window->position.y = 0;
+    window->rect.x = 0;
+    window->rect.y = 0;
     size               = window_clamp_size(window, size);
-    window->size       = size;
+    window->rect.w     = size.w;
+    window->rect.h     = size.h;
 
     task_record_resource_alloc(RES_WINDOW, window);
     push_window(window);
@@ -612,22 +637,32 @@ void window_title_set(window_t *window, char const *title) {
 }
 
 window_coords_t window_position_get(window_t *window) {
-    return window->position;
+    window_coords_t ret = {
+        .x = window->rect.x,
+        .y = window->rect.y,
+    };
+    return ret;
 }
 
 window_coords_t window_position_set(window_t *window, window_coords_t coords) {
     coords           = window_clamp_position(window, coords);
-    window->position = coords;
+    window->rect.x = coords.x;
+    window->rect.y = coords.y;
     return coords;
 }
 
 window_size_t window_size_get(window_t *window) {
-    return window->size;
+    window_size_t ret = {
+        .w = window->rect.w,
+        .h = window->rect.h,
+    };
+    return ret;
 }
 
 window_size_t window_size_set(window_t *window, window_size_t size) {
     size         = window_clamp_size(window, size);
-    window->size = size;
+    window->rect.w = size.w;
+    window->rect.h = size.h;
     return size;
 }
 

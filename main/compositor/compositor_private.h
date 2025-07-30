@@ -46,8 +46,7 @@ typedef struct window {
     window_flag_t          flags;
     char                  *title;
 
-    window_size_t   size;
-    window_coords_t position;
+    window_rect_t   rect;
     task_info_t    *task_info;
     QueueHandle_t   event_queue;
 

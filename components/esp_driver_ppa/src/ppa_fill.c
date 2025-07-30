@@ -15,6 +15,7 @@
 
 static const char *TAG = "ppa_fill";
 
+IRAM_ATTR
 bool ppa_fill_transaction_on_picked(uint32_t num_chans, const dma2d_trans_channel_info_t *dma2d_chans, void *user_config)
 {
     assert(num_chans == 1 && dma2d_chans && user_config);
