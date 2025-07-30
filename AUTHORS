@@ -7,7 +7,8 @@ Authors of BadgeVMS
   notice and this notice are preserved.
 
 
-HP van Braam <hp@tmm.cx>                  all files.
-Julian Scheffers <julian@scheffers.net>   contributions to buddy allocator
-Joram Agten <joram.agten@gmail.com>       drivers/ test_badge.c
+HP van Braam <hp@tmm.cx>                              all files.
+Julian Scheffers <julian@scheffers.net>               contributions to buddy allocator
+Joram Agten <joram.agten@gmail.com>                   drivers/ test_badge.c
+Eirik Furuseth / Heplaphon <heplaphon@heplaphon.com>  main/ota
 
