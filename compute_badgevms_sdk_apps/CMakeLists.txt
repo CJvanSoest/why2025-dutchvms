@@ -130,6 +130,11 @@ build_app(wifi_test
     wifi_test/wifi_test.c
 )
 
+build_app(curl_test
+    SOURCES
+    curl_test/curl_test.c
+)
+
 build_app(doom
     SOURCES
     doomgeneric/doomgeneric/am_map.c

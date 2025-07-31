@@ -43,7 +43,7 @@ why_fgets(char *str, int size, FILE *stream)
 
 	size--;
 	for (c = 0, cp = str; c != '\n' && size > 0; size--, cp++) {
-		if ((c = getc_unlocked(stream)) == EOF) {
+		if ((c = why_getc_unlocked(stream)) == EOF) {
 			if(cp == str)
 				__funlock_return(stream, NULL);
 			else

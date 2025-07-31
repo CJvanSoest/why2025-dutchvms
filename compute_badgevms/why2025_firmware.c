@@ -155,21 +155,22 @@ int app_main(void) {
         get_num_tasks()
     );
 
+    run_task_path("FLASH0:curl_test.elf", 4096, TASK_TYPE_ELF, 2, argv);
     // pidb = run_task_path("FLASH0:hello.elf", 4096, TASK_TYPE_ELF_PATH, 2, argv);
     // ESP_LOGI(TAG, "Started task with pid %i", pidb);
     // pidb       = run_task(framebuffer_test_a_start, 4096, TASK_TYPE_ELF_ROM, 2, argv);
     // ESP_LOGI(TAG, "Started task with pid %i", pidb);
 
     while (1) {
-        while (get_num_tasks() < 1) {
-            pidb = run_task_path("FLASH0:wifi_test.elf", 4096, TASK_TYPE_ELF, 2, argv);
-            // pidb = run_task_path("FLASH0:doom.elf", 4096, TASK_TYPE_ELF, 5, argv);
+        while (get_num_tasks() < 2) {
+            // pidb = run_task_path("FLASH0:wifi_test.elf", 4096, TASK_TYPE_ELF, 2, argv);
+            pidb = run_task_path("FLASH0:doom.elf", 4096, TASK_TYPE_ELF, 5, argv);
             // pidb = run_task_path("FLASH0:doom.elf", 4096, TASK_TYPE_ELF, 5, argv);
             // pidb = run_task_path("FLASH0:doom.elf", 4096, TASK_TYPE_ELF, 3, argv);
             // pidb = run_task_path("FLASH0:framebuffer_test.elf", 4096, TASK_TYPE_ELF, 2, argv);
             // pidb = run_task_path("FLASH0:hardware_test.elf", 4096, TASK_TYPE_ELF, 2, argv);
-            // pidb = run_task_path("FLASH0:sdl_test.elf", 4096, TASK_TYPE_ELF, 2, argv);
-            vTaskDelay(10 / portTICK_PERIOD_MS);
+            pidb = run_task_path("FLASH0:sdl_test.elf", 4096, TASK_TYPE_ELF, 2, argv);
+            vTaskDelay(100 / portTICK_PERIOD_MS);
         }
         free_ram = heap_caps_get_free_size(MALLOC_CAP_DEFAULT);
         ESP_LOGW(

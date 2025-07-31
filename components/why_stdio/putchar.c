@@ -31,12 +31,12 @@
 
 #include "stdio_private.h"
 
-#undef putchar
+#undef why_putchar
 
 int
 why_putchar(int c)
 {
-	return putc(c, stdout);
+	return why_putc(c, stdout);
 }
 
 #undef why_putchar_unlocked
@@ -45,7 +45,7 @@ why_putchar(int c)
 int
 why_putchar_unlocked(int c)
 {
-        return putc_unlocked(c, stdout);
+        return why_putc_unlocked(c, stdout);
 }
 #else
 #ifdef __strong_reference

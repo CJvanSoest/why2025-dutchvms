@@ -263,11 +263,11 @@ int	fflush(FILE *stream);
 #define __PRINTF_ATTRIBUTE__(__s, __f) __FORMAT_ATTRIBUTE__(printf, __s, __f)
 #define __SCANF_ATTRIBUTE__(__s, _f) __FORMAT_ATTRIBUTE__(scanf, __s, __f)
 
-int	fputc(int __c, FILE *__stream);
-int	putc(int __c, FILE *__stream);
-int	putchar(int __c);
-#define putc(__c, __stream) fputc(__c, __stream)
-#define putchar(__c) fputc(__c, stdout)
+int	why_fputc(int __c, FILE *__stream);
+int	why_putc(int __c, FILE *__stream);
+int	why_putchar(int __c);
+#define why_putc(__c, __stream) why_fputc(__c, __stream)
+#define why_putchar(__c) why_fputc(__c, stdout)
 
 int	why_printf(const char *__fmt, ...) __PRINTF_ATTRIBUTE__(1, 2);
 int	why_fprintf(FILE *__stream, const char *__fmt, ...) __PRINTF_ATTRIBUTE__(2, 3);
@@ -282,34 +282,34 @@ char    *why_asnprintf(char *str, size_t *lenp, const char *fmt, ...) __PRINTF_A
 int     why_vasprintf(char **strp, const char *fmt, __gnuc_va_list ap) __PRINTF_ATTRIBUTE__(2,0);
 char    *why_vasnprintf(char *str, size_t *lenp, const char *fmt, __gnuc_va_list ap) __PRINTF_ATTRIBUTE__(3,0);
 
-int	fputs(const char *__str, FILE *__stream);
-int	puts(const char *__str);
-size_t	fwrite(const void *__ptr, size_t __size, size_t __nmemb,
+int	why_fputs(const char *__str, FILE *__stream);
+int	why_puts(const char *__str);
+size_t	why_fwrite(const void *__ptr, size_t __size, size_t __nmemb,
 		       FILE *__stream);
 
-int	fgetc(FILE *__stream);
-int	getc(FILE *__stream);
-int	getchar(void);
-#define getchar() getc(stdin)
-int	ungetc(int __c, FILE *__stream);
+int	why_fgetc(FILE *__stream);
+int	why_getc(FILE *__stream);
+int	why_getchar(void);
+#define why_getchar() getc(stdin)
+int	why_ungetc(int __c, FILE *__stream);
 
-int	scanf(const char *__fmt, ...) __FORMAT_ATTRIBUTE__(scanf, 1, 2);
-int	fscanf(FILE *__stream, const char *__fmt, ...) __FORMAT_ATTRIBUTE__(scanf, 2, 3);
-int	vscanf(const char *__fmt, __gnuc_va_list __ap) __FORMAT_ATTRIBUTE__(scanf, 1, 0);
-int	vfscanf(FILE *__stream, const char *__fmt, __gnuc_va_list __ap) __FORMAT_ATTRIBUTE__(scanf, 2, 0);
-int	sscanf(const char *__buf, const char *__fmt, ...) __FORMAT_ATTRIBUTE__(scanf, 2, 3);
-int	vsscanf(const char *__buf, const char *__fmt, __gnuc_va_list ap) __FORMAT_ATTRIBUTE__(scanf, 2, 0);
+int	why_scanf(const char *__fmt, ...) __FORMAT_ATTRIBUTE__(scanf, 1, 2);
+int	why_fscanf(FILE *__stream, const char *__fmt, ...) __FORMAT_ATTRIBUTE__(scanf, 2, 3);
+int	why_vscanf(const char *__fmt, __gnuc_va_list __ap) __FORMAT_ATTRIBUTE__(scanf, 1, 0);
+int	why_vfscanf(FILE *__stream, const char *__fmt, __gnuc_va_list __ap) __FORMAT_ATTRIBUTE__(scanf, 2, 0);
+int	why_sscanf(const char *__buf, const char *__fmt, ...) __FORMAT_ATTRIBUTE__(scanf, 2, 3);
+int	why_vsscanf(const char *__buf, const char *__fmt, __gnuc_va_list ap) __FORMAT_ATTRIBUTE__(scanf, 2, 0);
 
-char	*fgets(char *__str, int __size, FILE *__stream);
+char	*why_fgets(char *__str, int __size, FILE *__stream);
 #ifdef _PICOLIBC_USE_DEPRECATED_GETS
-char *gets(char *str);
+char *why_gets(char *str);
 #endif
-size_t	fread(void *__ptr, size_t __size, size_t __nmemb,
+size_t	why_fread(void *__ptr, size_t __size, size_t __nmemb,
 		      FILE *__stream);
 
-void	clearerr(FILE *__stream);
-int     ferror(FILE *__stream);
-int     feof(FILE *__stream);
+void	why_clearerr(FILE *__stream);
+int     why_ferror(FILE *__stream);
+int     why_feof(FILE *__stream);
 
 /* fast inlined versions */
 #define __clearerr_unlocked(s) ((s)->flags &= ~(__SERR | __SEOF))
@@ -318,9 +318,9 @@ int     feof(FILE *__stream);
 
 /* When locking is disabled, use the unlocked macros */
 #ifndef __STDIO_LOCKING
-#define clearerr(s) __clearerr_unlocked(s)
-#define ferror(s) __ferror_unlocked(s)
-#define feof(s) __feof_unlocked(s)
+#define why_clearerr(s) __why_clearerr_unlocked(s)
+#define why_ferror(s) __why_ferror_unlocked(s)
+#define why_feof(s) __why_feof_unlocked(s)
 #endif
 
 /* Expose the unlocked symbols when requested */
@@ -398,29 +398,29 @@ typedef __gnuc_va_list va_list;
 
 #endif
 
-int fgetpos(FILE * __restrict stream, fpos_t * __restrict pos);
+int why_fgetpos(FILE * __restrict stream, fpos_t * __restrict pos);
 FILE *why_fopen(const char *path, const char *mode) __malloc_like_with_free(why_fclose, 1);
-FILE *freopen(const char *path, const char *mode, FILE *stream);
+FILE *why_freopen(const char *path, const char *mode, FILE *stream);
 FILE *why_fdopen(int, const char *) __malloc_like_with_free(why_fclose, 1);
-FILE *fmemopen(void *buf, size_t size, const char *mode) __malloc_like_with_free(why_fclose, 1);
+FILE *why_fmemopen(void *buf, size_t size, const char *mode) __malloc_like_with_free(why_fclose, 1);
 int why_fseek(FILE *stream, long offset, int whence);
 int why_fseeko(FILE *stream, __off_t offset, int whence);
-int fsetpos(FILE *stream, const fpos_t *pos);
-long ftell(FILE *stream);
-__off_t ftello(FILE *stream);
-int fileno(FILE *);
-void perror(const char *s);
-int remove(const char *pathname);
-int rename(const char *oldpath, const char *newpath);
-void rewind(FILE *stream);
-void setbuf(FILE *stream, char *buf);
-void setbuffer(FILE *stream, char *buf, size_t size);
-void setlinebuf(FILE *stream);
-int setvbuf(FILE *stream, char *buf, int mode, size_t size);
-FILE *tmpfile(void);
-char *tmpnam (char *s);
-_ssize_t getline(char **__restrict lineptr, size_t *__restrict n, FILE *__restrict stream);
-_ssize_t getdelim(char **__restrict lineptr, size_t *__restrict  n, int delim, FILE *__restrict stream);
+int why_fsetpos(FILE *stream, const fpos_t *pos);
+long why_ftell(FILE *stream);
+__off_t why_ftello(FILE *stream);
+int why_fileno(FILE *);
+void why_perror(const char *s);
+int why_remove(const char *pathname);
+int why_rename(const char *oldpath, const char *newpath);
+void why_rewind(FILE *stream);
+void why_setbuf(FILE *stream, char *buf);
+void why_setbuffer(FILE *stream, char *buf, size_t size);
+void why_setlinebuf(FILE *stream);
+int why_setvbuf(FILE *stream, char *buf, int mode, size_t size);
+FILE *why_tmpfile(void);
+char *why_tmpnam (char *s);
+_ssize_t why_getline(char **__restrict lineptr, size_t *__restrict n, FILE *__restrict stream);
+_ssize_t why_getdelim(char **__restrict lineptr, size_t *__restrict  n, int delim, FILE *__restrict stream);
 
 #if __BSD_VISIBLE
 FILE	*funopen (const void *cookie,
@@ -435,18 +435,18 @@ FILE	*funopen (const void *cookie,
 #endif /*__BSD_VISIBLE */
 
 #if __POSIX_VISIBLE >= 199309L
-int	getc_unlocked (FILE *);
-int	getchar_unlocked (void);
-void	flockfile (FILE *);
-int	ftrylockfile (FILE *);
-void	funlockfile (FILE *);
-int	putc_unlocked (int, FILE *);
-int	putchar_unlocked (int);
+int	why_getc_unlocked (FILE *);
+int	why_getchar_unlocked (void);
+void	why_flockfile (FILE *);
+int	why_ftrylockfile (FILE *);
+void	why_funlockfile (FILE *);
+int	why_putc_unlocked (int, FILE *);
+int	why_putchar_unlocked (int);
 #ifndef __STDIO_LOCKING
-#define getc_unlocked(f) getc(f)
-#define getchar_unlocked(f) getc(stdin)
-#define putc_unlocked(c, f) putc(c, f)
-#define putchar_unlocked(c, f) putc(c, stdout)
+#define why_getc_unlocked(f) why_getc(f)
+#define why_getchar_unlocked(f) why_getc(stdin)
+#define why_putc_unlocked(c, f) why_putc(c, f)
+#define why_putchar_unlocked(c, f) why_putc(c, stdout)
 #endif
 #endif
 
@@ -464,11 +464,11 @@ typedef __rsize_t rsize_t;
 #define _RSIZE_T_DEFINED
 #endif
 
-int sprintf_s(char *__restrict __s, rsize_t __bufsize,
+int why_sprintf_s(char *__restrict __s, rsize_t __bufsize,
               const char *__restrict __format, ...);
-int vsnprintf_s(char *__restrict s, rsize_t n, const char *__restrict fmt,
+int why_vsnprintf_s(char *__restrict s, rsize_t n, const char *__restrict fmt,
                 va_list arg);
-int vfprintf_s(FILE *__restrict stream, const char *__restrict fmt,
+int why_vfprintf_s(FILE *__restrict stream, const char *__restrict fmt,
                va_list ap_orig);
 #endif
 

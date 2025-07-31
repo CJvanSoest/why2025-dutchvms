@@ -116,7 +116,7 @@ idf_component_register( SRCS
   #swscanf.c
   #tmpfile.c
   #tmpnam.c
-  #ungetc.c
+  ungetc.c
   #ungetwc.c
   #vasnprintf.c
   #vasprintf.c

@@ -37,6 +37,7 @@ include:
   - badgevms/ota.h
   - badgevms/wifi.h
   - wrapped_funcs.h
+  - curl/curl.h
 
   # Networking
   - netdb.h
@@ -926,6 +927,18 @@ simple_function:
   - window_title_get
   - window_title_set
 
+# Curl
+  - curl_easy_cleanup
+  - curl_easy_getinfo
+  - curl_easy_init
+  - curl_easy_perform
+  - curl_easy_setopt
+  - curl_easy_strerror
+  - curl_global_cleanup
+  - curl_global_init
+  - curl_slist_append
+  - curl_slist_free_all
+
 # Networking
   - freeaddrinfo
   - inet_ntoa
@@ -1010,6 +1023,7 @@ wrapped_function:
   - ftell
   - ftello
   - fwrite
+  - getc
   - getenv
   - getpid
   - gmtime

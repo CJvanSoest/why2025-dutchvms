@@ -31,8 +31,8 @@
 
 #include "stdio_private.h"
 
-#undef ferror
-#undef ferror_unlocked
+#undef why_ferror
+#undef why_ferror_unlocked
 
 int
 __STDIO_UNLOCKED(why_ferror)(FILE *stream)

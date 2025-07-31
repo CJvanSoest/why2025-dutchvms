@@ -31,8 +31,8 @@
 
 #include "stdio_private.h"
 
-#undef feof
-#undef feof_unlocked
+#undef why_feof
+#undef why_feof_unlocked
 
 int
 __STDIO_UNLOCKED(why_feof)(FILE *stream)

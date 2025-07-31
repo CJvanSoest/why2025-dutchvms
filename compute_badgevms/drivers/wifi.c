@@ -207,13 +207,17 @@ static void event_handler(void *arg, esp_event_base_t event_base, int32_t event_
     }
 }
 
+static void hermes_do_disconnect() {
+    ESP_ERROR_CHECK(esp_wifi_disconnect());
+}
+
 static void hermes_do_connect() {
     ESP_ERROR_CHECK(esp_wifi_stop());
     ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_STA));
 
     wifi_config_t wifi_config = {
         .sta = {
-            .ssid     = "WHY2025-open",
+            .ssid = "WHY2025-open",
         },
     };
     ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_STA, &wifi_config));
@@ -308,7 +312,11 @@ static void hermes(void *ignored) {
                     hermes_do_connect();
                     command->status = status.connection_status;
                     break;
-                case WIFI_COMMAND_DISCONNECT: ESP_LOGW("HERMES", "Confining to the mortal plane"); break;
+                case WIFI_COMMAND_DISCONNECT:
+                    ESP_LOGW("HERMES", "Confining to the mortal plane");
+                    hermes_do_disconnect();
+                    command->status = status.connection_status;
+                    break;
                 case WIFI_COMMAND_SCAN:
                     ESP_LOGW("HERMES", "Scanning for pathways to olympus");
                     hermes_do_scan();

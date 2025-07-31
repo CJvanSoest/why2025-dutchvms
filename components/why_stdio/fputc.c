@@ -31,8 +31,8 @@
 
 #include "stdio_private.h"
 
-#undef putc
-#undef putc_unlocked
+#undef why_putc
+#undef why_putc_unlocked
 
 int
 __STDIO_UNLOCKED(why_putc)(int c, FILE *stream)

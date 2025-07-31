@@ -20,6 +20,7 @@
 #include "badgevms/event.h"
 #include "badgevms/ota.h"
 #include "bitfuncs.h"
+#include "curl/curl.h"
 #include "esp_elf.h"
 #include "esp_log.h"
 #include "hal/cache_hal.h"

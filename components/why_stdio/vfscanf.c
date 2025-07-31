@@ -78,8 +78,8 @@ typedef long int_scanf_t;
 # elif __SIZEOF_WCHAR_T__ == 4
 #  define UCHAR          uint32_t
 # endif
-# define GETC(s) getwc_unlocked(s)
-# define UNGETC(c,s) ungetwc(c,s)
+# define GETC(s) why_getwc_unlocked(s)
+# define UNGETC(c,s) why_ungetwc(c,s)
 # define ISSPACE(c) iswspace(c)
 # define ISALNUM(c) iswalnum(c)
 # define IS_EOF(c)       ((c) == WEOF)
@@ -94,8 +94,8 @@ typedef long int_scanf_t;
 # define IS_EOF(c)       ((c) < 0)
 # define CHAR char
 # define UCHAR unsigned char
-# define GETC(s) getc_unlocked(s)
-# define UNGETC(c,s) ungetc(c,s)
+# define GETC(s) why_getc_unlocked(s)
+# define UNGETC(c,s) why_ungetc(c,s)
 # define ISSPACE(c) isspace(c)
 # define ISALNUM(c) isalnum(c)
 # define STRCHR(s,c) strchr(s, c)

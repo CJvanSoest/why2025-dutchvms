@@ -32,7 +32,7 @@
 #include "stdio_private.h"
 
 int
-ungetc(int c, FILE *stream)
+why_ungetc(int c, FILE *stream)
 {
         __flockfile(stream);
 	/*

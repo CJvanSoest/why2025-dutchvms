@@ -47,3 +47,6 @@
 * spi_flash (From esp-idf v5.5)
   - No changes.
   - Needed here because it implicitly depends on esptool_py Kconfig.
+
+* esp_http_client (From esp-idf v5.5)
+  - Switch all allocations to dlmalloc
