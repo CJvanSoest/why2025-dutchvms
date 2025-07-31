@@ -45,7 +45,7 @@ ExternalProject_Add(compute_recovery_c6
     SOURCE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/connectivity_esp_hosted/slave
     BINARY_DIR ${CMAKE_CURRENT_SOURCE_DIR}/connectivity_esp_hosted/slave
     CONFIGURE_COMMAND IDF_TARGET=esp32c6 idf.py reconfigure
-    BUILD_COMMAND     IDF_TARGET=esp32c6 idf.py app
+    BUILD_COMMAND     IDF_TARGET=esp32c6 idf.py merge-bin
     BUILD_ALWAYS true
     INSTALL_COMMAND ""
 )
