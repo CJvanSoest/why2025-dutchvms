@@ -49,6 +49,6 @@ prepare_compute_storage_image()
 fatfs_create_spiflash_image(
     ${FATFS_PARTITION_NAME}
     ${FATFS_STAGING_DIR}
-    FLASH_IN_PROJECT PRESERVE_TIME
+    PRESERVE_TIME
 )
 add_dependencies(fatfs_${FATFS_PARTITION_NAME}_bin prepare_compute_storage_staging)
