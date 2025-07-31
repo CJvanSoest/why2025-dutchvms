@@ -48,5 +48,5 @@ add_custom_target(sdk
 
 # Add our binaries to the flash target
 # bootloader, partition-table and otadata are done automatically
-esptool_py_flash_to_partition(flash "ota_0"   "${CMAKE_CURRENT_BINARY_DIR}/compute_badgevms.bin")
+# esptool_py_flash_to_partition(flash "ota_0"   "${CMAKE_CURRENT_BINARY_DIR}/compute_badgevms.bin")
 esptool_py_flash_to_partition(flash "storage" "${CMAKE_CURRENT_BINARY_DIR}/storage.bin")
