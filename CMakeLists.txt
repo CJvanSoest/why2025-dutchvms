@@ -20,17 +20,6 @@ add_subdirectory(compute_badgevms_sdk_apps)
 # Build compute_storage/ as storage.bin
 add_subdirectory(compute_storage)
 
-# Build compute_factory/ as compute_factory.bin
-ExternalProject_Add(compute_factory
-    SOURCE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/compute_factory
-    BINARY_DIR ${CMAKE_CURRENT_SOURCE_DIR}/compute_factory
-    CONFIGURE_COMMAND IDF_TARGET=esp32p4 idf.py reconfigure
-    BUILD_COMMAND     IDF_TARGET=esp32p4 idf.py app
-                      && cp build/factory.bin ${CMAKE_CURRENT_BINARY_DIR}/compute_factory.bin
-    BUILD_ALWAYS true
-    INSTALL_COMMAND ""
-)
-
 # Build and run compute_badgevms_host_tests/
 ExternalProject_Add(compute_badgevms_host_tests
     SOURCE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/compute_badgevms_host_tests
@@ -59,6 +48,5 @@ add_custom_target(sdk
 
 # Add our binaries to the flash target
 # bootloader, partition-table and otadata are done automatically
-esptool_py_flash_to_partition(flash "factory" "${CMAKE_CURRENT_BINARY_DIR}/compute_factory.bin")
 esptool_py_flash_to_partition(flash "ota_0"   "${CMAKE_CURRENT_BINARY_DIR}/compute_badgevms.bin")
 esptool_py_flash_to_partition(flash "storage" "${CMAKE_CURRENT_BINARY_DIR}/storage.bin")
