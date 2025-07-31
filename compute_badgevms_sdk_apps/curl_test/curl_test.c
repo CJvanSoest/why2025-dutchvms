@@ -196,7 +196,7 @@ void cookie_jar_example() {
     curl = curl_easy_init();
     if (curl) {
         printf("Setting manual cookies...\n");
-        curl_easy_setopt(curl, CURLOPT_URL, "https://www.google.com");
+        curl_easy_setopt(curl, CURLOPT_URL, "https://httpbin.org/cookies");
         curl_easy_setopt(curl, CURLOPT_COOKIE, "manual_cookie=test_value; session_id=abc123");
         curl_easy_setopt(curl, CURLOPT_USERAGENT, "BadgeVMS-libcurl/1.0");
 
@@ -204,7 +204,7 @@ void cookie_jar_example() {
         if (res != CURLE_OK) {
             printf("Manual cookie test failed: %s\n", curl_easy_strerror(res));
         } else {
-            printf("✓ Manual cookies sent successfully\n");
+            printf("Manual cookies sent successfully\n");
         }
 
         curl_easy_cleanup(curl);
@@ -214,7 +214,7 @@ void cookie_jar_example() {
     printf("\nTesting CURLOPT_COOKIEJAR (save cookies to file)...\n");
     curl = curl_easy_init();
     if (curl) {
-        curl_easy_setopt(curl, CURLOPT_URL, "https://www.google.com");
+        curl_easy_setopt(curl, CURLOPT_URL, "https://httpbin.org/cookies/set/jar_test/saved_value");
         curl_easy_setopt(curl, CURLOPT_USERAGENT, "BadgeVMS-libcurl/1.0");
         curl_easy_setopt(curl, CURLOPT_COOKIEJAR, test_cookie_file); // Save cookies here
         curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1L);
@@ -223,12 +223,12 @@ void cookie_jar_example() {
         if (res != CURLE_OK) {
             printf("Cookie jar save test failed: %s\n", curl_easy_strerror(res));
         } else {
-            printf("✓ Request completed, cookies should be saved to file\n");
+            printf("Request completed, cookies should be saved to file\n");
 
             // Verify file was created
             FILE *verify_file = fopen(test_cookie_file, "r");
             if (verify_file) {
-                printf("✓ Cookie file created successfully\n");
+                printf("Cookie file created successfully\n");
                 char line[256];
                 int  line_count = 0;
                 while (fgets(line, sizeof(line), verify_file) && line_count < 5) {
@@ -237,7 +237,7 @@ void cookie_jar_example() {
                 }
                 fclose(verify_file);
             } else {
-                printf("✗ Cookie file was not created\n");
+                printf("Cookie file was not created\n");
             }
         }
 
@@ -248,7 +248,7 @@ void cookie_jar_example() {
     printf("\nTesting CURLOPT_COOKIEFILE (load cookies from file)...\n");
     curl = curl_easy_init();
     if (curl) {
-        curl_easy_setopt(curl, CURLOPT_URL, "https://www.google.com");
+        curl_easy_setopt(curl, CURLOPT_URL, "https://httpbin.org/cookies");
         curl_easy_setopt(curl, CURLOPT_USERAGENT, "BadgeVMS-libcurl/1.0");
         curl_easy_setopt(curl, CURLOPT_COOKIEFILE, test_cookie_file); // Load cookies from file
         curl_easy_setopt(curl, CURLOPT_VERBOSE, 1L);                  // Show what cookies are being sent
@@ -257,7 +257,7 @@ void cookie_jar_example() {
         if (res != CURLE_OK) {
             printf("Cookie file load test failed: %s\n", curl_easy_strerror(res));
         } else {
-            printf("✓ Request completed with loaded cookies\n");
+            printf("Request completed with loaded cookies\n");
         }
 
         curl_easy_cleanup(curl);
@@ -265,7 +265,7 @@ void cookie_jar_example() {
 
     // Clean up test file
     if (remove(test_cookie_file) == 0) {
-        printf("✓ Test cookie file cleaned up\n");
+        printf("Test cookie file cleaned up\n");
     }
 }
 
@@ -280,7 +280,7 @@ void cookie_persistence_example() {
     if (curl) {
         // First request - this should set cookies from the server
         printf("Making first request to set cookies...\n");
-        curl_easy_setopt(curl, CURLOPT_URL, "https://www.google.com");
+        curl_easy_setopt(curl, CURLOPT_URL, "https://httpbin.org/cookies/set/persistent_cookie/esp32_value");
         curl_easy_setopt(curl, CURLOPT_USERAGENT, "BadgeVMS-libcurl/1.0");
         curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1L); // Follow redirects
 
@@ -293,7 +293,7 @@ void cookie_persistence_example() {
 
         // Second request - should automatically send stored cookies
         printf("\nMaking second request - should send stored cookies...\n");
-        curl_easy_setopt(curl, CURLOPT_URL, "https://www.google.com");
+        curl_easy_setopt(curl, CURLOPT_URL, "https://httpbin.org/cookies");
 
         res = curl_easy_perform(curl);
         if (res != CURLE_OK) {
@@ -322,50 +322,50 @@ void proxy_stub_example() {
         printf("Testing HTTP proxy setting...\n");
         res = curl_easy_setopt(curl, CURLOPT_PROXY, "http://proxy.example.com:8080");
         if (res != CURLE_OK) {
-            printf("✓ Proxy setting correctly returned error: %s\n", curl_easy_strerror(res));
+            printf("Proxy setting correctly returned error: %s\n", curl_easy_strerror(res));
         }
 
         printf("Testing proxy authentication...\n");
         res = curl_easy_setopt(curl, CURLOPT_PROXYUSERPWD, "user:pass");
         if (res != CURLE_OK) {
-            printf("✓ Proxy auth correctly returned error: %s\n", curl_easy_strerror(res));
+            printf("Proxy auth correctly returned error: %s\n", curl_easy_strerror(res));
         }
 
         printf("Testing proxy type setting...\n");
         res = curl_easy_setopt(curl, CURLOPT_PROXYTYPE, CURLPROXY_SOCKS5);
         if (res != CURLE_OK) {
-            printf("✓ Proxy type correctly returned error: %s\n", curl_easy_strerror(res));
+            printf("Proxy type correctly returned error: %s\n", curl_easy_strerror(res));
         }
 
         printf("Testing proxy port setting...\n");
         res = curl_easy_setopt(curl, CURLOPT_PROXYPORT, 1080L);
         if (res != CURLE_OK) {
-            printf("✓ Proxy port correctly returned error: %s\n", curl_easy_strerror(res));
+            printf("Proxy port correctly returned error: %s\n", curl_easy_strerror(res));
         }
 
         printf("Testing proxy auth type...\n");
         res = curl_easy_setopt(curl, CURLOPT_PROXYAUTH, CURLAUTH_DIGEST);
         if (res != CURLE_OK) {
-            printf("✓ Proxy auth type correctly returned error: %s\n", curl_easy_strerror(res));
+            printf("Proxy auth type correctly returned error: %s\n", curl_easy_strerror(res));
         }
 
         printf("Testing HTTP auth type (should work)...\n");
         res = curl_easy_setopt(curl, CURLOPT_HTTPAUTH, CURLAUTH_BASIC);
         if (res == CURLE_OK) {
-            printf("✓ HTTP auth type setting works correctly\n");
+            printf("HTTP auth type setting works correctly\n");
         }
 
         // Test unimplemented options
         printf("Testing unimplemented range option...\n");
         res = curl_easy_setopt(curl, CURLOPT_RANGE, "0-1023");
         if (res != CURLE_OK) {
-            printf("✓ Range option correctly returned error: %s\n", curl_easy_strerror(res));
+            printf("Range option correctly returned error: %s\n", curl_easy_strerror(res));
         }
 
         printf("Testing unimplemented referer option...\n");
         res = curl_easy_setopt(curl, CURLOPT_REFERER, "https://example.com");
         if (res != CURLE_OK) {
-            printf("✓ Referer option correctly returned error: %s\n", curl_easy_strerror(res));
+            printf("Referer option correctly returned error: %s\n", curl_easy_strerror(res));
         }
 
         curl_easy_cleanup(curl);
@@ -379,11 +379,11 @@ static size_t header_callback(void *contents, size_t size, size_t nmemb, void *u
 
     // Print Set-Cookie headers to show cookie jar is working
     if (realsize >= 11 && strncasecmp(header, "Set-Cookie:", 11) == 0) {
-        printf("🍪 Server set cookie: %.*s", (int)realsize, header);
+        printf("Server set cookie: %.*s", (int)realsize, header);
     }
     // Print Cookie headers to show we're sending cookies
     else if (realsize >= 7 && strncasecmp(header, "Cookie:", 7) == 0) {
-        printf("🍪 We sent cookies: %.*s", (int)realsize, header);
+        printf("We sent cookies: %.*s", (int)realsize, header);
     }
 
     return realsize;
@@ -397,7 +397,7 @@ void cookie_visibility_example() {
 
     curl = curl_easy_init();
     if (curl) {
-        curl_easy_setopt(curl, CURLOPT_URL, "https://www.google.com");
+        curl_easy_setopt(curl, CURLOPT_URL, "https://httpbin.org/cookies/set/test_visibility/working");
         curl_easy_setopt(curl, CURLOPT_USERAGENT, "BadgeVMS-libcurl/1.0");
         curl_easy_setopt(curl, CURLOPT_HEADERFUNCTION, header_callback);
         curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1L);
@@ -410,7 +410,7 @@ void cookie_visibility_example() {
         }
 
         printf("\nSecond request - should see Cookie header being sent:\n");
-        curl_easy_setopt(curl, CURLOPT_URL, "https://www.google.com");
+        curl_easy_setopt(curl, CURLOPT_URL, "https://httpbin.org/cookies");
         curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 0L); // Don't follow redirects this time
 
         res = curl_easy_perform(curl);
@@ -434,7 +434,7 @@ void cookie_file_persistence_example() {
     printf("\n=== Session 1: Setting cookies and saving to file ===\n");
     curl = curl_easy_init();
     if (curl) {
-        curl_easy_setopt(curl, CURLOPT_URL, "https://www.google.com");
+        curl_easy_setopt(curl, CURLOPT_URL, "https://httpbin.org/cookies/set/file_test/persistent_value");
         curl_easy_setopt(curl, CURLOPT_USERAGENT, "BadgeVMS-libcurl/1.0");
         curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1L);
         curl_easy_setopt(curl, CURLOPT_COOKIEJAR, cookie_file); // Save cookies to file
@@ -466,7 +466,7 @@ void cookie_file_persistence_example() {
     printf("\n=== Session 2: Loading cookies from file ===\n");
     curl = curl_easy_init();
     if (curl) {
-        curl_easy_setopt(curl, CURLOPT_URL, "https://www.google.com");
+        curl_easy_setopt(curl, CURLOPT_URL, "https://httpbin.org/cookies");
         curl_easy_setopt(curl, CURLOPT_USERAGENT, "BadgeVMS-libcurl/1.0");
         curl_easy_setopt(curl, CURLOPT_COOKIEFILE, cookie_file); // Load cookies from file
         curl_easy_setopt(curl, CURLOPT_VERBOSE, 1L);

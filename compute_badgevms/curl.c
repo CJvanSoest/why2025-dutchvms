@@ -113,15 +113,20 @@ static void free_all_cookies(cookie_entry_t *cookies) {
 }
 
 static cookie_entry_t *parse_set_cookie(char const *set_cookie_header) {
-    if (!set_cookie_header)
+    if (!set_cookie_header) {
+        ESP_LOGW(TAG, "No cookie header");
         return NULL;
+    }
 
     cookie_entry_t *cookie = dlcalloc(1, sizeof(cookie_entry_t));
-    if (!cookie)
+    if (!cookie) {
+        ESP_LOGW(TAG, "Cookie dlmalloc failed (cookie)");
         return NULL;
+    }
 
     char *header_copy = why_strdup(set_cookie_header);
     if (!header_copy) {
+        ESP_LOGW(TAG, "Cookie dlmalloc failed (header_copy)");
         free_cookie(cookie);
         return NULL;
     }
@@ -158,11 +163,13 @@ static cookie_entry_t *parse_set_cookie(char const *set_cookie_header) {
         cookie->value = why_strdup(value);
 
         if (!cookie->name || !cookie->value) {
+            ESP_LOGW(TAG, "No name or no value for '%s'", header_copy);
             dlfree(header_copy);
             free_cookie(cookie);
             return NULL;
         }
     } else {
+        ESP_LOGW(TAG, "No = for '%s'", header_copy);
         dlfree(header_copy);
         free_cookie(cookie);
         return NULL;
@@ -176,6 +183,7 @@ static cookie_entry_t *parse_set_cookie(char const *set_cookie_header) {
     cookie->samesite  = CURL_SAMESITE_NONE; // Default per RFC
 
     if (!cookie->domain || !cookie->path) {
+        ESP_LOGW(TAG, "No domain or cookie path for '%s'", header_copy);
         dlfree(header_copy);
         free_cookie(cookie);
         return NULL;
@@ -223,6 +231,7 @@ static cookie_entry_t *parse_set_cookie(char const *set_cookie_header) {
                     dlfree(cookie->domain);
                     cookie->domain = why_strdup(attr_value);
                     if (!cookie->domain) {
+                        ESP_LOGW(TAG, "No domain for '%s'", header_copy);
                         dlfree(header_copy);
                         free_cookie(cookie);
                         return NULL;
@@ -231,6 +240,7 @@ static cookie_entry_t *parse_set_cookie(char const *set_cookie_header) {
                     dlfree(cookie->path);
                     cookie->path = why_strdup(attr_value);
                     if (!cookie->path) {
+                        ESP_LOGW(TAG, "No path for '%s'", header_copy);
                         dlfree(header_copy);
                         free_cookie(cookie);
                         return NULL;
@@ -363,7 +373,7 @@ static int load_cookies_from_file(curl_handle_t *curl, char const *filename) {
 
     FILE *file = why_fopen(filename, "r");
     if (!file) {
-        ESP_LOGD(TAG, "Cookie file not found or can't be opened: %s", filename);
+        ESP_LOGW(TAG, "Cookie file not found or can't be opened: %s", filename);
         return 0;
     }
 
@@ -411,7 +421,7 @@ static int load_cookies_from_file(curl_handle_t *curl, char const *filename) {
 
         time_t current_time = time(NULL);
         if (cookie->expires > 0 && cookie->expires < current_time) {
-            ESP_LOGD(TAG, "Skipping expired cookie: %s", cookie->name);
+            ESP_LOGW(TAG, "Skipping expired cookie: %s", cookie->name);
             free_cookie(cookie);
             continue;
         }
@@ -421,7 +431,7 @@ static int load_cookies_from_file(curl_handle_t *curl, char const *filename) {
     }
 
     why_fclose(file);
-    ESP_LOGI(TAG, "Loaded %d cookies from file: %s", cookies_loaded, filename);
+    ESP_LOGW(TAG, "Loaded %d cookies from file: %s", cookies_loaded, filename);
     return cookies_loaded;
 }
 
@@ -444,10 +454,11 @@ static int save_cookies_to_file(curl_handle_t *curl, char const *filename) {
     cookie_entry_t *cookie = curl->cookies;
     while (cookie) {
         if (cookie->expires > 0 && cookie->expires < current_time) {
-            ESP_LOGD(TAG, "Skipping expired cookie when saving: %s", cookie->name);
+            ESP_LOGW(TAG, "Skipping expired cookie when saving: %s", cookie->name);
             cookie = cookie->next;
             continue;
         }
+        ESP_LOGW(TAG, "Saving cookie: %s", cookie->name);
 
         why_fprintf(
             file,
@@ -494,28 +505,29 @@ static esp_err_t http_event_handler(esp_http_client_event_t *evt) {
             break;
 
         case HTTP_EVENT_ON_HEADER:
-            if (evt->data && evt->data_len >= 11 && strncasecmp((char *)evt->data, "Set-Cookie:", 11) == 0) {
-                char *cookie_data = dlmalloc(evt->data_len + 1);
-                if (cookie_data) {
-                    memcpy(cookie_data, evt->data, evt->data_len);
-                    cookie_data[evt->data_len] = '\0';
-
-                    char *cookie_value = strchr(cookie_data, ':');
-                    if (cookie_value) {
-                        cookie_value++;                              // Skip ':'
-                        while (*cookie_value == ' ') cookie_value++; // Skip spaces
-
-                        cookie_entry_t *cookie = parse_set_cookie(cookie_value);
+            if (evt->header_key) {
+                if (strncasecmp(evt->header_key, "Set-Cookie", 10) == 0) {
+                    if (evt->header_value) {
+                        cookie_entry_t *cookie = parse_set_cookie(evt->header_value);
                         if (cookie) {
                             add_cookie(curl, cookie);
                         }
                     }
-                    dlfree(cookie_data);
                 }
             }
 
             if (curl->header_function) {
-                curl->header_function(evt->data, 1, evt->data_len, curl->header_data);
+                size_t key_len = strlen(evt->header_key);
+                size_t val_len = strlen(evt->header_value);
+
+                char *tmp_header = dlmalloc(key_len + val_len + 2);
+                memcpy(tmp_header, evt->header_key, key_len);
+                tmp_header[key_len] = ':';
+                tmp_header[key_len + 1] = ' ';
+                memcpy(&tmp_header[key_len + 2], evt->header_value, val_len);
+
+                curl->header_function(tmp_header, 1, key_len + val_len + 2, curl->header_data);
+                dlfree(tmp_header);
             }
             break;
 
@@ -559,8 +571,8 @@ CURL *curl_easy_init(void) {
         return NULL;
     }
 
-    curl->write_function  = default_write_callback;
-    curl->header_function = default_header_callback;
+    // curl->write_function  = default_write_callback;
+    // curl->header_function = default_header_callback;
 
     memset(&curl->config, 0, sizeof(esp_http_client_config_t));
     curl->config.event_handler = http_event_handler;
