@@ -29,6 +29,7 @@ typedef enum {
     DEVICE_TYPE_LCD,
     DEVICE_TYPE_KEYBOARD,
     DEVICE_TYPE_BUS,
+    DEVICE_TYPE_WIFI,
 } device_type_t;
 
 typedef struct device {
@@ -66,5 +67,9 @@ typedef struct {
     int (*_scan)(void *dev, i2c_scanresult_t *results, int num);
     i2c_device_t *(*_device_create)(void *dev, uint8_t address, uint32_t clk_speed);
 } i2c_bus_device_t;
+
+typedef struct {
+    device_t device;
+} wifi_device_t;
 
 device_t *device_get(char const *name);

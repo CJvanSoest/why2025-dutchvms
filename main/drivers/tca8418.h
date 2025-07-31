@@ -16,6 +16,6 @@
 
 #pragma once
 
-#include "device.h"
+#include "badgevms/device.h"
 
 device_t *tca8418_keyboard_create();

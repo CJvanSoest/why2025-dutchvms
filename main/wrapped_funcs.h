@@ -16,6 +16,5 @@
 
 #pragma once
 
-#include "badgevms/device.h"
-
-device_t *fatfs_create_spi(char const *devname, char const *partname, bool rw);
+char *inet_ntoa(struct in_addr __in);
+int   inet_aton(char const *__cp, struct in_addr *__inp);

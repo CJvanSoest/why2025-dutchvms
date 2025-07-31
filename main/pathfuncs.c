@@ -14,7 +14,7 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include "pathfuncs.h"
+#include "badgevms/pathfuncs.h"
 
 #include <stdbool.h>
 #include <stdio.h>

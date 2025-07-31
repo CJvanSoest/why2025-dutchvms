@@ -16,7 +16,7 @@
 
 #pragma once
 
-#include "device.h"
+#include "badgevms/device.h"
 #include "dlmalloc.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
@@ -106,10 +106,13 @@ typedef struct task_info {
     void *pad; // For debugging
 } task_info_t;
 
-__attribute__((always_inline)) inline static task_info_t *get_task_info() {
-    task_info_t *task_info = pvTaskGetThreadLocalStoragePointer(NULL, 0);
+extern task_info_t kernel_task;
 
-    return task_info;
+__attribute__((always_inline)) inline static task_info_t *get_task_info() {
+    if (xTaskGetApplicationTaskTag(NULL) == (void *)0x12345678) {
+        return pvTaskGetThreadLocalStoragePointer(NULL, 1);
+    }
+    return &kernel_task;
 }
 
 void         task_init();

@@ -16,9 +16,9 @@
 
 #include "tca8418.h"
 
+#include "badgevms/event.h"
 #include "esp_log.h"
 #include "esp_tca8418.h"
-#include "event.h"
 #include "freertos/FreeRTOS.h"
 
 #include <sys/time.h>

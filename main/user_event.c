@@ -14,8 +14,8 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
+#include "badgevms/event.h"
 #include "compositor/compositor_private.h"
-#include "event.h"
 #include "freertos/FreeRTOS.h"
 #include "task.h"
 

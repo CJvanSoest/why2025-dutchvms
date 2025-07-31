@@ -30,11 +30,16 @@ include:
   - wctype.h
 
   # BadgeVMS
-  - compositor.h
-  - event.h
-  - misc_funcs.h
-  - device.h
-  - ota.h
+  - badgevms/compositor.h
+  - badgevms/device.h
+  - badgevms/event.h
+  - badgevms/misc_funcs.h
+  - badgevms/ota.h
+  - badgevms/wifi.h
+  - wrapped_funcs.h
+
+  # Networking
+  - netdb.h
 
 simple_function:
 # libc.a
@@ -881,8 +886,30 @@ simple_function:
   - ynf
 
 # BadgeVMS
+  - device_get
   - get_screen_info
+  - ota_get_invalid_version
+  - ota_get_running_version
+  - ota_session_abort
+  - ota_session_commit
+  - ota_session_open
+  - ota_write
   - vaddr_to_paddr
+  - wifi_connect
+  - wifi_disconnect
+  - wifi_get_connection_station
+  - wifi_get_connection_status
+  - wifi_get_status
+  - wifi_scan_free_station
+  - wifi_scan_get_num_results
+  - wifi_scan_get_result
+  - wifi_station_get_bssid
+  - wifi_station_get_mode
+  - wifi_station_get_primary_channel
+  - wifi_station_get_rssi
+  - wifi_station_get_secondary_channel
+  - wifi_station_get_ssid
+  - wifi_station_wps
   - window_create
   - window_destroy
   - window_event_poll
@@ -898,13 +925,11 @@ simple_function:
   - window_size_set
   - window_title_get
   - window_title_set
-  - device_get
-  - ota_get_invalid_version
-  - ota_get_running_version
-  - ota_session_abort
-  - ota_session_commit
-  - ota_session_open
-  - ota_write
+
+# Networking
+  - freeaddrinfo
+  - inet_ntoa
+  - getaddrinfo
 
 simple_function_extern:
   - __adddf3
@@ -1026,6 +1051,7 @@ wrapped_function:
   - vfscanf
   - vsnprintf
   - vsprintf
+  - vsscanf
   - wcsdup
   - write
 

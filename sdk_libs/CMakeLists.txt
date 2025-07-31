@@ -40,6 +40,7 @@ file(MAKE_DIRECTORY ${SDK_LIB_DIR})
 file(MAKE_DIRECTORY ${SDK_INCLUDE_DIR})
 
 file(COPY ${CMAKE_SOURCE_DIR}/include/ DESTINATION ${SDK_INCLUDE_DIR})
+file(COPY ${CMAKE_SOURCE_DIR}/main/include/ DESTINATION ${SDK_INCLUDE_DIR})
 
 function(build_sdk_library lib_name)
     set(LIB_SOURCE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/${lib_name})

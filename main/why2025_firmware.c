@@ -20,14 +20,15 @@
 #error "BadgeVMS requires esp-idf 5.50 (or maybe later, who knows)"
 #endif
 
+#include "badgevms/device.h"
 #include "compositor/compositor_private.h"
-#include "device.h"
 #include "device_private.h"
 #include "drivers/badgevms_i2c_bus.h"
 #include "drivers/fatfs.h"
 #include "drivers/st7703.h"
 #include "drivers/tca8418.h"
 #include "drivers/tty.h"
+#include "drivers/wifi.h"
 #include "elf_symbols.h"
 #include "esp_debug_helpers.h"
 #include "esp_log.h"
@@ -68,20 +69,30 @@ extern size_t why_fread(void *ptr, size_t size, size_t nmemb, FILE *stream);
 extern int    why_fclose(FILE *f);
 extern long   why_ftell(FILE *stream);
 
-void IRAM_ATTR __wrap_esp_panic_handler(panic_info_t *info) {
-    task_info_t *task_info = get_task_info();
-    if (task_info) {
-        esp_rom_printf("Crashing in task: %u\n", task_info->pid);
-    } else {
-        esp_rom_printf("Crashing in BadgeVMS\n");
-    }
+#include "nvs_flash.h"
 
-    dump_mmu();
+void IRAM_ATTR __wrap_esp_panic_handler(panic_info_t *info) {
+    if (xTaskGetApplicationTaskTag(NULL) == (void *)0x12345678) {
+        task_info_t *task_info = get_task_info();
+        if (task_info && task_info->pid) {
+            esp_rom_printf("Crashing in task: %u\n", task_info->pid);
+        } else {
+            esp_rom_printf("Crashing in BadgeVMS\n");
+        }
+
+        dump_mmu();
+    } else {
+        esp_rom_printf("Crashing in ESP-IDF task\n");
+    }
 
     __real_esp_panic_handler(info);
 }
 
+#include "lwip/netdb.h"
+
 int app_main(void) {
+    printf("Sizeof struct addrinfo %u\n", sizeof(struct addrinfo));
+
     printf("BadgeVMS Initializing...\n");
     size_t free_ram = heap_caps_get_free_size(MALLOC_CAP_DEFAULT);
     ESP_LOGW(TAG, "Free main memory: %zi", free_ram);
@@ -91,11 +102,19 @@ int app_main(void) {
     device_init();
     logical_names_system_init();
 
+    esp_err_t ret = nvs_flash_init();
+    if (ret == ESP_ERR_NVS_NO_FREE_PAGES || ret == ESP_ERR_NVS_NEW_VERSION_FOUND) {
+        ESP_ERROR_CHECK(nvs_flash_erase());
+        ret = nvs_flash_init();
+    }
+
     device_register("KEYBOARD0", tca8418_keyboard_create());
     device_register("PANEL0", st7703_create());
     device_register("TT01", tty_create(true, true));
     device_register("FLASH0", fatfs_create_spi("FLASH0", "storage", true));
     device_register("I2CBUS0", badgevms_i2c_bus_create("I2CBUS0", 0, 400 * 1000));
+    device_register("WIFI0", wifi_create());
+
     logical_name_set("SEARCH", "FLASH0:[SUBDIR], FLASH0:[SUBDIR.ANOTHER]", false);
 
     compositor_init("PANEL0", "KEYBOARD0");
@@ -143,9 +162,10 @@ int app_main(void) {
 
     while (1) {
         while (get_num_tasks() < 1) {
-            // pidb = run_task_path("FLASH0:bench_basic_b.elf", 4096, TASK_TYPE_ELF, 2, argv);
+            pidb = run_task_path("FLASH0:wifi_test.elf", 4096, TASK_TYPE_ELF, 2, argv);
             // pidb = run_task_path("FLASH0:doom.elf", 4096, TASK_TYPE_ELF, 5, argv);
-            pidb = run_task_path("FLASH0:doom.elf", 4096, TASK_TYPE_ELF, 3, argv);
+            // pidb = run_task_path("FLASH0:doom.elf", 4096, TASK_TYPE_ELF, 5, argv);
+            // pidb = run_task_path("FLASH0:doom.elf", 4096, TASK_TYPE_ELF, 3, argv);
             // pidb = run_task_path("FLASH0:framebuffer_test.elf", 4096, TASK_TYPE_ELF, 2, argv);
             // pidb = run_task_path("FLASH0:hardware_test.elf", 4096, TASK_TYPE_ELF, 2, argv);
             // pidb = run_task_path("FLASH0:sdl_test.elf", 4096, TASK_TYPE_ELF, 2, argv);

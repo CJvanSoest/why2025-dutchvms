@@ -14,10 +14,13 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
+#include "badgevms/pathfuncs.h"
 #include "dlmalloc.h"
 #include "esp_log.h"
 #include "logical_names.h"
-#include "pathfuncs.h"
+#include "lwip/ip4_addr.h"
+#include "lwip/netdb.h"
+#include "lwip/sockets.h"
 #include "rom/uart.h"
 #include "task.h"
 
@@ -422,4 +425,14 @@ void why_abort(void) {
     task_info_t *task_info = get_task_info();
     ESP_LOGW("abort", "Task %u called abort()", task_info->pid);
     vTaskDelete(NULL);
+}
+
+#undef inet_ntoa
+#undef inet_aton
+char *inet_ntoa(struct in_addr __in) {
+    return ip4addr_ntoa((ip4_addr_t const *)&(__in));
+}
+
+int inet_aton(char const *__cp, struct in_addr *__inp) {
+    return ip4addr_aton(__cp, (ip4_addr_t *)__inp);
 }

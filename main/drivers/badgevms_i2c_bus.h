@@ -16,6 +16,6 @@
 
 #pragma once
 
-#include "device.h"
+#include "badgevms/device.h"
 
 device_t *badgevms_i2c_bus_create(char const *name, uint8_t port, uint32_t clk_speed);

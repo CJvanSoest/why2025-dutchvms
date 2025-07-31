@@ -16,5 +16,6 @@
 
 #pragma once
 
-#include "../../include/badgevms/framebuffer.h"
+#include "badgevms/framebuffer.h"
+
 framebuffer_t *framebuffer_allocate(uint32_t w, uint32_t h);

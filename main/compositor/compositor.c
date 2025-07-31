@@ -14,19 +14,19 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include "compositor.h"
+#include "badgevms/compositor.h"
 
+#include "badgevms/device.h"
+#include "badgevms/event.h"
+#include "badgevms/pixel_formats.h"
 #include "badgevms_config.h"
 #include "compositor_private.h"
-#include "device.h"
 #include "driver/ppa.h"
 #include "esp_cache.h"
 #include "esp_log.h"
 #include "esp_private/esp_cache_private.h"
-#include "event.h"
 #include "font.h"
 #include "memory.h"
-#include "pixel_formats.h"
 #include "pixel_functions.h"
 #include "task.h"
 #include "window_decorations.h"
@@ -57,13 +57,10 @@ rotation_angle_t rotation = ROTATION_ANGLE_270;
 #define WINDOW_MAX_H (FRAMEBUFFER_MAX_H - BORDER_TOP_PX - TOP_BAR_PX)
 
 __attribute__((always_inline)) static inline ppa_srm_rotation_angle_t rotation_to_srm(rotation_angle_t rotation) {
-    switch(rotation) {
-        case ROTATION_ANGLE_270:
-            return PPA_SRM_ROTATION_ANGLE_90;
-        case ROTATION_ANGLE_180:
-            return PPA_SRM_ROTATION_ANGLE_180;
-        case ROTATION_ANGLE_90:
-            return PPA_SRM_ROTATION_ANGLE_270;
+    switch (rotation) {
+        case ROTATION_ANGLE_270: return PPA_SRM_ROTATION_ANGLE_90;
+        case ROTATION_ANGLE_180: return PPA_SRM_ROTATION_ANGLE_180;
+        case ROTATION_ANGLE_90: return PPA_SRM_ROTATION_ANGLE_270;
         default:
     }
     return PPA_SRM_ROTATION_ANGLE_0;
@@ -286,7 +283,7 @@ __attribute__((always_inline)) static inline bool check_occluded(window_t *windo
 }
 
 static void IRAM_ATTR NOINLINE_ATTR compositor(void *ignored) {
-    static ppa_client_handle_t ppa_srm_handle = NULL;
+    static ppa_client_handle_t ppa_srm_handle  = NULL;
     static ppa_client_handle_t ppa_fill_handle = NULL;
 
     ppa_client_config_t ppa_srm_config = {
@@ -362,7 +359,7 @@ static void IRAM_ATTR NOINLINE_ATTR compositor(void *ignored) {
                             continue;
                         default:
                     }
-                    cur_pos = window_clamp_position(window_stack, cur_pos);
+                    cur_pos              = window_clamp_position(window_stack, cur_pos);
                     window_stack->rect.x = cur_pos.x;
                     window_stack->rect.y = cur_pos.y;
                 }
@@ -420,7 +417,7 @@ static void IRAM_ATTR NOINLINE_ATTR compositor(void *ignored) {
                 float scale = fminf(scale_x, scale_y);
 
                 ppa_srm_rotation_angle_t ppa_rotation = rotation_to_srm(rotation);
-                
+
 #if 0
                 int empty_rect_a_x = final_fb_x;
                 int empty_rect_a_y = final_fb_y;
@@ -583,13 +580,13 @@ window_t *window_create(char const *title, window_size_t size, window_flag_t fla
         goto error;
     }
 
-    window->flags      = flags;
-    window->task_info  = task_info;
-    window->rect.x = 0;
-    window->rect.y = 0;
-    size               = window_clamp_size(window, size);
-    window->rect.w     = size.w;
-    window->rect.h     = size.h;
+    window->flags     = flags;
+    window->task_info = task_info;
+    window->rect.x    = 0;
+    window->rect.y    = 0;
+    size              = window_clamp_size(window, size);
+    window->rect.w    = size.w;
+    window->rect.h    = size.h;
 
     task_record_resource_alloc(RES_WINDOW, window);
     push_window(window);
@@ -645,7 +642,7 @@ window_coords_t window_position_get(window_t *window) {
 }
 
 window_coords_t window_position_set(window_t *window, window_coords_t coords) {
-    coords           = window_clamp_position(window, coords);
+    coords         = window_clamp_position(window, coords);
     window->rect.x = coords.x;
     window->rect.y = coords.y;
     return coords;
@@ -660,7 +657,7 @@ window_size_t window_size_get(window_t *window) {
 }
 
 window_size_t window_size_set(window_t *window, window_size_t size) {
-    size         = window_clamp_size(window, size);
+    size           = window_clamp_size(window, size);
     window->rect.w = size.w;
     window->rect.h = size.h;
     return size;

@@ -16,6 +16,6 @@
 
 #pragma once
 
-#include "device.h"
+#include "badgevms/device.h"
 
 device_t *tty_create(bool is_stdout, bool is_stdin);

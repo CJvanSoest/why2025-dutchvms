@@ -136,7 +136,7 @@ idf_component_register( SRCS
   #vscanf.c
   vsnprintf.c
   vsprintf.c
-  #vsscanf.c
+  vsscanf.c
   #vswprintf.c
   #vswscanf.c
   #vwprintf.c

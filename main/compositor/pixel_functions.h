@@ -16,8 +16,8 @@
 
 #pragma once
 
-#include "compositor_private.h"
 #include "badgevms_config.h"
+#include "compositor_private.h"
 
 #include <stdint.h>
 
@@ -56,9 +56,7 @@ __attribute__((always_inline)) inline static void
 __attribute__((always_inline)) inline static window_rect_t rotate_rect(window_rect_t rect, rotation_angle_t rotation) {
     window_rect_t ret;
     switch (rotation) {
-        case ROTATION_ANGLE_0:
-            ret = rect;
-            break;
+        case ROTATION_ANGLE_0: ret = rect; break;
 
         case ROTATION_ANGLE_90:
             ret.w = rect.h;

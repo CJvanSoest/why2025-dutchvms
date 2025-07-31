@@ -3,6 +3,7 @@
 #define __ARPA_INET_H__
 
 #include <endian.h>
+#include <netinet/in.h>
 
 /* byteorder(3) - simimlar to linux <arpa/inet.h> */
 #ifndef __machine_host_to_from_network_defined
@@ -26,5 +27,8 @@
 #define	ntohs(_x)	__ntohs(_x)
 #endif
 #endif /* __machine_host_to_from_network_defined */
+
+char *inet_ntoa (struct in_addr __in);
+int inet_aton (const char *__cp, struct in_addr *__inp);
 
 #endif /* __ARPA_INET_H__ */

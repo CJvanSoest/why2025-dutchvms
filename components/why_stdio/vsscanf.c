@@ -30,9 +30,9 @@
 #include "stdio_private.h"
 
 int
-vsscanf(const char *s, const char *fmt, va_list ap)
+why_vsscanf(const char *s, const char *fmt, va_list ap)
 {
 	struct __file_str f = FDEV_SETUP_STRING_READ(s);
 
-	return vfscanf(&f.file, fmt, ap);
+	return why_vfscanf(&f.file, fmt, ap);
 }

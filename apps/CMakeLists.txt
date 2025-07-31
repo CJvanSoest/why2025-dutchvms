@@ -123,6 +123,11 @@ build_app(sdl_test
     sdl3
 )
 
+build_app(wifi_test
+    SOURCES
+    wifi_test/wifi_test.c
+)
+
 build_app(doom
     SOURCES
     doomgeneric/doomgeneric/am_map.c

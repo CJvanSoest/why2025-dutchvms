@@ -16,7 +16,7 @@
 
 #pragma once
 
-#include "device.h"
+#include "badgevms/device.h"
 
 int  device_register(char const *name, device_t *device);
 void device_init();

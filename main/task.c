@@ -16,11 +16,12 @@
 
 #include "task.h"
 
+#include "badgevms/compositor.h"
+#include "badgevms/event.h"
+#include "badgevms/ota.h"
 #include "bitfuncs.h"
-#include "compositor.h"
 #include "esp_elf.h"
 #include "esp_log.h"
-#include "event.h"
 #include "hal/cache_hal.h"
 #include "hal/cache_ll.h"
 #include "hal/cache_types.h"
@@ -31,7 +32,6 @@
 #include "khash.h"
 #include "memory.h"
 #include "why_io.h"
-#include "ota.h"
 
 #include <stdatomic.h>
 
@@ -133,7 +133,7 @@ static void process_table_remove_task(task_info_t *task_info) {
 }
 
 void vTaskPreDeletionHook(TaskHandle_t handle) {
-    task_info_t *task_info = pvTaskGetThreadLocalStoragePointer(handle, 0);
+    task_info_t *task_info = pvTaskGetThreadLocalStoragePointer(handle, 1);
 
     if (!task_info) {
         ESP_DRAM_LOGW(DRAM_STR("vTaskPreDeletionHook"), "Called for a kernel task");
@@ -547,7 +547,8 @@ static void IRAM_ATTR zeus(void *ignored) {
                 // Since Zeus is the highest priority task on the core the task should never be able to run
                 task_info->handle = new_task;
                 process_table_add_task(task_info);
-                vTaskSetThreadLocalStoragePointer(new_task, 0, task_info);
+                vTaskSetThreadLocalStoragePointer(new_task, 1, task_info);
+                vTaskSetApplicationTaskTag(new_task, (void *)0x12345678);
                 ESP_LOGV("ZEUS", "PID %d sprung forth fully formed from my forehead", task_info->pid);
                 ++num_tasks;
             } else {
@@ -561,7 +562,8 @@ static void IRAM_ATTR zeus(void *ignored) {
 
 void kernel_task_base(void *pvParameters) {
     kernel_task_param_t *params = pvParameters;
-    vTaskSetThreadLocalStoragePointer(NULL, 0, &kernel_task);
+    vTaskSetThreadLocalStoragePointer(NULL, 1, &kernel_task);
+    vTaskSetApplicationTaskTag(NULL, (void *)0x12345678);
 
     TaskFunction_t entry           = params->entry;
     void          *task_parameters = params->pvParameters;
@@ -612,7 +614,10 @@ void task_init() {
         &kernel_task,
         ((uintptr_t)&kernel_task) + sizeof(task_info_t)
     );
-    vTaskSetThreadLocalStoragePointer(NULL, 0, &kernel_task);
+
+    vTaskSetThreadLocalStoragePointer(NULL, 1, &kernel_task);
+    vTaskSetApplicationTaskTag(NULL, (void *)0x12345678);
+
     process_table_add_task(&kernel_task);
 
     ESP_DRAM_LOGI(DRAM_STR("task_init"), "Starting Hades process");

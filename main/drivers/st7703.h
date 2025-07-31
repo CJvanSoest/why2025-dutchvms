@@ -16,8 +16,8 @@
 
 #pragma once
 
+#include "badgevms/device.h"
 #include "badgevms_config.h"
-#include "device.h"
 #include "sdkconfig.h"
 
 #ifdef __cplusplus

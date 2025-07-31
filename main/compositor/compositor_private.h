@@ -16,9 +16,9 @@
 
 #pragma once
 
+#include "badgevms/compositor.h"
+#include "badgevms/framebuffer.h"
 #include "badgevms_config.h"
-#include "compositor.h"
-#include "framebuffer.h"
 #include "memory.h"
 #include "task.h"
 
@@ -46,9 +46,9 @@ typedef struct window {
     window_flag_t          flags;
     char                  *title;
 
-    window_rect_t   rect;
-    task_info_t    *task_info;
-    QueueHandle_t   event_queue;
+    window_rect_t rect;
+    task_info_t  *task_info;
+    QueueHandle_t event_queue;
 
     struct window *next;
     struct window *prev;

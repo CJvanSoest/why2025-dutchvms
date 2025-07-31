@@ -49,7 +49,7 @@ if(CONFIG_SOC_MIPI_DSI_SUPPORTED)
 endif()
 
 idf_component_register(SRCS ${srcs}
-                       INCLUDE_DIRS ${includes}
+                       INCLUDE_DIRS ${includes} "${CMAKE_CURRENT_SOURCE_DIR}/../../main/include"
                        PRIV_INCLUDE_DIRS "priv_include"
                        PRIV_REQUIRES ${priv_requires}
                        REQUIRES ${public_requires}

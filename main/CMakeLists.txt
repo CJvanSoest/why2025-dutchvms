@@ -11,6 +11,7 @@ idf_component_register(
 	 "drivers/tca8418.c"
 	 "drivers/tty.c"
 	 "drivers/badgevms_i2c_bus.c"
+	 "drivers/wifi.c"
 	 "logical_names.c"
 	 "memory.c"
 	 "memory_heap_caps.c"
@@ -23,18 +24,22 @@ idf_component_register(
     	 "why2025_firmware.c"
     INCLUDE_DIRS
 	 ${CMAKE_CURRENT_SOURCE_DIR}/
-	 ${CMAKE_CURRENT_SOURCE_DIR}/../include/badgevms
+	 ${CMAKE_CURRENT_SOURCE_DIR}/include
 	 ${CMAKE_CURRENT_SOURCE_DIR}/thirdparty
     PRIV_REQUIRES
+	"app_update"
 	"esp_driver_ppa"
 	"esp_lcd_st7703"
 	"esp_psram"
 	"esp_tca8418"
+	"esp_wifi"
+	"esp_wifi_remote"
 	"fatfs"
 	"hal"
+	"nvs_flash"
 	"vfs"
-    "esp_mm"
-	"app_update"
+        "esp_mm"
+        "lwip"
 )
 
 add_custom_command(
