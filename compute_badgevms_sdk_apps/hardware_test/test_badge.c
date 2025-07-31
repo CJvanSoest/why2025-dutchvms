@@ -18,7 +18,7 @@
 #include "badgevms/compositor.h"
 #include "badgevms/event.h"
 #include "badgevms/framebuffer.h"
-#include "badgevms/keyboard.h"
+#include "badgevms/misc_funcs.h"
 
 #include "test_badge.h"
 #include "test_keyboard.h"
@@ -31,8 +31,33 @@
 #include <string.h>
 #include <time.h>
 
+#include "badgevms/wifi.h"
+#include "curl/curl.h"
+#include <unistd.h> // for usleep
+
+int ping_badgehub(void) {
+    wifi_connect();
+    usleep(10000000);
+    curl_global_init(0);
+    CURL *curl = curl_easy_init();
+
+    CURLcode res;
+    uint64_t unique_id = get_unique_id();
+    curl_easy_setopt(curl, CURLOPT_URL, "https://badge.why2025.org/api/v3/ping?id=%08lX%08lX", (uint32_t) (unique_id >> 32), (uint32_t) unique_id);
+    curl_easy_setopt(curl, CURLOPT_USERAGENT, "BadgeVMS-libcurl/1.0");
+    res = curl_easy_perform(curl);
+    curl_easy_cleanup(curl);
+
+    if (res != CURLE_OK) {
+        printf("Badgehub ping failed: %s\n", curl_easy_strerror(res));
+    } else {
+        printf("Badgehub ping success\n");
+    }
+    return res;
+}
+
 void init_tests(app_state_t *app) {
-    app->num_tests = 8;
+    app->num_tests = 10;
 
     strcpy(app->tests[0].name, "I2C Bus");
     strcpy(app->tests[0].status, "Scan Success 4/4");
@@ -65,6 +90,23 @@ void init_tests(app_state_t *app) {
     strcpy(app->tests[7].name, "Sensors");
     strcpy(app->tests[7].status, "All Online");
     app->tests[7].passed = true;
+
+    strcpy(app->tests[8].name, "SPI Flash");
+    uint64_t unique_id = get_unique_id();
+    snprintf(app->tests[8].status, sizeof(app->tests[8].status), "%08lX%08lX",
+             (uint32_t) (unique_id >> 32), (uint32_t) unique_id);
+    printf("Device ID: %08lX%08lX\n", (uint32_t) (unique_id >> 32), (uint32_t) unique_id);
+    app->tests[8].passed = unique_id != 0; // This test always passes if an ID is retrieved
+
+    strcpy(app->tests[9].name, "Badgehub connection");
+    int pingBadgeHubErr = ping_badgehub();
+    if (pingBadgeHubErr == 0) {
+        strcpy(app->tests[9].status, "Ping Success!");
+        app->tests[9].passed = true;
+    } else {
+        snprintf(app->tests[9].status, sizeof(app->tests[9].status), "Badgehub Ping Error: %d", pingBadgeHubErr);
+        app->tests[9].passed = false;
+    }
 }
 
 
@@ -79,7 +121,6 @@ void render_ui(app_state_t *app) {
     mu_begin(ctx);
 
     if (mu_begin_window(ctx, "WHY2025 Badge Test", mu_rect(0, 0, 720, 270))) {
-
         mu_layout_row(ctx, 1, (int[]){-1}, 40);
         mu_text(ctx, "WHY2025 Badge Test");
 
@@ -124,7 +165,8 @@ void render_ui(app_state_t *app) {
             case MU_COMMAND_TEXT:
                 draw_text(app->fb, cmd->text.str, cmd->text.pos.x, cmd->text.pos.y, cmd->text.color);
                 break;
-            case MU_COMMAND_RECT: draw_rect(app->fb, cmd->rect.rect, cmd->rect.color); break;
+            case MU_COMMAND_RECT: draw_rect(app->fb, cmd->rect.rect, cmd->rect.color);
+                break;
             case MU_COMMAND_ICON:
             case MU_COMMAND_CLIP: break;
         }
@@ -140,14 +182,14 @@ int main() {
 
     app.ctx = malloc(sizeof(mu_Context));
     mu_init(app.ctx);
-    app.ctx->text_width  = mu_text_width;
+    app.ctx->text_width = mu_text_width;
     app.ctx->text_height = mu_text_height;
 
     init_tests(&app);
     init_keyboard_layout(&app);
     strcpy(app.input_buffer, "Type here...");
 
-    bool       running              = true;
+    bool running = true;
     long const target_frame_time_us = 16667;
 
     memset(app.fb->pixels, 0x55, 720 * 720 * 2);
@@ -162,7 +204,7 @@ int main() {
         while (1) {
             clock_gettime(CLOCK_MONOTONIC, &cur_time);
             long elapsed_us =
-                (cur_time.tv_sec - start_time.tv_sec) * 1000000L + (cur_time.tv_nsec - start_time.tv_nsec) / 1000L;
+                    (cur_time.tv_sec - start_time.tv_sec) * 1000000L + (cur_time.tv_nsec - start_time.tv_nsec) / 1000L;
             long sleep_time = target_frame_time_us - elapsed_us;
 
             if (sleep_time <= 0) {
@@ -172,10 +214,12 @@ int main() {
             event_t event = window_event_poll(app.window, false, sleep_time / 1000);
 
             switch (event.type) {
-                case EVENT_QUIT: running = false; break;
+                case EVENT_QUIT: running = false;
+                    break;
 
                 case EVENT_KEY_DOWN:
-                case EVENT_KEY_UP: handle_keyboard_event(&app, &event.keyboard); break;
+                case EVENT_KEY_UP: handle_keyboard_event(&app, &event.keyboard);
+                    break;
 
                 default: break;
             }
