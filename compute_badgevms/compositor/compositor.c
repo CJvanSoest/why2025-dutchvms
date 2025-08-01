@@ -160,8 +160,10 @@ framebuffer_t *framebuffer_allocate(uint32_t w, uint32_t h, pixel_format_t forma
     short framebuffer_bpp = 2;
 
     switch (format) {
+        case BADGEVMS_PIXELFORMAT_BGRA8888: // fallthrough
         case BADGEVMS_PIXELFORMAT_RGBA8888: // fallthrough
-        case BADGEVMS_PIXELFORMAT_BGRA8888: framebuffer_bpp = 4; break;
+        case BADGEVMS_PIXELFORMAT_ARGB8888: // fallthrough
+        case BADGEVMS_PIXELFORMAT_ABGR8888: framebuffer_bpp = 4; break;
         case BADGEVMS_PIXELFORMAT_RGB565: // fallthrough
         case BADGEVMS_PIXELFORMAT_BGR565: break;
         default: format = BADGEVMS_PIXELFORMAT_RGB565;
@@ -447,9 +449,14 @@ static void IRAM_ATTR NOINLINE_ATTR compositor(void *ignored) {
                 switch (framebuffer->format) {
                     case BADGEVMS_PIXELFORMAT_RGB565: rgb_swap = true; // Fallthrough
                     case BADGEVMS_PIXELFORMAT_BGR565: break;
-                    case BADGEVMS_PIXELFORMAT_RGBA8888: rgb_swap = true; // Fallthrough
-                    case BADGEVMS_PIXELFORMAT_BGRA8888:
-                        byte_swap = true;
+                    case BADGEVMS_PIXELFORMAT_BGRA8888: // Fallthrough
+                        rgb_swap = true;
+                    case BADGEVMS_PIXELFORMAT_RGBA8888:
+                        // byte_swap = true;
+                        mode      = PPA_SRM_COLOR_MODE_ARGB8888;
+                        break;
+                    case BADGEVMS_PIXELFORMAT_ARGB8888: rgb_swap = true; // Fallthrough
+                    case BADGEVMS_PIXELFORMAT_ABGR8888:
                         mode      = PPA_SRM_COLOR_MODE_ARGB8888;
                         break;
                     default:
