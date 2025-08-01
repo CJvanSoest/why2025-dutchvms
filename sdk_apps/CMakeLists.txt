@@ -101,7 +101,7 @@ function(build_app app_name)
         COMMAND ${CMAKE_STRIP} ${STORAGE_STAGING_DIR}/${app_name}.elf
         DEPENDS
          build_app_${app_name}
-         init_storage_staging
+         ${APP_ELF_DIR}/${app_name}.elf
         COMMENT "Copying ${app_name}.elf to storage staging and stripping"
         VERBATIM
     )
@@ -153,6 +153,11 @@ build_app(wifi_test
 build_app(curl_test
     SOURCES
      curl_test/curl_test.c
+)
+
+build_app(thread_test
+    SOURCES
+     thread_test/main.c
 )
 
 build_app(doom

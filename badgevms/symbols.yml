@@ -35,9 +35,10 @@ include:
   - badgevms/event.h
   - badgevms/misc_funcs.h
   - badgevms/ota.h
+  - badgevms/thread.h
   - badgevms/wifi.h
-  - wrapped_funcs.h
   - curl/curl.h
+  - wrapped_funcs.h
 
   # Networking
   - netdb.h
@@ -896,6 +897,7 @@ simple_function:
   - ota_session_commit
   - ota_session_open
   - ota_write
+  - thread_create
   - vaddr_to_paddr
   - wifi_connect
   - wifi_disconnect
