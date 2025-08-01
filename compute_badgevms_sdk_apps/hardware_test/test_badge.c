@@ -37,22 +37,38 @@
 
 int ping_badgehub(void) {
     wifi_connect();
-    usleep(10000000);
     curl_global_init(0);
     CURL *curl = curl_easy_init();
 
     CURLcode res;
     uint64_t unique_id = get_unique_id();
-    curl_easy_setopt(curl, CURLOPT_URL, "https://badge.why2025.org/api/v3/ping?id=%08lX%08lX", (uint32_t) (unique_id >> 32), (uint32_t) unique_id);
+    char url[200];
+    snprintf(url, sizeof(url), "https://badge.why2025.org/api/v3/ping?mac=badge_mac&id=%08lX%08lX",
+             (uint32_t) (unique_id >> 32), (uint32_t) unique_id);
+    curl_easy_setopt(curl, CURLOPT_URL, url);
     curl_easy_setopt(curl, CURLOPT_USERAGENT, "BadgeVMS-libcurl/1.0");
-    res = curl_easy_perform(curl);
-    curl_easy_cleanup(curl);
+    int retries = 10;
 
-    if (res != CURLE_OK) {
-        printf("Badgehub ping failed: %s\n", curl_easy_strerror(res));
-    } else {
-        printf("Badgehub ping success\n");
+        printf("\nDoing Badgehub ping with url: %s\n", url);
+    while (retries && ((res = curl_easy_perform(curl) != CURLE_OK))) {
+        printf("\nDoing Badgehub ping with url Retry[%d]: %s\n", 11 - retries, url);
+        usleep(500);
+        --retries;
     }
+
+    long http_code = 0;
+    curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &http_code);
+    curl_easy_cleanup(curl);
+    if (res != CURLE_OK) {
+        printf("\nBadgehub ping failed: %s\n", curl_easy_strerror(res));
+    } else {
+        if (http_code != 200) {
+            printf("\nBadgehub ping failed with HTTP status code: %ld\n", http_code);
+            return -1; // Indicate an error
+        }
+        printf("\nBadgehub ping success\n");
+    }
+
     return res;
 }
 
