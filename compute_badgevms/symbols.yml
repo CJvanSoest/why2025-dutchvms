@@ -951,6 +951,7 @@ simple_function_extern:
   - __divdf3
   - __divdi3
   - __eqdf2
+  - __extendhfsf2
   - __extendsfdf2
   - __fixdfdi
   - __fixdfsi
@@ -961,6 +962,7 @@ simple_function_extern:
   - __gtdf2
   - __ltdf2
   - __muldf3
+  - __popcountsi2
   - __riscv_restore_0
   - __riscv_restore_1
   - __riscv_restore_10
@@ -989,6 +991,7 @@ simple_function_extern:
   - __riscv_save_9
   - __subdf3
   - __truncdfsf2
+  - __truncsfhf2
   - __udivdi3
   - __umoddi3
 
@@ -1062,6 +1065,7 @@ wrapped_function:
   - system
   - tcgetattr
   - tcsetattr
+  - ungetc
   - vfprintf
   - vfscanf
   - vsnprintf
