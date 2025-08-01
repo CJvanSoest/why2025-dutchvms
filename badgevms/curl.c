@@ -522,7 +522,7 @@ static esp_err_t http_event_handler(esp_http_client_event_t *evt) {
 
                 char *tmp_header = dlmalloc(key_len + val_len + 2);
                 memcpy(tmp_header, evt->header_key, key_len);
-                tmp_header[key_len] = ':';
+                tmp_header[key_len]     = ':';
                 tmp_header[key_len + 1] = ' ';
                 memcpy(&tmp_header[key_len + 2], evt->header_value, val_len);
 

@@ -16,8 +16,8 @@
 
 #include "badgevms/pathfuncs.h"
 #include "dlmalloc.h"
-#include "esp_log.h"
 #include "esp_flash.h"
+#include "esp_log.h"
 #include "logical_names.h"
 #include "lwip/ip4_addr.h"
 #include "lwip/netdb.h"

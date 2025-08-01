@@ -453,12 +453,10 @@ static void IRAM_ATTR NOINLINE_ATTR compositor(void *ignored) {
                         rgb_swap = true;
                     case BADGEVMS_PIXELFORMAT_RGBA8888:
                         // byte_swap = true;
-                        mode      = PPA_SRM_COLOR_MODE_ARGB8888;
+                        mode = PPA_SRM_COLOR_MODE_ARGB8888;
                         break;
                     case BADGEVMS_PIXELFORMAT_ARGB8888: rgb_swap = true; // Fallthrough
-                    case BADGEVMS_PIXELFORMAT_ABGR8888:
-                        mode      = PPA_SRM_COLOR_MODE_ARGB8888;
-                        break;
+                    case BADGEVMS_PIXELFORMAT_ABGR8888: mode = PPA_SRM_COLOR_MODE_ARGB8888; break;
                     default:
                 }
 
