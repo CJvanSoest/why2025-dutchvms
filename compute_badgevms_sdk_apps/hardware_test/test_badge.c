@@ -18,7 +18,6 @@
 #include "badgevms/compositor.h"
 #include "badgevms/event.h"
 #include "badgevms/framebuffer.h"
-#include "badgevms/misc_funcs.h"
 
 #include "test_badge.h"
 #include "test_keyboard.h"
@@ -31,46 +30,7 @@
 #include <string.h>
 #include <time.h>
 
-#include "badgevms/wifi.h"
-#include "curl/curl.h"
-#include <unistd.h> // for usleep
-
-int ping_badgehub(void) {
-    wifi_connect();
-    curl_global_init(0);
-    CURL *curl = curl_easy_init();
-
-    CURLcode res;
-    uint64_t unique_id = get_unique_id();
-    char url[200];
-    snprintf(url, sizeof(url), "https://badge.why2025.org/api/v3/ping?mac=badge_mac&id=%08lX%08lX",
-             (uint32_t) (unique_id >> 32), (uint32_t) unique_id);
-    curl_easy_setopt(curl, CURLOPT_URL, url);
-    curl_easy_setopt(curl, CURLOPT_USERAGENT, "BadgeVMS-libcurl/1.0");
-    int retries = 10;
-
-        printf("\nDoing Badgehub ping with url: %s\n", url);
-    while (retries && ((res = curl_easy_perform(curl) != CURLE_OK))) {
-        printf("\nDoing Badgehub ping with url Retry[%d]: %s\n", 11 - retries, url);
-        usleep(500);
-        --retries;
-    }
-
-    long http_code = 0;
-    curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &http_code);
-    curl_easy_cleanup(curl);
-    if (res != CURLE_OK) {
-        printf("\nBadgehub ping failed: %s\n", curl_easy_strerror(res));
-    } else {
-        if (http_code != 200) {
-            printf("\nBadgehub ping failed with HTTP status code: %ld\n", http_code);
-            return -1; // Indicate an error
-        }
-        printf("\nBadgehub ping success\n");
-    }
-
-    return res;
-}
+#include "run_tests.h"
 
 void init_tests(app_state_t *app) {
     app->num_tests = 10;
@@ -107,24 +67,16 @@ void init_tests(app_state_t *app) {
     strcpy(app->tests[7].status, "All Online");
     app->tests[7].passed = true;
 
-    strcpy(app->tests[8].name, "SPI Flash");
-    uint64_t unique_id = get_unique_id();
-    snprintf(app->tests[8].status, sizeof(app->tests[8].status), "%08lX%08lX",
-             (uint32_t) (unique_id >> 32), (uint32_t) unique_id);
-    printf("Device ID: %08lX%08lX\n", (uint32_t) (unique_id >> 32), (uint32_t) unique_id);
-    app->tests[8].passed = unique_id != 0; // This test always passes if an ID is retrieved
+    // Initialize Device ID test with "Loading..."
+    strcpy(app->tests[8].name, "Device ID");
+    strcpy(app->tests[8].status, "Loading...");
+    app->tests[8].passed = false;
 
+    // Initialize Badgehub connection test with "Loading..."
     strcpy(app->tests[9].name, "Badgehub connection");
-    int pingBadgeHubErr = ping_badgehub();
-    if (pingBadgeHubErr == 0) {
-        strcpy(app->tests[9].status, "Ping Success!");
-        app->tests[9].passed = true;
-    } else {
-        snprintf(app->tests[9].status, sizeof(app->tests[9].status), "Badgehub Ping Error: %d", pingBadgeHubErr);
-        app->tests[9].passed = false;
-    }
+    strcpy(app->tests[9].status, "Loading...");
+    app->tests[9].passed = false;
 }
-
 
 void render_ui(app_state_t *app) {
     mu_Context *ctx = app->ctx;
@@ -212,6 +164,8 @@ int main() {
 
     render_ui(&app);
     window_framebuffer_update(app.window, fb_num, true, NULL, 0);
+
+    run_tests(&app, fb_num);
 
     while (running) {
         struct timespec start_time, cur_time;
