@@ -22,7 +22,7 @@
 #include "hal/cache_ll.h"
 #include "hal/color_hal.h"
 
-#include "../../compute_badgevms/compositor/framebuffer_private.h"
+#include "../../badgevms/compositor/framebuffer_private.h"
 
 static const char *TAG = "lcd.dsi.dpi";
 

@@ -13,12 +13,12 @@ message(STATUS "Host test compiler version: ${CMAKE_C_COMPILER_VERSION}")
 enable_testing()
 
 include_directories(
-    ${CMAKE_CURRENT_SOURCE_DIR}/../compute_badgevms
-    ${CMAKE_CURRENT_SOURCE_DIR}/../compute_badgevms/thirdparty
+    ${CMAKE_CURRENT_SOURCE_DIR}/../badgevms
+    ${CMAKE_CURRENT_SOURCE_DIR}/../badgevms/thirdparty
 )
 
 add_executable(logical_names_test
-    ${CMAKE_CURRENT_SOURCE_DIR}/../compute_badgevms/logical_names.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/../badgevms/logical_names.c
 )
 
 target_compile_definitions(logical_names_test PRIVATE RUN_TEST)

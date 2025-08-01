@@ -7,35 +7,35 @@ cmake_policy(SET CMP0114 NEW)
 include(ExternalProject)
 include($ENV{IDF_PATH}/tools/cmake/project.cmake)
 
-# Build compute_badgevms/
-#  outputs: compute_badgevms.bin
+# Build badgevms/
+#  outputs: badgevms.bin
 #  targets: gen_project_binary
-set(EXTRA_COMPONENT_DIRS compute_badgevms)
-set(COMPONENTS compute_badgevms)
-project(compute_badgevms)
+set(EXTRA_COMPONENT_DIRS badgevms)
+set(COMPONENTS badgevms)
+project(badgevms)
 
-# Build and run compute_badgevms_host_tests/
-#  targets: compute_badgevms_host_tests-test
-ExternalProject_Add(compute_badgevms_host_tests
-    SOURCE_DIR ${CMAKE_SOURCE_DIR}/compute_badgevms_host_tests
-    BINARY_DIR ${CMAKE_BINARY_DIR}/compute_badgevms_host_tests
+# Build and run host_tests/
+#  targets: host_tests-test
+ExternalProject_Add(host_tests
+    SOURCE_DIR ${CMAKE_SOURCE_DIR}/host_tests
+    BINARY_DIR ${CMAKE_BINARY_DIR}/host_tests
     BUILD_ALWAYS true
     INSTALL_COMMAND ""
     TEST_AFTER_INSTALL true
 )
-ExternalProject_Add_StepTargets(compute_badgevms_host_tests test)
-add_dependencies(gen_project_binary compute_badgevms_host_tests-test)
+ExternalProject_Add_StepTargets(host_tests test)
+add_dependencies(gen_project_binary host_tests-test)
 
-# Build compute_storage/
+# Build flash_storage/
 # outputs: storage.bin
 # targets: init_storage_staging, final_storage_staging, fatfs_storage_bin
-add_subdirectory(compute_storage)
+add_subdirectory(flash_storage)
 
-# Build compute_badgevms_sdk_libs/
+# Build sdk_libs/
 # outputs: SDK_LIBS
 # targets: SDK_LIB_BUILD_TARGETS, sdk_lib_build_all
 # targets: init_sdk_staging, final_sdk_staging
-add_subdirectory(compute_badgevms_sdk_libs)
+add_subdirectory(sdk_libs)
 
 # Custom target for generating sdk_dist/
 # TODO: might want to split this into a subdirectory, along with init/final_sdk_staging
@@ -46,10 +46,10 @@ add_custom_target(sdk
     COMMENT "Creating SDK distribution in sdk_dist/"
 )
 
-# Build compute_badgevms_sdk_apps/
+# Build sdk_apps/
 #  output: SDK_APP_ELFS
 #  target: SDK_APP_BUILD_TARGETS, sdk_app_build_all
-add_subdirectory(compute_badgevms_sdk_apps)
+add_subdirectory(sdk_apps)
 
 # Build connectivity_esp_hosted/ as network_adapter.bin (target )
 #  output: connectivity.bin
@@ -82,5 +82,5 @@ add_dependencies(final_storage_staging storage_staging_add_connectivity)
 
 # Add our binaries to the flash target
 # bootloader, partition-table and otadata are done automatically
-# esptool_py_flash_to_partition(flash "ota_0"   "${CMAKE_BINARY_DIR}/compute_badgevms.bin")
+# esptool_py_flash_to_partition(flash "ota_0"   "${CMAKE_BINARY_DIR}/badgevms.bin")
 esptool_py_flash_to_partition(flash "storage" "${CMAKE_BINARY_DIR}/storage.bin")

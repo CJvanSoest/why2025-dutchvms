@@ -40,11 +40,11 @@ add_custom_command(
     COMMAND ${CMAKE_COMMAND} -E make_directory ${SDK_STAGING_DIR}
     COMMAND ${CMAKE_COMMAND} -E make_directory ${SDK_STAGING_DIR}/include
     COMMAND ${CMAKE_COMMAND} -E make_directory ${SDK_STAGING_DIR}/lib
-    COMMAND ${CMAKE_COMMAND} -E copy_directory ${CMAKE_SOURCE_DIR}/compute_badgevms_sdk_include ${SDK_STAGING_DIR}/include
-    COMMAND ${CMAKE_COMMAND} -E copy_directory ${CMAKE_SOURCE_DIR}/compute_badgevms/include ${SDK_STAGING_DIR}/include
+    COMMAND ${CMAKE_COMMAND} -E copy_directory ${CMAKE_SOURCE_DIR}/sdk_include ${SDK_STAGING_DIR}/include
+    COMMAND ${CMAKE_COMMAND} -E copy_directory ${CMAKE_SOURCE_DIR}/badgevms/include ${SDK_STAGING_DIR}/include
     DEPENDS
-     ${CMAKE_SOURCE_DIR}/compute_badgevms_sdk_include
-     ${CMAKE_SOURCE_DIR}/compute_badgevms
+     ${CMAKE_SOURCE_DIR}/sdk_include
+     ${CMAKE_SOURCE_DIR}/badgevms
     VERBATIM
 )
 add_custom_target(init_sdk_staging ALL
