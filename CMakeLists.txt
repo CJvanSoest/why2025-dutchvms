@@ -17,8 +17,8 @@ project(compute_badgevms)
 # Build and run compute_badgevms_host_tests/
 #  targets: compute_badgevms_host_tests-test
 ExternalProject_Add(compute_badgevms_host_tests
-    SOURCE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/compute_badgevms_host_tests
-    BINARY_DIR ${CMAKE_CURRENT_BINARY_DIR}/compute_badgevms_host_tests
+    SOURCE_DIR ${CMAKE_SOURCE_DIR}/compute_badgevms_host_tests
+    BINARY_DIR ${CMAKE_BINARY_DIR}/compute_badgevms_host_tests
     BUILD_ALWAYS true
     INSTALL_COMMAND ""
     TEST_AFTER_INSTALL true
@@ -51,18 +51,36 @@ add_custom_target(sdk
 #  target: SDK_APP_BUILD_TARGETS, sdk_app_build_all
 add_subdirectory(compute_badgevms_sdk_apps)
 
-# Build connectivity_esp_hosted/ as network_adapter.bin (target connectivity_esp_hosted-build)
+# Build connectivity_esp_hosted/ as network_adapter.bin (target )
+#  output: connectivity.bin
+#  target: connectivity_esp_hosted-install
 ExternalProject_Add(connectivity_esp_hosted
-    SOURCE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/connectivity_esp_hosted/slave
-    BINARY_DIR ${CMAKE_CURRENT_SOURCE_DIR}/connectivity_esp_hosted/slave
+    SOURCE_DIR ${CMAKE_SOURCE_DIR}/connectivity_esp_hosted/slave
+    BINARY_DIR ${CMAKE_SOURCE_DIR}/connectivity_esp_hosted/slave
     CONFIGURE_COMMAND IDF_TARGET=esp32c6 idf.py reconfigure
-    BUILD_COMMAND     IDF_TARGET=esp32c6 idf.py merge-bin
+    BUILD_COMMAND IDF_TARGET=esp32c6 idf.py merge-bin
     BUILD_ALWAYS true
-    BUILD_BYPRODUCTS "build/network_adapter.bin"
-    INSTALL_COMMAND ""
+    BUILD_BYPRODUCTS build/network_adapter.bin
+    INSTALL_COMMAND ${CMAKE_COMMAND} -E copy build/network_adapter.bin ${CMAKE_BINARY_DIR}/connectivity.bin
 )
+ExternalProject_Add_StepTargets(connectivity_esp_hosted install)
+get_property(STORAGE_STAGING_DIR GLOBAL PROPERTY STORAGE_STAGING_DIR)
+add_custom_command(
+    OUTPUT ${STORAGE_STAGING_DIR}/firmware/connectivity.bin
+    COMMAND ${CMAKE_COMMAND} -E make_directory ${STORAGE_STAGING_DIR}/firmware
+    COMMAND ${CMAKE_COMMAND} -E copy ${CMAKE_BINARY_DIR}/connectivity.bin ${STORAGE_STAGING_DIR}/firmware/connectivity.bin
+    DEPENDS
+     connectivity_esp_hosted-install
+     init_storage_staging
+    COMMENT "Copying connectivity.bin to storage staging"
+    VERBATIM
+)
+add_custom_target(storage_staging_add_connectivity ALL
+    DEPENDS ${STORAGE_STAGING_DIR}/firmware/connectivity.bin
+)
+add_dependencies(final_storage_staging storage_staging_add_connectivity)
 
 # Add our binaries to the flash target
 # bootloader, partition-table and otadata are done automatically
-# esptool_py_flash_to_partition(flash "ota_0"   "${CMAKE_CURRENT_BINARY_DIR}/compute_badgevms.bin")
-esptool_py_flash_to_partition(flash "storage" "${CMAKE_CURRENT_BINARY_DIR}/storage.bin")
+# esptool_py_flash_to_partition(flash "ota_0"   "${CMAKE_BINARY_DIR}/compute_badgevms.bin")
+esptool_py_flash_to_partition(flash "storage" "${CMAKE_BINARY_DIR}/storage.bin")

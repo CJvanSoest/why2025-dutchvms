@@ -12,6 +12,7 @@ add_custom_command(
     COMMAND ${CMAKE_COMMAND} -E copy_directory ${CMAKE_CURRENT_SOURCE_DIR}/skel ${STORAGE_STAGING_DIR}
     DEPENDS
      ${CMAKE_CURRENT_SOURCE_DIR}/skel
+    VERBATIM
 )
 add_custom_target(init_storage_staging ALL
     DEPENDS ${STORAGE_STAGING_DIR}

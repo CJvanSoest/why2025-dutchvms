@@ -45,6 +45,7 @@ add_custom_command(
     DEPENDS
      ${CMAKE_SOURCE_DIR}/compute_badgevms_sdk_include
      ${CMAKE_SOURCE_DIR}/compute_badgevms
+    VERBATIM
 )
 add_custom_target(init_sdk_staging ALL
     DEPENDS ${SDK_STAGING_DIR}
