@@ -25,7 +25,7 @@ int ping_badgehub(void) {
              (uint32_t) (unique_id >> 32), (uint32_t) unique_id);
     curl_easy_setopt(curl, CURLOPT_URL, url);
     curl_easy_setopt(curl, CURLOPT_USERAGENT, "BadgeVMS-libcurl/1.0");
-    int retries = 10;
+    int retries = 5;
 
     printf("\nDoing Badgehub ping with url: %s\n", url);
     while (retries && ((res = curl_easy_perform(curl) != CURLE_OK))) {
