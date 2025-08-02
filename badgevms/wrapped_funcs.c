@@ -233,6 +233,7 @@ char *why_strndup(char const *s, size_t n) {
     return ptr;
 }
 
+IRAM_ATTR
 ssize_t why_write(int fd, void const *buf, size_t count) {
     task_info_t *task_info = get_task_info();
     ESP_LOGD("why_write", "Calling write from task %p fd = %i count = %zi", task_info->handle, fd, count);
@@ -249,6 +250,7 @@ ssize_t why_write(int fd, void const *buf, size_t count) {
     return 0;
 }
 
+IRAM_ATTR
 ssize_t why_read(int fd, void *buf, size_t count) {
     task_info_t *task_info = get_task_info();
     ESP_LOGI("why_read", "Calling read from task %p fd = %i count = %zi", task_info->handle, fd, count);
