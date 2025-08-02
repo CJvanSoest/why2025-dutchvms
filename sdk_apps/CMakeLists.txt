@@ -101,6 +101,7 @@ function(build_app app_name)
         COMMAND ${CMAKE_STRIP} ${STORAGE_STAGING_DIR}/${app_name}.elf
         DEPENDS
          build_app_${app_name}
+         init_storage_staging
          ${APP_ELF_DIR}/${app_name}.elf
         COMMENT "Copying ${app_name}.elf to storage staging and stripping"
         VERBATIM
