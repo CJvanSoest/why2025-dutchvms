@@ -298,13 +298,13 @@ static void IRAM_ATTR NOINLINE_ATTR compositor(void *ignored) {
         .max_pending_trans_num = 1,
     };
 
-    ppa_event_callbacks_t ppa_srm_callbacks = {
-        .on_trans_done = ppa_event_callback,
-    };
+    // ppa_event_callbacks_t ppa_srm_callbacks = {
+    //    .on_trans_done = ppa_event_callback,
+    //};
 
     ppa_register_client(&ppa_srm_config, &ppa_srm_handle);
     ppa_register_client(&ppa_fill_config, &ppa_fill_handle);
-    ppa_client_register_event_callbacks(ppa_srm_handle, &ppa_srm_callbacks);
+    // ppa_client_register_event_callbacks(ppa_srm_handle, &ppa_srm_callbacks);
 
     bool fn_down = false;
 
