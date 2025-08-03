@@ -18,37 +18,36 @@
 
 // Include this first as it wants to call printf and gets angry at why_printf
 #include "esp_log.h"
-
 #include "why_io.h"
 
-#define malloc dlmalloc
-#define calloc dlcalloc
+#define malloc  dlmalloc
+#define calloc  dlcalloc
 #define realloc dlrealloc
-#define free dlfree
+#define free    dlfree
 
-#define asprintf why_asprintf
-#define close why_close
-#define dprintf why_dprintf
-#define fclose why_fclose
-#define fgetc why_fgetc
-#define fgets why_fgets
-#define fopen why_fopen
-#define fprintf why_fprintf
-#define getc why_getc
-#define getchar why_getchar
-#define lseek why_lseek
-#define open why_open
-#define printf why_printf
-#define read why_read
-#define snprintf why_snprintf
-#define sprintf why_sprintf
-#define sscanf why_sscanf
-#define strdup why_strdup
-#define ungetc why_ungetc
+#define asprintf  why_asprintf
+#define close     why_close
+#define dprintf   why_dprintf
+#define fclose    why_fclose
+#define fgetc     why_fgetc
+#define fgets     why_fgets
+#define fopen     why_fopen
+#define fprintf   why_fprintf
+#define getc      why_getc
+#define getchar   why_getchar
+#define lseek     why_lseek
+#define open      why_open
+#define printf    why_printf
+#define read      why_read
+#define snprintf  why_snprintf
+#define sprintf   why_sprintf
+#define sscanf    why_sscanf
+#define strdup    why_strdup
+#define ungetc    why_ungetc
 #define vasprintf why_vasprintf
-#define vdprintf why_vdprintf
-#define vfprintf why_vfprintf
-#define vprintf why_vprintf
+#define vdprintf  why_vdprintf
+#define vfprintf  why_vfprintf
+#define vprintf   why_vprintf
 #define vsnprintf why_vsnprintf
-#define vsprintf why_vsprintf
-#define write why_write
+#define vsprintf  why_vsprintf
+#define write     why_write

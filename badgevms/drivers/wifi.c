@@ -231,8 +231,13 @@ static void event_handler(void *arg, esp_event_base_t event_base, int32_t event_
 static void hermes_do_disconnect() {
     status.connection_status = WIFI_DISCONNECTED;
     ESP_ERROR_CHECK(esp_wifi_disconnect());
-    EventBits_t bits =
-        xEventGroupWaitBits(wifi_event_group, WIFI_CONNECTED_BIT | WIFI_DISCONNECTED_BIT | WIFI_FAIL_BIT, pdFALSE, pdFALSE, portMAX_DELAY);
+    EventBits_t bits = xEventGroupWaitBits(
+        wifi_event_group,
+        WIFI_CONNECTED_BIT | WIFI_DISCONNECTED_BIT | WIFI_FAIL_BIT,
+        pdFALSE,
+        pdFALSE,
+        portMAX_DELAY
+    );
 }
 
 static void hermes_do_connect() {
