@@ -21,6 +21,8 @@
 #include <fcntl.h>
 #include <unistd.h>
 
+#include "thirdparty/dlmalloc.h"
+
 ssize_t why_write(int fd, void const *buf, size_t count);
 ssize_t why_read(int fd, void *buf, size_t count);
 off_t   why_lseek(int fd, off_t offset, int whence);
@@ -47,5 +49,8 @@ int why_vfprintf(FILE *restrict stream, char const *restrict format, va_list ap)
 int why_vdprintf(int fd, char const *restrict format, va_list ap);
 int why_vsprintf(char *restrict str, char const *restrict format, va_list ap);
 int why_vsnprintf(char *str, size_t size, char const *restrict format, va_list ap);
+
+int why_asprintf(char **restrict strp, const char *restrict fmt, ...);
+int why_vasprintf(char **restrict strp, const char *restrict fmt, va_list ap);
 
 char *why_strdup(char const *s);

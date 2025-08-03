@@ -397,13 +397,13 @@ simple_function:
 #  - siprintf
 #  - siscanf
   - sleep
-  - sniprintf
-  - snprintf
-  - sprintf
+#  - sniprintf
+#  - snprintf
+#  - sprintf
 #  - srand
 #  - srand48
 #  - srandom
-  - sscanf
+#  - sscanf
 #  - stat
   - stpcpy
   - stpncpy
@@ -1002,6 +1002,8 @@ simple_object:
 wrapped_function:
   - _Exit
   - asctime
+  - asnprintf
+  - asprintf
   - atexit
   - calloc
   - close
@@ -1058,8 +1060,11 @@ wrapped_function:
   - setbuffer
   - setlinebuf
   - setvbuf
+  - snprintf
+  - sprintf
   - srand
   - srandom
+  - sscanf
   - strdup
   - strerror
   - strndup
@@ -1068,6 +1073,7 @@ wrapped_function:
   - tcgetattr
   - tcsetattr
   - ungetc
+  - vasprintf
   - vfprintf
   - vfscanf
   - vsnprintf
