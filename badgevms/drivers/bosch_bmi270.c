@@ -19,8 +19,9 @@
 #include "bmi270.h"
 #include "esp_log.h"
 
-#include <math.h>
 #include <stdatomic.h>
+
+#include <math.h>
 
 #define BMI270_I2C_ADDR 0x69
 
