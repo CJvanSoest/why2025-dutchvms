@@ -35,7 +35,8 @@
 
 #define DEFAULT_SCAN_LIST_SIZE 20
 #define WIFI_CONNECTED_BIT     BIT0
-#define WIFI_FAIL_BIT          BIT1
+#define WIFI_DISCONNECTED_BIT  BIT1
+#define WIFI_FAIL_BIT          BIT2
 
 typedef struct wifi_station {
     mac_address_t                   bssid[6];
@@ -192,9 +193,13 @@ static badgevms_wifi_connection_mode_t esp_phy_to_badgevms_mode(wifi_ap_record_t
 static void event_handler(void *arg, esp_event_base_t event_base, int32_t event_id, void *event_data) {
     if (event_base == WIFI_EVENT && event_id == WIFI_EVENT_STA_START) {
         xEventGroupClearBits(wifi_event_group, WIFI_CONNECTED_BIT);
+        xEventGroupClearBits(wifi_event_group, WIFI_DISCONNECTED_BIT);
+        xEventGroupClearBits(wifi_event_group, WIFI_FAIL_BIT);
         esp_wifi_connect();
     } else if (event_base == WIFI_EVENT && event_id == WIFI_EVENT_STA_DISCONNECTED) {
         xEventGroupClearBits(wifi_event_group, WIFI_CONNECTED_BIT);
+        xEventGroupClearBits(wifi_event_group, WIFI_DISCONNECTED_BIT);
+        xEventGroupClearBits(wifi_event_group, WIFI_FAIL_BIT);
         if (status.connection_status == WIFI_CONNECTED) {
             status.connection_status = WIFI_DISCONNECTED;
             ESP_LOGW(TAG, "unexpected wifi disconnect, reconnecting");
@@ -210,6 +215,7 @@ static void event_handler(void *arg, esp_event_base_t event_base, int32_t event_
             }
         } else {
             ESP_LOGW(TAG, "User requested disconnect");
+            xEventGroupSetBits(wifi_event_group, WIFI_DISCONNECTED_BIT);
         }
     } else if (event_base == IP_EVENT && event_id == IP_EVENT_STA_GOT_IP) {
         ip_event_got_ip_t *event = (ip_event_got_ip_t *)event_data;
@@ -218,16 +224,19 @@ static void event_handler(void *arg, esp_event_base_t event_base, int32_t event_
 
         status.connection_status = WIFI_CONNECTED;
         xEventGroupSetBits(wifi_event_group, WIFI_CONNECTED_BIT);
+        xEventGroupClearBits(wifi_event_group, WIFI_DISCONNECTED_BIT);
     }
 }
 
 static void hermes_do_disconnect() {
     status.connection_status = WIFI_DISCONNECTED;
     ESP_ERROR_CHECK(esp_wifi_disconnect());
+    EventBits_t bits =
+        xEventGroupWaitBits(wifi_event_group, WIFI_CONNECTED_BIT | WIFI_DISCONNECTED_BIT | WIFI_FAIL_BIT, pdFALSE, pdFALSE, portMAX_DELAY);
 }
 
 static void hermes_do_connect() {
-    ESP_ERROR_CHECK(esp_wifi_stop());
+    ESP_ERROR_CHECK(esp_wifi_disconnect());
     ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_STA));
 
     wifi_config_t wifi_config = {
@@ -245,7 +254,7 @@ static void hermes_do_connect() {
     // ESP_ERROR_CHECK(esp_wifi_start());
 
     ESP_LOGW("HERMES", "Waiting for connection");
-    esp_wifi_start();
+    esp_wifi_connect();
     EventBits_t bits =
         xEventGroupWaitBits(wifi_event_group, WIFI_CONNECTED_BIT | WIFI_FAIL_BIT, pdFALSE, pdFALSE, portMAX_DELAY);
 
