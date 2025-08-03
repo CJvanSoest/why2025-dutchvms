@@ -77,6 +77,24 @@ dependencies:
       registry_url: https://components.espressif.com/
       type: service
     version: 1.2.0
+  espressif2022/bmi270:
+    component_hash: 6c6637680a233845d13961f23df39426a7fad9c02c6c289bf8facbb7f8624e22
+    dependencies:
+    - name: espressif/cmake_utilities
+      registry_url: https://components.espressif.com
+      require: private
+      version: 0.*
+    - name: espressif/i2c_bus
+      registry_url: https://components.espressif.com
+      require: private
+      version: 1.*
+    - name: idf
+      require: private
+      version: '>=4.4'
+    source:
+      registry_url: https://components.espressif.com/
+      type: service
+    version: 1.1.0~2
   idf:
     source:
       type: idf
@@ -86,7 +104,8 @@ direct_dependencies:
 - espressif/esp_hosted
 - espressif/esp_wifi_remote
 - espressif/i2c_bus
+- espressif2022/bmi270
 - idf
-manifest_hash: e99e6742c90ee76c1aff1125c64da2f9535d89d40610a7b3f4e276f8e6e7f3d4
+manifest_hash: 828cfc09e9914f8fb041265e09249ba7c59010113e6ebefdcaf8b315fae2a649
 target: esp32p4
 version: 2.0.0
