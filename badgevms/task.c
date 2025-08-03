@@ -80,6 +80,7 @@ static uint32_t          tail = MAX_PID;
 typedef struct {
     SemaphoreHandle_t ready;
     pid_t             pid;
+    TaskHandle_t      handle;
 
     task_info_t *parent_task_info;
     task_type_t  type;
@@ -555,8 +556,8 @@ pid_t thread_create(void (*thread_entry)(void *user_data), void *user_data, uint
 
     xQueueSend(zeus_queue, &c, portMAX_DELAY);
     xSemaphoreTake(c->ready, portMAX_DELAY);
-    pid_t pid = c->pid;
     vSemaphoreDelete(c->ready);
+    pid_t pid = c->pid;
     free(c);
 
     return pid;
@@ -604,6 +605,22 @@ static void IRAM_ATTR hades(void *ignored) {
                 process_table_remove_task(task_info);
                 task_thread_destroy(task_info->thread);
                 task_info_delete(task_info);
+
+                if (xSemaphoreTake(process_table_lock, portMAX_DELAY) != pdTRUE) {
+                    ESP_LOGE(TAG, "Failed to get process table mutex");
+                    abort();
+                }
+
+                // Clean up any threads this process might have left behind
+                for (int i = 1; i < MAX_PID; ++i) {
+                    if (process_table[i] && process_table[i]->type == TASK_TYPE_THREAD &&
+                        process_table[i]->parent == dead_pid) {
+                        // See you soon...
+                        vTaskDelete(process_table[i]->handle);
+                    }
+                }
+
+                xSemaphoreGive(process_table_lock);
 
                 // Don't free our PID until the last moment
                 pid_free(dead_pid);
@@ -704,6 +721,7 @@ static void IRAM_ATTR zeus(void *ignored) {
                 process_table_add_task(task_info);
                 vTaskSetThreadLocalStoragePointer(new_task, 1, task_info);
                 vTaskSetApplicationTaskTag(new_task, (void *)0x12345678);
+                command->handle = new_task;
                 ESP_LOGV("ZEUS", "PID %d sprung forth fully formed from my forehead", task_info->pid);
                 ++num_tasks;
                 goto out;
