@@ -187,19 +187,10 @@ static badgevms_wifi_connection_mode_t esp_phy_to_badgevms_mode(wifi_ap_record_t
     return (badgevms_wifi_connection_mode_t)mode;
 }
 
-#include <netdb.h>
-#include <sys/socket.h>
-
 static void event_handler(void *arg, esp_event_base_t event_base, int32_t event_id, void *event_data) {
     if (event_base == WIFI_EVENT && event_id == WIFI_EVENT_STA_START) {
-        xEventGroupClearBits(wifi_event_group, WIFI_CONNECTED_BIT);
-        xEventGroupClearBits(wifi_event_group, WIFI_DISCONNECTED_BIT);
-        xEventGroupClearBits(wifi_event_group, WIFI_FAIL_BIT);
         esp_wifi_connect();
     } else if (event_base == WIFI_EVENT && event_id == WIFI_EVENT_STA_DISCONNECTED) {
-        xEventGroupClearBits(wifi_event_group, WIFI_CONNECTED_BIT);
-        xEventGroupClearBits(wifi_event_group, WIFI_DISCONNECTED_BIT);
-        xEventGroupClearBits(wifi_event_group, WIFI_FAIL_BIT);
         if (status.connection_status == WIFI_CONNECTED) {
             status.connection_status = WIFI_DISCONNECTED;
             ESP_LOGW(TAG, "unexpected wifi disconnect, reconnecting");
@@ -224,23 +215,37 @@ static void event_handler(void *arg, esp_event_base_t event_base, int32_t event_
 
         status.connection_status = WIFI_CONNECTED;
         xEventGroupSetBits(wifi_event_group, WIFI_CONNECTED_BIT);
-        xEventGroupClearBits(wifi_event_group, WIFI_DISCONNECTED_BIT);
     }
 }
 
 static void hermes_do_disconnect() {
+    if (status.connection_status == WIFI_DISCONNECTED) {
+        ESP_LOGW("HERMES", "Already disconnected");
+        return;
+    }
+
     status.connection_status = WIFI_DISCONNECTED;
+    int retries              = 5;
+again:
     ESP_ERROR_CHECK(esp_wifi_disconnect());
     EventBits_t bits = xEventGroupWaitBits(
         wifi_event_group,
         WIFI_CONNECTED_BIT | WIFI_DISCONNECTED_BIT | WIFI_FAIL_BIT,
+        pdTRUE,
         pdFALSE,
-        pdFALSE,
-        portMAX_DELAY
+        5000 / portTICK_PERIOD_MS
     );
+    if ((!(bits & WIFI_DISCONNECTED_BIT)) && retries) {
+        --retries;
+        goto again;
+    }
 }
 
 static void hermes_do_connect() {
+    if (status.connection_status == WIFI_CONNECTED) {
+        ESP_LOGW("HERMES", "Already connected");
+        return;
+    }
     ESP_ERROR_CHECK(esp_wifi_disconnect());
     ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_STA));
 
@@ -258,10 +263,23 @@ static void hermes_do_connect() {
     // esp_wifi_sta_enterprise_enable();
     // ESP_ERROR_CHECK(esp_wifi_start());
 
-    ESP_LOGW("HERMES", "Waiting for connection");
+    int retries = 10;
+again:
+    ESP_LOGW("HERMES", "Dialing...");
     esp_wifi_connect();
-    EventBits_t bits =
-        xEventGroupWaitBits(wifi_event_group, WIFI_CONNECTED_BIT | WIFI_FAIL_BIT, pdFALSE, pdFALSE, portMAX_DELAY);
+    EventBits_t bits = xEventGroupWaitBits(
+        wifi_event_group,
+        WIFI_CONNECTED_BIT | WIFI_FAIL_BIT,
+        pdFALSE,
+        pdTRUE,
+        5000 / portTICK_PERIOD_MS
+    );
+
+    if ((!(bits & WIFI_CONNECTED_BIT)) && retries) {
+        ESP_LOGW("HERMES", "Timeout, maybe Apollo is on the phone?");
+        --retries;
+        goto again;
+    }
 
     ESP_LOGW("HERMES", "Mount olympus paged");
 }
