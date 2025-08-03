@@ -49,6 +49,7 @@ typedef struct {
     orientation_device_t device;
     bmi270_handle_t      sensor;
     atomic_flag          open;
+    float                degrees;
 } bosch_bmi270_device_t;
 
 static int8_t set_accel_gyro_config(struct bmi2_dev *bmi);
@@ -67,10 +68,10 @@ void why_bmi2_error_codes_print_result(int8_t rslt) {
             /* Do nothing */
             break;
 
-        case BMI2_W_FIFO_EMPTY: printf("Warning [%d] : FIFO empty\r\n", rslt); break;
-        case BMI2_W_PARTIAL_READ: printf("Warning [%d] : FIFO partial read\r\n", rslt); break;
+        case BMI2_W_FIFO_EMPTY: ESP_LOGW(TAG, "Warning [%d] : FIFO empty\r\n", rslt); break;
+        case BMI2_W_PARTIAL_READ: ESP_LOGW(TAG, "Warning [%d] : FIFO partial read\r\n", rslt); break;
         case BMI2_E_NULL_PTR:
-            printf(
+            ESP_LOGW(TAG, 
                 "Error [%d] : Null pointer error. It occurs when the user tries to assign value (not address) to a "
                 "pointer,"
                 " which has been initialized to NULL.\r\n",
@@ -79,7 +80,7 @@ void why_bmi2_error_codes_print_result(int8_t rslt) {
             break;
 
         case BMI2_E_COM_FAIL:
-            printf(
+            ESP_LOGW(TAG, 
                 "Error [%d] : Communication failure error. It occurs due to read/write operation failure and also due "
                 "to power failure during communication\r\n",
                 rslt
@@ -87,14 +88,14 @@ void why_bmi2_error_codes_print_result(int8_t rslt) {
             break;
 
         case BMI2_E_DEV_NOT_FOUND:
-            printf(
+            ESP_LOGW(TAG, 
                 "Error [%d] : Device not found error. It occurs when the device chip id is incorrectly read\r\n",
                 rslt
             );
             break;
 
         case BMI2_E_INVALID_SENSOR:
-            printf(
+            ESP_LOGW(TAG, 
                 "Error [%d] : Invalid sensor error. It occurs when there is a mismatch in the requested feature with "
                 "the "
                 "available one\r\n",
@@ -103,7 +104,7 @@ void why_bmi2_error_codes_print_result(int8_t rslt) {
             break;
 
         case BMI2_E_SELF_TEST_FAIL:
-            printf(
+            ESP_LOGW(TAG, 
                 "Error [%d] : Self-test failed error. It occurs when the validation of accel self-test data is "
                 "not satisfied\r\n",
                 rslt
@@ -111,7 +112,7 @@ void why_bmi2_error_codes_print_result(int8_t rslt) {
             break;
 
         case BMI2_E_INVALID_INT_PIN:
-            printf(
+            ESP_LOGW(TAG, 
                 "Error [%d] : Invalid interrupt pin error. It occurs when the user tries to configure interrupt pins "
                 "apart from INT1 and INT2\r\n",
                 rslt
@@ -119,7 +120,7 @@ void why_bmi2_error_codes_print_result(int8_t rslt) {
             break;
 
         case BMI2_E_OUT_OF_RANGE:
-            printf(
+            ESP_LOGW(TAG, 
                 "Error [%d] : Out of range error. It occurs when the data exceeds from filtered or unfiltered data "
                 "from "
                 "fifo and also when the range exceeds the maximum range for accel and gyro while performing FOC\r\n",
@@ -128,7 +129,7 @@ void why_bmi2_error_codes_print_result(int8_t rslt) {
             break;
 
         case BMI2_E_ACC_INVALID_CFG:
-            printf(
+            ESP_LOGW(TAG, 
                 "Error [%d] : Invalid Accel configuration error. It occurs when there is an error in accel "
                 "configuration"
                 " register which could be one among range, BW or filter performance in reg address 0x40\r\n",
@@ -137,7 +138,7 @@ void why_bmi2_error_codes_print_result(int8_t rslt) {
             break;
 
         case BMI2_E_GYRO_INVALID_CFG:
-            printf(
+            ESP_LOGW(TAG, 
                 "Error [%d] : Invalid Gyro configuration error. It occurs when there is a error in gyro configuration"
                 "register which could be one among range, BW or filter performance in reg address 0x42\r\n",
                 rslt
@@ -145,7 +146,7 @@ void why_bmi2_error_codes_print_result(int8_t rslt) {
             break;
 
         case BMI2_E_ACC_GYR_INVALID_CFG:
-            printf(
+            ESP_LOGW(TAG, 
                 "Error [%d] : Invalid Accel-Gyro configuration error. It occurs when there is a error in accel and gyro"
                 " configuration registers which could be one among range, BW or filter performance in reg address 0x40 "
                 "and 0x42\r\n",
@@ -154,7 +155,7 @@ void why_bmi2_error_codes_print_result(int8_t rslt) {
             break;
 
         case BMI2_E_CONFIG_LOAD:
-            printf(
+            ESP_LOGW(TAG, 
                 "Error [%d] : Configuration load error. It occurs when failure observed while loading the "
                 "configuration "
                 "into the sensor\r\n",
@@ -163,7 +164,7 @@ void why_bmi2_error_codes_print_result(int8_t rslt) {
             break;
 
         case BMI2_E_INVALID_PAGE:
-            printf(
+            ESP_LOGW(TAG, 
                 "Error [%d] : Invalid page error. It occurs due to failure in writing the correct feature "
                 "configuration "
                 "from selected page\r\n",
@@ -172,7 +173,7 @@ void why_bmi2_error_codes_print_result(int8_t rslt) {
             break;
 
         case BMI2_E_SET_APS_FAIL:
-            printf(
+            ESP_LOGW(TAG, 
                 "Error [%d] : APS failure error. It occurs due to failure in write of advance power mode configuration "
                 "register\r\n",
                 rslt
@@ -180,7 +181,7 @@ void why_bmi2_error_codes_print_result(int8_t rslt) {
             break;
 
         case BMI2_E_AUX_INVALID_CFG:
-            printf(
+            ESP_LOGW(TAG, 
                 "Error [%d] : Invalid AUX configuration error. It occurs when the auxiliary interface settings are not "
                 "enabled properly\r\n",
                 rslt
@@ -188,7 +189,7 @@ void why_bmi2_error_codes_print_result(int8_t rslt) {
             break;
 
         case BMI2_E_AUX_BUSY:
-            printf(
+            ESP_LOGW(TAG, 
                 "Error [%d] : AUX busy error. It occurs when the auxiliary interface buses are engaged while "
                 "configuring"
                 " the AUX\r\n",
@@ -197,7 +198,7 @@ void why_bmi2_error_codes_print_result(int8_t rslt) {
             break;
 
         case BMI2_E_REMAP_ERROR:
-            printf(
+            ESP_LOGW(TAG, 
                 "Error [%d] : Remap error. It occurs due to failure in assigning the remap axes data for all the axes "
                 "after change in axis position\r\n",
                 rslt
@@ -205,7 +206,7 @@ void why_bmi2_error_codes_print_result(int8_t rslt) {
             break;
 
         case BMI2_E_GYR_USER_GAIN_UPD_FAIL:
-            printf(
+            ESP_LOGW(TAG, 
                 "Error [%d] : Gyro user gain update fail error. It occurs when the reading of user gain update status "
                 "fails\r\n",
                 rslt
@@ -213,7 +214,7 @@ void why_bmi2_error_codes_print_result(int8_t rslt) {
             break;
 
         case BMI2_E_SELF_TEST_NOT_DONE:
-            printf(
+            ESP_LOGW(TAG, 
                 "Error [%d] : Self-test not done error. It occurs when the self-test process is ongoing or not "
                 "completed\r\n",
                 rslt
@@ -223,11 +224,11 @@ void why_bmi2_error_codes_print_result(int8_t rslt) {
             break;
 
         case BMI2_E_CRT_ERROR:
-            printf("Error [%d] : CRT error. It occurs when the CRT test has failed\r\n", rslt);
+            ESP_LOGW(TAG, "Error [%d] : CRT error. It occurs when the CRT test has failed\r\n", rslt);
             break;
 
         case BMI2_E_ST_ALREADY_RUNNING:
-            printf(
+            ESP_LOGW(TAG, 
                 "Error [%d] : Self-test already running error. It occurs when the self-test is already running and "
                 "another has been initiated\r\n",
                 rslt
@@ -235,7 +236,7 @@ void why_bmi2_error_codes_print_result(int8_t rslt) {
             break;
 
         case BMI2_E_CRT_READY_FOR_DL_FAIL_ABORT:
-            printf(
+            ESP_LOGW(TAG, 
                 "Error [%d] : CRT ready for download fail abort error. It occurs when download in CRT fails due to "
                 "wrong "
                 "address location\r\n",
@@ -244,14 +245,14 @@ void why_bmi2_error_codes_print_result(int8_t rslt) {
             break;
 
         case BMI2_E_DL_ERROR:
-            printf(
+            ESP_LOGW(TAG, 
                 "Error [%d] : Download error. It occurs when write length exceeds that of the maximum burst length\r\n",
                 rslt
             );
             break;
 
         case BMI2_E_PRECON_ERROR:
-            printf(
+            ESP_LOGW(TAG, 
                 "Error [%d] : Pre-conditional error. It occurs when precondition to start the feature was not "
                 "completed\r\n",
                 rslt
@@ -259,11 +260,11 @@ void why_bmi2_error_codes_print_result(int8_t rslt) {
             break;
 
         case BMI2_E_ABORT_ERROR:
-            printf("Error [%d] : Abort error. It occurs when the device was shaken during CRT test\r\n", rslt);
+            ESP_LOGW(TAG, "Error [%d] : Abort error. It occurs when the device was shaken during CRT test\r\n", rslt);
             break;
 
         case BMI2_E_WRITE_CYCLE_ONGOING:
-            printf(
+            ESP_LOGW(TAG, 
                 "Error [%d] : Write cycle ongoing error. It occurs when the write cycle is already running and another "
                 "has been initiated\r\n",
                 rslt
@@ -271,7 +272,7 @@ void why_bmi2_error_codes_print_result(int8_t rslt) {
             break;
 
         case BMI2_E_ST_NOT_RUNING:
-            printf(
+            ESP_LOGW(TAG, 
                 "Error [%d] : Self-test is not running error. It occurs when self-test running is disabled while it's "
                 "running\r\n",
                 rslt
@@ -279,7 +280,7 @@ void why_bmi2_error_codes_print_result(int8_t rslt) {
             break;
 
         case BMI2_E_DATA_RDY_INT_FAILED:
-            printf(
+            ESP_LOGW(TAG, 
                 "Error [%d] : Data ready interrupt error. It occurs when the sample count exceeds the FOC sample limit "
                 "and data ready status is not updated\r\n",
                 rslt
@@ -287,14 +288,14 @@ void why_bmi2_error_codes_print_result(int8_t rslt) {
             break;
 
         case BMI2_E_INVALID_FOC_POSITION:
-            printf(
+            ESP_LOGW(TAG, 
                 "Error [%d] : Invalid FOC position error. It occurs when average FOC data is obtained for the wrong"
                 " axes\r\n",
                 rslt
             );
             break;
 
-        default: printf("Error [%d] : Unknown error code\r\n", rslt); break;
+        default: ESP_LOGW(TAG, "Error [%d] : Unknown error code\r\n", rslt); break;
     }
 }
 
@@ -326,7 +327,6 @@ static int get_orientation_degrees(void *dev) {
     bosch_bmi270_device_t *device = dev;
 
     int8_t rslt;
-    float  degrees = 0;
 
     /* Assign accel and gyro sensor to variable. */
     uint8_t sensor_list[2] = {BMI2_ACCEL, BMI2_GYRO};
@@ -338,8 +338,10 @@ static int get_orientation_degrees(void *dev) {
     struct bmi2_sens_config config;
 
     if (atomic_flag_test_and_set(&device->open)) {
-        return 0;
+        // Return cached result
+        return (int)device->degrees;
     }
+
     /* Accel and gyro configuration settings. */
     rslt = set_accel_gyro_config(device->sensor);
     why_bmi2_error_codes_print_result(rslt);
@@ -367,7 +369,7 @@ static int get_orientation_degrees(void *dev) {
                     acc_x   = lsb_to_mps2(sensor_data.acc.x, (float)2, device->sensor->resolution);
                     acc_y   = lsb_to_mps2(sensor_data.acc.y, (float)2, device->sensor->resolution);
                     acc_z   = lsb_to_mps2(sensor_data.acc.z, (float)2, device->sensor->resolution);
-                    degrees = tilt_angle_deg(acc_x, acc_y);
+                    device->degrees = tilt_angle_deg(acc_x, acc_y);
                     break;
                 }
             }
@@ -375,10 +377,10 @@ static int get_orientation_degrees(void *dev) {
     }
     bmi270_sensor_disable(sensor_list, 2, device->sensor);
     atomic_flag_clear(&device->open);
-    return (int)degrees;
+    return (int)device->degrees;
 }
 
-static enum orientation get_orientation(void *dev) {
+static orientation_t get_orientation(void *dev) {
     int degrees = get_orientation_degrees(dev);
     if (degrees > 45 && degrees < 135) {
         return ORIENTATION_90;
