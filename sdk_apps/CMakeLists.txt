@@ -189,6 +189,12 @@ build_app(process_test
 #     style_test/test_drawing_helper.c
 #)
 
+build_app(ota_wifi_update
+    SOURCES
+     ota_wifi_update/ota_wifi_update.c
+     ota_wifi_update/thirdparty/microui.c
+)
+
 build_app(doom
     SOURCES
      doomgeneric/doomgeneric/am_map.c
