@@ -59,13 +59,14 @@ add_subdirectory(sdk_apps)
 ExternalProject_Add(connectivity_esp_hosted
     SOURCE_DIR ${CMAKE_SOURCE_DIR}/connectivity_esp_hosted/slave
     BINARY_DIR ${CMAKE_SOURCE_DIR}/connectivity_esp_hosted/slave
-    CONFIGURE_COMMAND IDF_TARGET=esp32c6 idf.py reconfigure
-    BUILD_COMMAND IDF_TARGET=esp32c6 idf.py merge-bin
+    CONFIGURE_COMMAND ${CMAKE_COMMAND} -E env IDF_TARGET=esp32c6 idf.py reconfigure
+    BUILD_COMMAND ${CMAKE_COMMAND} -E env IDF_TARGET=esp32c6 idf.py merge-bin
     BUILD_ALWAYS true
     BUILD_BYPRODUCTS build/network_adapter.bin
     INSTALL_COMMAND ${CMAKE_COMMAND} -E copy build/network_adapter.bin ${CMAKE_BINARY_DIR}/connectivity.bin
 )
 ExternalProject_Add_StepTargets(connectivity_esp_hosted install)
+
 get_property(STORAGE_STAGING_DIR GLOBAL PROPERTY STORAGE_STAGING_DIR)
 add_custom_command(
     OUTPUT ${STORAGE_STAGING_DIR}/firmware/connectivity.bin
