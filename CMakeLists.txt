@@ -14,17 +14,19 @@ set(EXTRA_COMPONENT_DIRS badgevms)
 set(COMPONENTS badgevms)
 project(badgevms)
 
-# Build and run host_tests/
-#  targets: host_tests-test
-ExternalProject_Add(host_tests
-    SOURCE_DIR ${CMAKE_SOURCE_DIR}/host_tests
-    BINARY_DIR ${CMAKE_BINARY_DIR}/host_tests
-    BUILD_ALWAYS true
-    INSTALL_COMMAND ""
-    TEST_AFTER_INSTALL true
-)
-ExternalProject_Add_StepTargets(host_tests test)
-add_dependencies(gen_project_binary host_tests-test)
+if(CMAKE_HOST_SYSTEM_NAME STREQUAL "Linux")
+    # Build and run host_tests/
+    #  targets: host_tests-test
+    ExternalProject_Add(host_tests
+        SOURCE_DIR ${CMAKE_SOURCE_DIR}/host_tests
+        BINARY_DIR ${CMAKE_BINARY_DIR}/host_tests
+        BUILD_ALWAYS true
+        INSTALL_COMMAND ""
+        TEST_AFTER_INSTALL true
+    )
+    ExternalProject_Add_StepTargets(host_tests test)
+    add_dependencies(gen_project_binary host_tests-test)
+endif()
 
 # Build flash_storage/
 # outputs: storage.bin
