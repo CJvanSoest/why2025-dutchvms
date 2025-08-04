@@ -297,6 +297,7 @@ static task_info_t *task_info_init() {
         return NULL;
     }
 
+    task_info->children = xQueueCreate(10, sizeof(pid_t));
     return task_info;
 }
 
@@ -305,6 +306,7 @@ static void task_info_delete(task_info_t *task_info) {
         return;
     }
 
+    vQueueDelete(task_info->children);
     free(task_info->file_path);
     free(task_info->argv_back);
     heap_caps_free(task_info);
@@ -387,7 +389,7 @@ out:
 static void elf_task_path(task_info_t *task_info) {
     int fd = why_open(task_info->file_path, O_RDONLY, 0);
     if (fd == -1) {
-        ESP_LOGW("elf_task_path", "Unable to open file");
+        ESP_LOGW("elf_task_path", "Unable to open file '%s'", task_info->file_path);
         return;
     }
 
@@ -481,7 +483,7 @@ pid_t run_task_path(char const *path, uint16_t stack_size, task_type_t type, int
 
     why_close(fd);
 
-    return run_task((void const *)path, stack_size, type, argc, argv);
+    return run_task(strdup((void const *)path), stack_size, type, argc, argv);
 }
 
 pid_t run_task(void const *buffer, uint16_t stack_size, task_type_t type, int argc, char *argv[]) {
@@ -499,7 +501,7 @@ pid_t run_task(void const *buffer, uint16_t stack_size, task_type_t type, int ar
     }
 
     char **new_argv = malloc(argv_size);
-    if (!new_argv) {
+    if (!new_argv && argv_size) {
         ESP_LOGE(TAG, "Out of memory trying to allocate argv buffer");
         return -1;
     }
@@ -536,6 +538,10 @@ pid_t run_task(void const *buffer, uint16_t stack_size, task_type_t type, int ar
     return pid;
 }
 
+pid_t process_create(char const *path, size_t stack_size, int argc, char **argv) {
+    return run_task_path(path, stack_size, TASK_TYPE_ELF_PATH, argc, argv);
+}
+
 pid_t thread_create(void (*thread_entry)(void *user_data), void *user_data, uint16_t stack_size) {
     task_info_t *parent_task_info = get_task_info();
 
@@ -557,6 +563,19 @@ pid_t thread_create(void (*thread_entry)(void *user_data), void *user_data, uint
     vSemaphoreDelete(c->ready);
     pid_t pid = c->pid;
     free(c);
+
+    return pid;
+}
+
+pid_t wait(bool block, uint32_t timeout_msec) {
+    task_info_t *task_info = get_task_info();
+
+    pid_t      pid;
+    TickType_t wait = block ? portMAX_DELAY : timeout_msec / portTICK_PERIOD_MS;
+
+    if (xQueueReceive(task_info->children, &pid, wait) != pdTRUE) {
+        return -1;
+    }
 
     return pid;
 }
@@ -600,6 +619,8 @@ static void IRAM_ATTR hades(void *ignored) {
                     default: ESP_LOGE(TAG, "Unknown task type %i", task_info->type);
                 }
 
+                pid_t parent_pid = task_info->parent;
+
                 process_table_remove_task(task_info);
                 task_thread_destroy(task_info->thread);
                 task_info_delete(task_info);
@@ -609,10 +630,16 @@ static void IRAM_ATTR hades(void *ignored) {
                     abort();
                 }
 
-                // Clean up any threads this process might have left behind
+                // If this process had a parent, and it is still alive, signal it.
+                if (parent_pid && process_table[parent_pid]) {
+                    if (xQueueSend(process_table[parent_pid]->children, &dead_pid, 0) != pdTRUE) {
+                        ESP_LOGW("HADES", "Unable to inform parent of their child's journey");
+                    }
+                }
+
+                // Clean up any child processes or threads this process might have left behind
                 for (int i = 1; i < MAX_PID; ++i) {
-                    if (process_table[i] && process_table[i]->type == TASK_TYPE_THREAD &&
-                        process_table[i]->parent == dead_pid) {
+                    if (process_table[i] && process_table[i]->parent == dead_pid) {
                         // See you soon...
                         vTaskDelete(process_table[i]->handle);
                     }
@@ -690,7 +717,7 @@ static void IRAM_ATTR zeus(void *ignored) {
             switch (command->type) {
                 case TASK_TYPE_ELF: task_info->task_entry = elf_task; break;
                 case TASK_TYPE_ELF_PATH:
-                    task_info->file_path  = strdup((char const *)command->buffer);
+                    task_info->file_path  = (char const *)command->buffer;
                     task_info->buffer     = NULL;
                     task_info->task_entry = elf_task_path;
                     break;

@@ -153,10 +153,11 @@ int app_main(void) {
                 get_total_psram_pages(),
                 get_num_tasks()
             );
+            pidb = run_task_path("FLASH0:process_test.elf", 4096, TASK_TYPE_ELF, 5, argv);
             // pidb = run_task_path("FLASH0:hello.elf", 4096, TASK_TYPE_ELF, 5, argv);
             // pidb = run_task_path("FLASH0:bench_basic_b.elf", 4096, TASK_TYPE_ELF, 2, argv);
             // pidb = run_task_path("FLASH0:wifi_test.elf", 4096, TASK_TYPE_ELF, 2, argv);
-            pidb = run_task_path("FLASH0:doom.elf", 4096, TASK_TYPE_ELF, 5, argv);
+            // pidb = run_task_path("FLASH0:doom.elf", 4096, TASK_TYPE_ELF, 5, argv);
             // pidb = run_task_path("FLASH0:doom.elf", 4096, TASK_TYPE_ELF, 5, argv);
             // pidb = run_task_path("FLASH0:doom.elf", 4096, TASK_TYPE_ELF, 3, argv);
             // pidb = run_task_path("FLASH0:framebuffer_test.elf", 4096, TASK_TYPE_ELF, 2, argv);

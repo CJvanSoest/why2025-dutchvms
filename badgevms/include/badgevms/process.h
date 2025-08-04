@@ -16,8 +16,18 @@
 
 #pragma once
 
-#include <stdint.h>
+#include <stdbool.h>
 #include <stddef.h>
+#include <stdint.h>
 #include <sys/types.h>
 
+// Create a new process from the given filename, with argv, **argc, and a particular stack size.
+pid_t process_create(const char *path, size_t stack_size, int argc, char **argv);
+
+// Create a thread with from thead_entry(void* user_data), the user_data to send, and the stack size for the new thread.
 pid_t thread_create(void (*thread_entry)(void *user_data), void *user_data, uint16_t stack_size);
+
+// Wait for a child process or thread to terminate. The return value of wait is either -1 if the timeout passed, and 
+// blocking was requested, or the pid of the child process that terminated.
+pid_t wait(bool block, uint32_t timeout_msec);
+

@@ -107,8 +107,9 @@ typedef struct task_info {
     char ctime_buf[26];
 
     // Structured
-    struct tm gmtime_tm;
-    struct tm localtime_tm;
+    struct tm     gmtime_tm;
+    struct tm     localtime_tm;
+    QueueHandle_t children;
 
     void *pad; // For debugging
 } task_info_t;

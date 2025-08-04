@@ -171,6 +171,11 @@ build_app(thread_test
      thread_test/main.c
 )
 
+build_app(process_test
+    SOURCES
+     process_test/main.c
+)
+
 build_app(doom
     SOURCES
      doomgeneric/doomgeneric/am_map.c

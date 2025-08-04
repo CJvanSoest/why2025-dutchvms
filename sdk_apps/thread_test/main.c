@@ -1,5 +1,5 @@
 #include "badgevms/misc_funcs.h"
-#include "badgevms/thread.h"
+#include "badgevms/process.h"
 
 #include <stdatomic.h>
 #include <stdbool.h>
