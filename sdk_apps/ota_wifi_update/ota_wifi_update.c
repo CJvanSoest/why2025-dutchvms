@@ -389,6 +389,7 @@ static size_t WriteOTACallback(void *contents, size_t size, size_t nmemb, app_st
         app->ota_error = true;
     }
 
+    free(buffer);
     return realsize;
 }
 
