@@ -14,13 +14,13 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include "thirdparty/dlmalloc.h"
 #include "esp_attr.h"
 #include "esp_heap_caps.h"
 #include "freertos/FreeRTOS.h"
 #include "hal/cache_hal.h"
 #include "hal/cache_ll.h"
 #include "memory.h"
+#include "thirdparty/dlmalloc.h"
 
 #include <stdarg.h>
 #include <stddef.h>

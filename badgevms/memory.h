@@ -17,9 +17,9 @@
 #pragma once
 
 #include "buddy_alloc.h"
-#include "thirdparty/dlmalloc.h"
 #include "esp_log.h"
 #include "soc/soc.h"
+#include "thirdparty/dlmalloc.h"
 
 /* BadgeVMS memory map for extram
  *

@@ -16,7 +16,6 @@
 
 #include "memory.h"
 
-#include "thirdparty/dlmalloc.h"
 #include "esp_cache.h"
 #include "esp_log.h"
 #include "esp_mmu_map.h"
@@ -31,6 +30,7 @@
 #include "soc/ext_mem_defs.h"
 #include "soc/soc.h"
 #include "task.h"
+#include "thirdparty/dlmalloc.h"
 
 #include <stdatomic.h>
 #include <stdio.h>

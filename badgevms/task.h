@@ -17,11 +17,11 @@
 #pragma once
 
 #include "badgevms/device.h"
-#include "thirdparty/dlmalloc.h"
-#include "thirdparty/khash.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "memory.h"
+#include "thirdparty/dlmalloc.h"
+#include "thirdparty/khash.h"
 
 #include <stdatomic.h>
 #include <stdbool.h>

@@ -22,8 +22,8 @@
 #include "compositor/compositor_private.h"
 #include "curl/curl.h"
 #include "esp_elf.h"
-#include "esp_tls.h"
 #include "esp_log.h"
+#include "esp_tls.h"
 #include "hal/cache_hal.h"
 #include "hal/cache_ll.h"
 #include "hal/cache_types.h"
@@ -31,8 +31,8 @@
 #include "hal/mmu_ll.h"
 #include "hal/mmu_types.h"
 #include "hash_helper.h"
-#include "thirdparty/khash.h"
 #include "memory.h"
+#include "thirdparty/khash.h"
 #include "why_io.h"
 
 #include <stdatomic.h>

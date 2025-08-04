@@ -15,7 +15,6 @@
  */
 
 #include "badgevms/pathfuncs.h"
-#include "thirdparty/dlmalloc.h"
 #include "esp_flash.h"
 #include "esp_log.h"
 #include "logical_names.h"
@@ -24,6 +23,7 @@
 #include "lwip/sockets.h"
 #include "rom/uart.h"
 #include "task.h"
+#include "thirdparty/dlmalloc.h"
 
 #include <stdio.h>
 #include <stdlib.h>
