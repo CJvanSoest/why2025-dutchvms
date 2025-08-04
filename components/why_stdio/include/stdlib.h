@@ -180,7 +180,7 @@ lldiv_t	lldiv (long long __numer, long long __denom);
 long   lrand48 (void);
 long   _lrand48_r (struct _rand48 *);
 #endif
-void	*malloc(size_t) __warn_unused_result __alloc_size(1) __nothrow;
+void	*why_malloc(size_t) __warn_unused_result __alloc_size(1) __nothrow;
 int	mblen (const char *, size_t);
 size_t	mbstowcs (wchar_t *__restrict, const char *__restrict, size_t);
 int	mbtowc (wchar_t *__restrict, const char *__restrict, size_t);

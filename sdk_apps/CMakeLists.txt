@@ -115,6 +115,11 @@ function(build_app app_name)
     set_property(GLOBAL APPEND PROPERTY SDK_APP_BUILD_TARGETS build_app_${app_name})
 endfunction()
 
+build_app(hello
+    SOURCES 
+     hello/main.c
+)
+
 build_app(bench_basic_a
     SOURCES 
      bench_basic_a/bench_basic_a.c

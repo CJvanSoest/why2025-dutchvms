@@ -19,3 +19,4 @@
 #include "badgevms/device.h"
 
 device_t *fatfs_create_spi(char const *devname, char const *partname, bool rw);
+device_t *fatfs_create_sd(char const *devname, bool rw);

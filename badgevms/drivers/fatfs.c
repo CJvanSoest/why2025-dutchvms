@@ -16,19 +16,52 @@
 
 #include "fatfs.h"
 
+#include "driver/sdmmc_host.h"
 #include "esp_vfs.h"
 #include "esp_vfs_fat.h"
 #include "freertos/FreeRTOS.h"
+#include "sd_test_io.h"
+#include "sdkconfig.h"
+#include "sdmmc_cmd.h"
 
 #include <stdbool.h>
 #include <stdio.h>
 
 #include <fcntl.h>
 
+#if CONFIG_SOC_SDMMC_IO_POWER_EXTERNAL
+#include "sd_pwr_ctrl_by_on_chip_ldo.h"
+#endif
+
+#define SD_DATA0_GPIO 39
+#define SD_DATA1_GPIO 40
+#define SD_DATA2_GPIO 41
+#define SD_DATA3_GPIO 42
+#define SD_SLC_GPIO   43
+#define SD_CMD_GPIO   44
+
+#define SDCARD_PIN_CLK SD_SLC_GPIO
+#define SDCARD_PIN_CMD SD_CMD_GPIO
+#define SDCARD_PIN_D0  SD_DATA0_GPIO
+#define SDCARD_PIN_D1  SD_DATA1_GPIO
+#define SDCARD_PIN_D2  SD_DATA2_GPIO
+#define SDCARD_PIN_D3  SD_DATA3_GPIO
+
+#define SDCARD_PWR_CTRL_LDO_IO_ID       4
+#define SDCARD_PWR_CTRL_LDO_INTERNAL_IO 1
+
+#undef SDCARD_SDMMC_SPEED_HS
+#undef SDCARD_SDMMC_SPEED_UHS_I_SDR50
+#undef SDCARD_SDMMC_SPEED_UHS_I_DDR50
+
+#define IS_UHS1 (SDCARD_SDMMC_SPEED_UHS_I_SDR50 || SDCARD_SDMMC_SPEED_UHS_I_DDR50)
+
 typedef struct {
-    device_t    device;
-    wl_handle_t wl_handle;
-    char       *base_path;
+    device_t             device;
+    wl_handle_t          wl_handle;
+    sdmmc_card_t        *sdmmc_handle;
+    sd_pwr_ctrl_handle_t pwr_ctrl_handle;
+    char                *base_path;
 } fatfs_device_t;
 
 static int fatfs_open(void *dev, path_t *path, int flags, mode_t mode) {
@@ -39,22 +72,18 @@ static int fatfs_open(void *dev, path_t *path, int flags, mode_t mode) {
     return ret;
 }
 
-IRAM_ATTR
 static int fatfs_close(void *dev, int fd) {
     return close(fd);
 }
 
-IRAM_ATTR
 static ssize_t fatfs_write(void *dev, int fd, void const *buf, size_t count) {
     return write(fd, buf, count);
 }
 
-IRAM_ATTR
 static ssize_t fatfs_read(void *dev, int fd, void *buf, size_t count) {
     return read(fd, buf, count);
 }
 
-IRAM_ATTR
 static ssize_t fatfs_lseek(void *dev, int fd, off_t offset, int whence) {
     return lseek(fd, offset, whence);
 }
@@ -72,7 +101,11 @@ device_t *fatfs_create_spi(char const *devname, char const *partname, bool rw) {
     dev->base_path[0]   = '/';
     strcpy(dev->base_path + 1, devname);
 
-    esp_err_t err      = esp_vfs_fat_spiflash_mount_rw_wl(dev->base_path, partname, &mount_config, &dev->wl_handle);
+    esp_err_t err = esp_vfs_fat_spiflash_mount_rw_wl(dev->base_path, partname, &mount_config, &dev->wl_handle);
+    if (err != ESP_OK) {
+        ESP_LOGE("fatfs-spi", "Failed to mount partition");
+        goto error;
+    }
     device_t *base_dev = (device_t *)dev;
 
     base_dev->type   = DEVICE_TYPE_BLOCK;
@@ -83,4 +116,97 @@ device_t *fatfs_create_spi(char const *devname, char const *partname, bool rw) {
     base_dev->_lseek = fatfs_lseek;
 
     return (device_t *)dev;
+
+error:
+    free(dev->base_path);
+    free(dev);
+    return NULL;
+}
+
+device_t *fatfs_create_sd(char const *devname, bool rw) {
+    esp_vfs_fat_mount_config_t const mount_config = {
+        .max_files              = 4,
+        .format_if_mount_failed = false,
+        .allocation_unit_size   = CONFIG_WL_SECTOR_SIZE,
+        .use_one_fat            = false,
+    };
+
+    fatfs_device_t *dev = malloc(sizeof(fatfs_device_t));
+    dev->base_path      = malloc(strlen(devname) + 2);
+    dev->base_path[0]   = '/';
+    strcpy(dev->base_path + 1, devname);
+
+    device_t *base_dev = (device_t *)dev;
+    base_dev->type     = DEVICE_TYPE_BLOCK;
+    base_dev->_open    = fatfs_open;
+    base_dev->_close   = fatfs_close;
+    base_dev->_write   = fatfs_write;
+    base_dev->_read    = fatfs_read;
+    base_dev->_lseek   = fatfs_lseek;
+
+    esp_err_t    err;
+    sdmmc_host_t host = SDMMC_HOST_DEFAULT();
+    host.slot         = SDMMC_HOST_SLOT_0;
+#if SDCARD_SDMMC_SPEED_HS
+    host.max_freq_khz = SDMMC_FREQ_HIGHSPEED;
+#elif SDCARD_SDMMC_SPEED_UHS_I_SDR50
+    host.max_freq_khz  = SDMMC_FREQ_SDR50;
+    host.flags        &= ~SDMMC_HOST_FLAG_DDR;
+#elif SDCARD_SDMMC_SPEED_UHS_I_DDR50
+    host.max_freq_khz = SDMMC_FREQ_DDR50;
+#endif
+
+#if SDCARD_PWR_CTRL_LDO_INTERNAL_IO
+    sd_pwr_ctrl_ldo_config_t ldo_config = {
+        .ldo_chan_id = SDCARD_PWR_CTRL_LDO_IO_ID,
+    };
+    err = sd_pwr_ctrl_new_on_chip_ldo(&ldo_config, &dev->pwr_ctrl_handle);
+    if (err != ESP_OK) {
+        ESP_LOGE("fatfs-sd", "Failed to create LDO power control driver");
+        goto error;
+    }
+
+    host.pwr_ctrl_handle = dev->pwr_ctrl_handle;
+#endif
+
+    sdmmc_slot_config_t slot_config = SDMMC_SLOT_CONFIG_DEFAULT();
+#if IS_UHS1
+    slot_config.flags |= SDMMC_SLOT_FLAG_UHS1;
+#endif
+    slot_config.gpio_cd = SDMMC_SLOT_NO_CD;
+    slot_config.gpio_wp = SDMMC_SLOT_NO_WP;
+
+    // Set bus width to use:
+    slot_config.width = 4;
+#ifdef CONFIG_SOC_SDMMC_USE_GPIO_MATRIX
+    slot_config.clk = SDCARD_PIN_CLK;
+    slot_config.cmd = SDCARD_PIN_CMD;
+    slot_config.d0  = SDCARD_PIN_D0;
+    slot_config.d1  = SDCARD_PIN_D1;
+    slot_config.d2  = SDCARD_PIN_D2;
+    slot_config.d3  = SDCARD_PIN_D3;
+#endif
+    slot_config.flags |= SDMMC_SLOT_FLAG_INTERNAL_PULLUP;
+
+    err = esp_vfs_fat_sdmmc_mount(dev->base_path, &host, &slot_config, &mount_config, &dev->sdmmc_handle);
+    if (err != ESP_OK) {
+#if SDCARD_PWR_CTRL_LDO_INTERNAL_IO
+        // Deinitialize the power control driver if it was used
+        err = sd_pwr_ctrl_del_on_chip_ldo(host.pwr_ctrl_handle);
+        if (err != ESP_OK) {
+            ESP_LOGW("fatfs-sd", "Failed to delete the on-chip LDO power control driver");
+            goto error;
+        }
+#endif
+        ESP_LOGW("fatfs-sd", "SD card not mounted");
+        goto error;
+    }
+
+    sdmmc_card_print_info(stdout, dev->sdmmc_handle);
+
+    return (device_t *)dev;
+error:
+    free(dev->base_path);
+    free(dev);
+    return NULL;
 }

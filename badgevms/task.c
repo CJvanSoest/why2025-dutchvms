@@ -222,7 +222,7 @@ static void task_thread_destroy(task_thread_t *thread) {
     for (int i = 0; i < MAXFD; ++i) {
         // We sadly can't reuse the why_close code as it must be ran from inside the user task
         if (thread->file_handles[i].is_open) {
-            ESP_LOGI(TAG, "Cleaning up open filehandle %i", i);
+            ESP_LOGW(TAG, "Cleaning up open filehandle %i", i);
             if (thread->file_handles[i].device->_close) {
                 thread->file_handles[i].device->_close(thread->file_handles[i].device, thread->file_handles[i].dev_fd);
             }
