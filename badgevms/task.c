@@ -704,6 +704,7 @@ static void IRAM_ATTR zeus(void *ignored) {
             }
 
             ESP_LOGI("ZEUS", "Breathing life into PID %d", task_info->pid);
+            snprintf(task_name, 9, "Task %u", task_info->pid);
 
             TaskHandle_t new_task;
             BaseType_t   res = xTaskCreatePinnedToCore(

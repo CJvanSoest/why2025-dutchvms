@@ -194,10 +194,6 @@ static void tca8418_keyboard_task(void *pvParameters) {
     while (true) {
         while (tca8418_get_event_count(device->keyboard) > 0) {
             sKeyAndChar test = tca8418_get_char(device->keyboard);
-            if (test.is_pressed) {
-                printf("%c", test.ch);
-                fflush(stdout);
-            }
         }
         vTaskDelay(100 / portTICK_PERIOD_MS);
     }
@@ -264,7 +260,7 @@ device_t *tca8418_keyboard_create() {
     tca8418_flush(dev->keyboard);
 
     ESP_LOGE(TAG, "keyboard initialization success");
-    xTaskCreate(tca8418_keyboard_task, "tca8418_keyboard_task", 4096, dev, tskIDLE_PRIORITY, NULL);
+    // xTaskCreate(tca8418_keyboard_task, "tca8418_keyboard_task", 4096, dev, tskIDLE_PRIORITY, NULL);
 
     return (device_t *)dev;
 }
