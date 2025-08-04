@@ -26,7 +26,6 @@
 #define free    dlfree
 
 #define asprintf  why_asprintf
-#define close     why_close
 #define dprintf   why_dprintf
 #define fclose    why_fclose
 #define fgetc     why_fgetc
@@ -36,9 +35,7 @@
 #define getc      why_getc
 #define getchar   why_getchar
 #define lseek     why_lseek
-#define open      why_open
 #define printf    why_printf
-#define read      why_read
 #define snprintf  why_snprintf
 #define sprintf   why_sprintf
 #define sscanf    why_sscanf
@@ -50,4 +47,3 @@
 #define vprintf   why_vprintf
 #define vsnprintf why_vsnprintf
 #define vsprintf  why_vsprintf
-#define write     why_write
