@@ -899,25 +899,25 @@ void app_main()
 
 	// added to put display backlight (GPIO_NUM_15) and keyboard backlight (GPIO_NUM_10) PWM on
 
-	gpio_set_direction(GPIO_NUM_15, GPIO_MODE_OUTPUT);
-	gpio_reset_pin(GPIO_NUM_15);
-	gpio_set_level(GPIO_NUM_15, 1);
+	// gpio_set_direction(GPIO_NUM_15, GPIO_MODE_OUTPUT);
+	// gpio_reset_pin(GPIO_NUM_15);
+	// gpio_set_level(GPIO_NUM_15, 1);
 	
-	gpio_set_direction(GPIO_NUM_10, GPIO_MODE_OUTPUT);
-	gpio_reset_pin(GPIO_NUM_10);
-	gpio_set_level(GPIO_NUM_10, 1);
+	// gpio_set_direction(GPIO_NUM_10, GPIO_MODE_OUTPUT);
+	// gpio_reset_pin(GPIO_NUM_10);
+	// gpio_set_level(GPIO_NUM_10, 1);
 	
 	// configure a timer to use for 2 pwm outputs (display and keyboard backlight)
-	// configure_pwm_timer(LEDC_TIMER_0);
+	configure_pwm_timer(LEDC_TIMER_0);
 	// Configure PWM on GPIO 15, using timer 0, channel 0
-	// configure_pwm(15, LEDC_CHANNEL_0, LEDC_TIMER_0);
+	configure_pwm(15, LEDC_CHANNEL_0, LEDC_TIMER_0);
 	// Set duty cycle to 10%
-	// set_pwm_duty_cycle(LEDC_CHANNEL_0, 10);
+	set_pwm_duty_cycle(LEDC_CHANNEL_0, 10);
 
 	// Configure PWM on GPIO 10, using timer 0, channel 1
-	// configure_pwm(10, LEDC_CHANNEL_1, LEDC_TIMER_0);
+	configure_pwm(10, LEDC_CHANNEL_1, LEDC_TIMER_0);
 	// Set duty cycle to 50%
-	// set_pwm_duty_cycle(LEDC_CHANNEL_1, 10);
+	set_pwm_duty_cycle(LEDC_CHANNEL_1, 10);
 
 	// end display and keyboard backlight
 
