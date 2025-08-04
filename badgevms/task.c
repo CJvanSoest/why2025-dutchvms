@@ -18,18 +18,12 @@
 
 #include "badgevms/event.h"
 #include "badgevms/ota.h"
-#include "bitfuncs.h"
 #include "compositor/compositor_private.h"
 #include "curl/curl.h"
+#include "elf_symbols.h"
 #include "esp_elf.h"
 #include "esp_log.h"
 #include "esp_tls.h"
-#include "hal/cache_hal.h"
-#include "hal/cache_ll.h"
-#include "hal/cache_types.h"
-#include "hal/mmu_hal.h"
-#include "hal/mmu_ll.h"
-#include "hal/mmu_types.h"
 #include "hash_helper.h"
 #include "memory.h"
 #include "thirdparty/khash.h"
@@ -40,6 +34,8 @@
 #include <iconv.h>
 #include <regex.h>
 #include <string.h>
+
+static void const *__keep_symbol_elf __attribute__((used)) = &elf_find_sym;
 
 extern void writeback_and_invalidate_task(task_info_t *task_info);
 extern void remap_task(task_info_t *task_info);
