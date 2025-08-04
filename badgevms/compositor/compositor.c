@@ -435,7 +435,9 @@ static void IRAM_ATTR NOINLINE_ATTR compositor(void *ignored) {
                         message.window->framebuffers[message.fb_num] = NULL;
                         bool is_clean                                = atomic_flag_test_and_set(&fb->clean);
                         if (!is_clean) {
-                            xTaskNotifyGiveIndexed(message.window->task_info->handle, 1);
+                            if (eTaskGetState(message.window->task_info->handle) != eDeleted) {
+                                xTaskNotifyGiveIndexed(message.window->task_info->handle, 1);
+                            }
                         }
                         framebuffer_free(fb);
                     }
@@ -444,7 +446,11 @@ static void IRAM_ATTR NOINLINE_ATTR compositor(void *ignored) {
             }
             visible_regions_valid = false;
             background_damaged    = 7;
-            xTaskNotifyGiveIndexed(message.caller, 0);
+            if (message.caller) {
+                if (eTaskGetState(message.caller) != eDeleted) {
+                    xTaskNotifyGiveIndexed(message.caller, 0);
+                }
+            }
             if (processed > 5)
                 break;
         }
@@ -715,7 +721,9 @@ static void IRAM_ATTR NOINLINE_ATTR compositor(void *ignored) {
                 }
 
                 if (!is_clean) {
-                    xTaskNotifyGiveIndexed(window->task_info->handle, 1);
+                    if (eTaskGetState(window->task_info->handle) != eDeleted) {
+                        xTaskNotifyGiveIndexed(window->task_info->handle, 1);
+                    }
                 }
 
                 if (drew_pixels) {
@@ -806,6 +814,21 @@ error:
     free(window->title);
     free(window);
     return NULL;
+}
+
+void window_destroy_task(window_t *window) {
+    if (!window) {
+        return;
+    }
+
+    ESP_LOGI(TAG, "Destroying window %p\n", window);
+
+    compositor_message_t message = {
+        .command = WINDOW_DESTROY,
+        .window  = window,
+    };
+
+    xQueueSend(compositor_queue, &message, portMAX_DELAY);
 }
 
 void window_destroy(window_t *window) {

@@ -16,10 +16,10 @@
 
 #include "task.h"
 
-#include "badgevms/compositor.h"
 #include "badgevms/event.h"
 #include "badgevms/ota.h"
 #include "bitfuncs.h"
+#include "compositor/compositor_private.h"
 #include "curl/curl.h"
 #include "esp_elf.h"
 #include "esp_log.h"
@@ -248,7 +248,7 @@ static void task_thread_destroy(task_thread_t *thread) {
                         break;
                     case RES_WINDOW:
                         ESP_LOGW(TAG, "Cleaning up window %p", ptr);
-                        window_destroy(ptr);
+                        window_destroy_task(ptr);
                         break;
                     case RES_DEVICE:
                         device_t *dev = (device_t *)ptr;
