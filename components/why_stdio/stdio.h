@@ -312,9 +312,9 @@ int     why_ferror(FILE *__stream);
 int     why_feof(FILE *__stream);
 
 /* fast inlined versions */
-#define __clearerr_unlocked(s) ((s)->flags &= ~(__SERR | __SEOF))
-#define __ferror_unlocked(s) ((s)->flags & __SERR)
-#define __feof_unlocked(s) ((s)->flags & __SEOF)
+#define __why_clearerr_unlocked(s) ((s)->flags &= ~(__SERR | __SEOF))
+#define __why_ferror_unlocked(s) ((s)->flags & __SERR)
+#define __why_feof_unlocked(s) ((s)->flags & __SEOF)
 
 /* When locking is disabled, use the unlocked macros */
 #ifndef __STDIO_LOCKING
@@ -325,12 +325,12 @@ int     why_feof(FILE *__stream);
 
 /* Expose the unlocked symbols when requested */
 #ifdef __MISC_VISIBLE
-void    clearerr_unlocked(FILE *__stream);
-int     ferror_unlocked(FILE *__stream);
-int     feof_unlocked(FILE *__stream);
-#define clearerr_unlocked(s) __clearerr_unlocked(s)
-#define ferror_unlocked(s) __ferror_unlocked(s)
-#define feof_unlocked(s) __feof_unlocked(s)
+void    why_clearerr_unlocked(FILE *__stream);
+int     why_ferror_unlocked(FILE *__stream);
+int     why_feof_unlocked(FILE *__stream);
+#define why_clearerr_unlocked(s) __why_clearerr_unlocked(s)
+#define why_ferror_unlocked(s) __why_ferror_unlocked(s)
+#define why_feof_unlocked(s) __why_feof_unlocked(s)
 #endif
 
 #ifndef SEEK_SET

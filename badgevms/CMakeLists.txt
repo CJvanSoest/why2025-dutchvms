@@ -14,6 +14,8 @@ idf_component_register(
      "drivers/tca8418.c"
      "drivers/tty.c"
      "drivers/wifi.c"
+     "drivers/esp-serial-flasher/why2025_firmware.c"
+     "drivers/esp-serial-flasher/slave_c6_flasher.c"
      "logical_names.c"
      "memory.c"
      "memory_heap_caps.c"

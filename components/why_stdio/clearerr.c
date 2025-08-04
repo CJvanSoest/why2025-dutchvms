@@ -31,27 +31,27 @@
 
 #include "stdio_private.h"
 
-#undef clearerr
-#undef clearerr_unlocked
+#undef why_clearerr
+#undef why_clearerr_unlocked
 
 void
-__STDIO_UNLOCKED(clearerr)(FILE *stream)
+__STDIO_UNLOCKED(why_clearerr)(FILE *stream)
 {
 	stream->flags &= ~(__SERR | __SEOF);
 }
 
 #if defined(__STDIO_LOCKING)
 void
-clearerr(FILE *stream)
+why_clearerr(FILE *stream)
 {
     __flockfile(stream);
-    clearerr_unlocked(stream);
+    why_clearerr_unlocked(stream);
     __funlockfile(stream);
 }
 #else
 #ifdef __strong_reference
-__strong_reference(clearerr, clearerr_unlocked);
+__strong_reference(why_clearerr, why_clearerr_unlocked);
 #else
-void clearerr_unlocked(FILE *stream) { return clearerr(stream); }
+void why_clearerr_unlocked(FILE *stream) { return why_clearerr(stream); }
 #endif
 #endif

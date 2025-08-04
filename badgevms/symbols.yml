@@ -1006,6 +1006,8 @@ wrapped_function:
   - asprintf
   - atexit
   - calloc
+  - clearerr
+  - clearerr_unlocked
   - close
   - ctime
   - die
@@ -1055,6 +1057,7 @@ wrapped_function:
   - regfree
   - remove
   - rename
+  - rewind
   - scanf
   - setbuf
   - setbuffer

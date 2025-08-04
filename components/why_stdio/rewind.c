@@ -36,10 +36,10 @@
 #include "stdio_private.h"
 
 void
-rewind(FILE *stream)
+why_rewind(FILE *stream)
 {
     __flockfile(stream);
-    (void) fseek(stream, 0L, SEEK_SET);
-    clearerr(stream);
+    (void) why_fseek(stream, 0L, SEEK_SET);
+    why_clearerr(stream);
     __funlockfile(stream);
 }

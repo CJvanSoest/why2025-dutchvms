@@ -4,7 +4,7 @@ idf_component_register( SRCS
   asprintf.c
   #atold_engine.c
   bufio.c
-  #clearerr.c
+  clearerr.c
   #compare_exchange.c
   #dtox_engine.c
   #ecvt.c
@@ -77,7 +77,7 @@ idf_component_register( SRCS
   puts.c
   #putwchar.c
   #remove.c
-  #rewind.c
+  rewind.c
   scanf.c
   setbuf.c
   setbuffer.c

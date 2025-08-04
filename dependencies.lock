@@ -23,6 +23,23 @@ dependencies:
       registry_url: https://components.espressif.com
       type: service
     version: 1.0.0
+  espressif/esp-serial-flasher:
+    component_hash: b06d58e01a43728d61fe344ceaeca192d46e159a3d6c15d40d968dc8e34fa357
+    dependencies:
+    - name: idf
+      require: private
+      version: '>=4.3'
+    - name: espressif/usb_host_cdc_acm
+      registry_url: https://components.espressif.com
+      require: private
+      rules:
+      - if: idf_version >=4.4
+      - if: target in [esp32s2, esp32s3]
+      version: ^2
+    source:
+      registry_url: https://components.espressif.com/
+      type: service
+    version: 1.9.0
   espressif/esp_hosted:
     component_hash: 791dc77041a4aa6c57bed57d775b6f218071beb57e883d238343295ea64cff43
     dependencies:
@@ -101,11 +118,12 @@ dependencies:
     version: 5.5.0
 direct_dependencies:
 - espressif/cmake_utilities
+- espressif/esp-serial-flasher
 - espressif/esp_hosted
 - espressif/esp_wifi_remote
 - espressif/i2c_bus
 - espressif2022/bmi270
 - idf
-manifest_hash: 828cfc09e9914f8fb041265e09249ba7c59010113e6ebefdcaf8b315fae2a649
+manifest_hash: b3cfbfc88bcc52fe2c801f77b7fb244823c8bd8e52ee902130008ca6eb06caa5
 target: esp32p4
 version: 2.0.0

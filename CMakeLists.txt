@@ -53,6 +53,15 @@ add_custom_target(sdk
 #  target: SDK_APP_BUILD_TARGETS, sdk_app_build_all
 add_subdirectory(sdk_apps)
 
+file(WRITE ${CMAKE_BINARY_DIR}/generate_md5.cmake "
+function(generate_md5_file input_file)
+    file(MD5 \${input_file} file_md5)
+    file(WRITE \${input_file}.md5 \"\${file_md5}\")
+endfunction()
+
+generate_md5_file(\${INPUT_FILE})
+")
+
 # Build connectivity_esp_hosted/ as network_adapter.bin (target )
 #  output: connectivity.bin
 #  target: connectivity_esp_hosted-install
@@ -60,26 +69,47 @@ ExternalProject_Add(connectivity_esp_hosted
     SOURCE_DIR ${CMAKE_SOURCE_DIR}/connectivity_esp_hosted/slave
     BINARY_DIR ${CMAKE_SOURCE_DIR}/connectivity_esp_hosted/slave
     CONFIGURE_COMMAND ${CMAKE_COMMAND} -E env IDF_TARGET=esp32c6 idf.py reconfigure
-    BUILD_COMMAND ${CMAKE_COMMAND} -E env IDF_TARGET=esp32c6 idf.py merge-bin
+    BUILD_COMMAND ${CMAKE_COMMAND} -E env IDF_TARGET=esp32c6 idf.py build
     BUILD_ALWAYS true
-    BUILD_BYPRODUCTS build/network_adapter.bin
-    INSTALL_COMMAND ${CMAKE_COMMAND} -E copy build/network_adapter.bin ${CMAKE_BINARY_DIR}/connectivity.bin
+    BUILD_BYPRODUCTS build/network_adapter.bin build/partition_table/partition-table.bin build/bootloader/bootloader.bin
+    INSTALL_COMMAND 
+        ${CMAKE_COMMAND} -E make_directory ${CMAKE_BINARY_DIR}/c6firmware &&
+        ${CMAKE_COMMAND} -E copy build/network_adapter.bin build/partition_table/partition-table.bin build/bootloader/bootloader.bin ${CMAKE_BINARY_DIR}/c6firmware
 )
 ExternalProject_Add_StepTargets(connectivity_esp_hosted install)
 
 get_property(STORAGE_STAGING_DIR GLOBAL PROPERTY STORAGE_STAGING_DIR)
 add_custom_command(
-    OUTPUT ${STORAGE_STAGING_DIR}/firmware/connectivity.bin
+    OUTPUT
+        ${STORAGE_STAGING_DIR}/firmware/network_adapter.bin
+        ${STORAGE_STAGING_DIR}/firmware/partition-table.bin
+        ${STORAGE_STAGING_DIR}/firmware/bootloader.bin
+        ${STORAGE_STAGING_DIR}/firmware/network_adapter.bin.md5
+        ${STORAGE_STAGING_DIR}/firmware/partition-table.bin.md5
+        ${STORAGE_STAGING_DIR}/firmware/bootloader.bin.md5
     COMMAND ${CMAKE_COMMAND} -E make_directory ${STORAGE_STAGING_DIR}/firmware
-    COMMAND ${CMAKE_COMMAND} -E copy ${CMAKE_BINARY_DIR}/connectivity.bin ${STORAGE_STAGING_DIR}/firmware/connectivity.bin
+    COMMAND ${CMAKE_COMMAND} -E copy ${CMAKE_BINARY_DIR}/c6firmware/network_adapter.bin ${STORAGE_STAGING_DIR}/firmware/
+    COMMAND ${CMAKE_COMMAND} -E copy ${CMAKE_BINARY_DIR}/c6firmware/partition-table.bin ${STORAGE_STAGING_DIR}/firmware/
+    COMMAND ${CMAKE_COMMAND} -E copy ${CMAKE_BINARY_DIR}/c6firmware/bootloader.bin ${STORAGE_STAGING_DIR}/firmware/
+    # Generate MD5 files using CMake script (cross-platform)
+    COMMAND ${CMAKE_COMMAND} -DINPUT_FILE=${STORAGE_STAGING_DIR}/firmware/network_adapter.bin -P ${CMAKE_BINARY_DIR}/generate_md5.cmake
+    COMMAND ${CMAKE_COMMAND} -DINPUT_FILE=${STORAGE_STAGING_DIR}/firmware/partition-table.bin -P ${CMAKE_BINARY_DIR}/generate_md5.cmake
+    COMMAND ${CMAKE_COMMAND} -DINPUT_FILE=${STORAGE_STAGING_DIR}/firmware/bootloader.bin -P ${CMAKE_BINARY_DIR}/generate_md5.cmake
     DEPENDS
      connectivity_esp_hosted-install
      init_storage_staging
-    COMMENT "Copying connectivity.bin to storage staging"
+    COMMENT "Copying slave c6 firmware to storage staging and generating MD5 checksums"
     VERBATIM
 )
+
 add_custom_target(storage_staging_add_connectivity ALL
-    DEPENDS ${STORAGE_STAGING_DIR}/firmware/connectivity.bin
+    DEPENDS
+        ${STORAGE_STAGING_DIR}/firmware/network_adapter.bin
+        ${STORAGE_STAGING_DIR}/firmware/partition-table.bin
+        ${STORAGE_STAGING_DIR}/firmware/bootloader.bin
+        ${STORAGE_STAGING_DIR}/firmware/network_adapter.bin.md5
+        ${STORAGE_STAGING_DIR}/firmware/partition-table.bin.md5
+        ${STORAGE_STAGING_DIR}/firmware/bootloader.bin.md5
 )
 add_dependencies(final_storage_staging storage_staging_add_connectivity)
 

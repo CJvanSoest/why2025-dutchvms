@@ -22,7 +22,7 @@
 #include <unistd.h>
 
 void *dlmalloc(size_t size);
-void dlfree(void *_Nullable ptr);
+void  dlfree(void *_Nullable ptr);
 void *dlcalloc(size_t nmemb, size_t size);
 void *dlrealloc(void *_Nullable ptr, size_t size);
 void *dlreallocarray(void *_Nullable ptr, size_t nmemb, size_t size);
@@ -58,3 +58,11 @@ int why_asprintf(char **restrict strp, char const *restrict fmt, ...);
 int why_vasprintf(char **restrict strp, char const *restrict fmt, va_list ap);
 
 char *why_strdup(char const *s);
+
+size_t why_fread(void *ptr, size_t size, size_t nmemb, FILE *restrict stream);
+size_t why_fwrite(void const *ptr, size_t size, size_t nmemb, FILE *restrict stream);
+int    why_fseek(FILE *stream, long offset, int whence);
+long   why_ftell(FILE *stream);
+void   why_rewind(FILE *stream);
+int    why_fgetpos(FILE *restrict stream, fpos_t *restrict pos);
+int    why_fsetpos(FILE *stream, fpos_t const *pos);

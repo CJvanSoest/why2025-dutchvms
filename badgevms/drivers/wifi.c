@@ -14,7 +14,7 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include "thirdparty/dlmalloc.h"
+#include "esp-serial-flasher/slave_c6_flasher.h"
 #include "esp_attr.h"
 #include "esp_event.h"
 #include "esp_log.h"
@@ -22,6 +22,7 @@
 #include "freertos/FreeRTOS.h"
 #include "nvs_flash.h"
 #include "task.h"
+#include "thirdparty/dlmalloc.h"
 #include "why_io.h"
 #include "wifi_internal.h"
 
@@ -530,6 +531,10 @@ static void start_wifi() {
 
 device_t *wifi_create() {
     ESP_LOGI(TAG, "Initializing");
+
+    ESP_LOGI(TAG, "Flashing C6");
+    flash_slave_c6_if_needed();
+
     wifi_device_t *dev      = malloc(sizeof(wifi_device_t));
     device_t      *base_dev = (device_t *)dev;
 
