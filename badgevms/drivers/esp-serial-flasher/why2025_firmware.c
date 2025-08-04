@@ -19,6 +19,8 @@
 #include <inttypes.h>
 #include <sys/param.h>
 #include <assert.h>
+#include <stdbool.h>
+
 #include "esp_loader_io.h"
 #include "esp_loader.h"
 #include "esp_log.h"
@@ -40,7 +42,7 @@
 #define PARTITION_ADDRESS           0x8000
 #define APPLICATION_ADDRESS         0x10000
 
-bool read_file_size(const char *filename, void** buffer, uint32_t *size) {
+bool read_file_size(const char *filename, void** buffer, uint32_t *size, bool null_terminate) {
     FILE *f = why_fopen(filename, "r");
     void *b = NULL;
     *buffer = NULL;
@@ -65,7 +67,12 @@ bool read_file_size(const char *filename, void** buffer, uint32_t *size) {
     }
     why_rewind(f);
 
-    b = heap_caps_malloc(s, MALLOC_CAP_SPIRAM);
+    if (null_terminate) {
+        b = heap_caps_calloc(1, s + 1, MALLOC_CAP_SPIRAM);
+    } else {
+        b = heap_caps_malloc(s, MALLOC_CAP_SPIRAM);
+    }
+
     if (!b) {
         ESP_LOGE(TAG, "Failed to get allocate memory %s", filename);
         goto error;
@@ -105,32 +112,32 @@ bool get_why2025_binaries(target_chip_t target, why2025_binaries_t *bins)
         bins->part.md5 = NULL;
         bins->app.md5 = NULL;
 
-        if (!read_file_size("FLASH0:[firmware]bootloader.bin", (void**)(&bins->boot.data), &bins->boot.size)) {
+        if (!read_file_size("FLASH0:[firmware]bootloader.bin", (void**)(&bins->boot.data), &bins->boot.size, false)) {
             ESP_LOGE(TAG, "Failed to read bootloader.bin");
             return false;
         }
 
-        if (!read_file_size("FLASH0:[firmware]bootloader.bin.md5", (void**)(&bins->boot.md5), NULL)) {
+        if (!read_file_size("FLASH0:[firmware]bootloader.bin.md5", (void**)(&bins->boot.md5), NULL, true)) {
             ESP_LOGE(TAG, "Failed to read bootloader.bin.md5");
             return false;
         }
 
-        if (!read_file_size("FLASH0:[firmware]partition-table.bin", (void**)(&bins->part.data), &bins->part.size)) {
+        if (!read_file_size("FLASH0:[firmware]partition-table.bin", (void**)(&bins->part.data), &bins->part.size, false)) {
             ESP_LOGE(TAG, "Failed to read partition-table.bin");
             return false;
         }
 
-        if (!read_file_size("FLASH0:[firmware]partition-table.bin.md5", (void**)(&bins->part.md5), NULL)) {
+        if (!read_file_size("FLASH0:[firmware]partition-table.bin.md5", (void**)(&bins->part.md5), NULL, true)) {
             ESP_LOGE(TAG, "Failed to read partition-table.bin.md5");
             return false;
         }
 
-        if (!read_file_size("FLASH0:[firmware]network_adapter.bin", (void**)(&bins->app.data), &bins->app.size)) {
+        if (!read_file_size("FLASH0:[firmware]network_adapter.bin", (void**)(&bins->app.data), &bins->app.size, false)) {
             ESP_LOGE(TAG, "Failed to read network_adapter.bin");
             return false;
         }
 
-        if (!read_file_size("FLASH0:[firmware]network_adapter.bin.md5", (void**)(&bins->app.md5), NULL)) {
+        if (!read_file_size("FLASH0:[firmware]network_adapter.bin.md5", (void**)(&bins->app.md5), NULL, true)) {
             ESP_LOGE(TAG, "Failed to read network_adapter.bin.md5");
             return false;
         }
