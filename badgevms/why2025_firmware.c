@@ -90,8 +90,6 @@ void IRAM_ATTR __wrap_esp_panic_handler(panic_info_t *info) {
     __real_esp_panic_handler(info);
 }
 
-#include "lwip/netdb.h"
-
 int app_main(void) {
     printf("BadgeVMS Initializing...\n");
     size_t free_ram = heap_caps_get_free_size(MALLOC_CAP_DEFAULT);
@@ -110,17 +108,38 @@ int app_main(void) {
         ret = nvs_flash_init();
     }
 
-    device_register("KEYBOARD0", tca8418_keyboard_create());
-    device_register("PANEL0", st7703_create());
-    device_register("TT01", tty_create(true, true));
     device_register("FLASH0", fatfs_create_spi("FLASH0", "storage", true));
-    device_register("I2CBUS0", badgevms_i2c_bus_create("I2CBUS0", 0, 400 * 1000));
+
+    // Must come after FLASH0 as that is where the firmware is
+    free_ram = heap_caps_get_free_size(MALLOC_CAP_DEFAULT);
+    ESP_LOGW(
+        TAG,
+        "Free main memory: %zi, free PSRAM pages: %zi/%zi, running processes %u",
+        free_ram,
+        get_free_psram_pages(),
+        get_total_psram_pages(),
+        get_num_tasks()
+    );
     device_register("WIFI0", wifi_create());
+    free_ram = heap_caps_get_free_size(MALLOC_CAP_DEFAULT);
+    ESP_LOGW(
+        TAG,
+        "Free main memory: %zi, free PSRAM pages: %zi/%zi, running processes %u",
+        free_ram,
+        get_free_psram_pages(),
+        get_total_psram_pages(),
+        get_num_tasks()
+    );
+
+    device_register("PANEL0", st7703_create());
+    device_register("KEYBOARD0", tca8418_keyboard_create());
+    device_register("TT01", tty_create(true, true));
+    device_register("I2CBUS0", badgevms_i2c_bus_create("I2CBUS0", 0, 400 * 1000));
     device_register("ORIENTATION0", bosch_bmi270_sensor_create());
 
-    logical_name_set("SEARCH", "FLASH0:[SUBDIR], FLASH0:[SUBDIR.ANOTHER]", false);
-
     compositor_init("PANEL0", "KEYBOARD0");
+
+    logical_name_set("SEARCH", "FLASH0:[SUBDIR], FLASH0:[SUBDIR.ANOTHER]", false);
 
     validate_ota_partition();
 
@@ -164,33 +183,36 @@ int app_main(void) {
     // pidb       = run_task(framebuffer_test_a_start, 4096, TASK_TYPE_ELF_ROM, 2, argv);
     // ESP_LOGI(TAG, "Started task with pid %i", pidb);
 
-    // pidb = run_task_path("FLASH0:doom.elf", 4096, TASK_TYPE_ELF, 5, argv);
-    pidb = run_task_path("FLASH0:framebuffer_test.elf", 4096, TASK_TYPE_ELF, 2, argv);
+    // pidb = run_task_path("FLASH0:doom.elf", 4096, TASK_TYPE_ELF, 3, argv);
+    // pidb = run_task_path("FLASH0:framebuffer_test.elf", 4096, TASK_TYPE_ELF, 2, argv);
     while (1) {
         while (get_num_tasks() < 2) {
+            free_ram = heap_caps_get_free_size(MALLOC_CAP_DEFAULT);
+            ESP_LOGW(
+                TAG,
+                "Free main memory: %zi, free PSRAM pages: %zi/%zi, running processes %u",
+                free_ram,
+                get_free_psram_pages(),
+                get_total_psram_pages(),
+                get_num_tasks()
+            );
             // pidb = run_task_path("FLASH0:bench_basic_b.elf", 4096, TASK_TYPE_ELF, 2, argv);
             // pidb = run_task_path("FLASH0:wifi_test.elf", 4096, TASK_TYPE_ELF, 2, argv);
             // pidb = run_task_path("FLASH0:doom.elf", 4096, TASK_TYPE_ELF, 5, argv);
-            // pidb = run_task_path("FLASH0:doom.elf", 4096, TASK_TYPE_ELF, 5, argv);
+            pidb = run_task_path("FLASH0:doom.elf", 4096, TASK_TYPE_ELF, 5, argv);
             // pidb = run_task_path("FLASH0:doom.elf", 4096, TASK_TYPE_ELF, 3, argv);
             // pidb = run_task_path("FLASH0:framebuffer_test.elf", 4096, TASK_TYPE_ELF, 2, argv);
+            // pidb = run_task_path("FLASH0:framebuffer_test.elf", 4096, TASK_TYPE_ELF, 2, argv);
             // pidb = run_task_path("FLASH0:hardware_test.elf", 4096, TASK_TYPE_ELF, 2, argv);
-            pidb = run_task_path("FLASH0:bmi270_test.elf", 4096, TASK_TYPE_ELF, 2, argv);
-            pidb = run_task_path("FLASH0:sdl_test.elf", 4096, TASK_TYPE_ELF, 2, argv);
+            // pidb = run_task_path("FLASH0:bmi270_test.elf", 4096, TASK_TYPE_ELF, 2, argv);
             // pidb = run_task_path("FLASH0:sdl_test.elf", 4096, TASK_TYPE_ELF, 2, argv);
+            // pidb = run_task_path("FLASH0:sdl_test.elf", 4096, TASK_TYPE_ELF, 2, argv);
+            // pidb = run_task_path("FLASH0:thread_test.elf", 4096, TASK_TYPE_ELF, 2, argv);
+            pidb = run_task_path("FLASH0:curl_test.elf", 4096, TASK_TYPE_ELF, 5, argv);
             // pidb = run_task_path("FLASH0:thread_test.elf", 4096, TASK_TYPE_ELF, 2, argv);
             // pidb = run_task_path("FLASH0:curl_test.elf", 4096, TASK_TYPE_ELF, 5, argv);
             vTaskDelay(100 / portTICK_PERIOD_MS);
         }
-        free_ram = heap_caps_get_free_size(MALLOC_CAP_DEFAULT);
-        ESP_LOGW(
-            TAG,
-            "Free main memory: %zi, free PSRAM pages: %zi/%zi, running processes %u",
-            free_ram,
-            get_free_psram_pages(),
-            get_total_psram_pages(),
-            get_num_tasks()
-        );
         vTaskDelay(10000 / portTICK_PERIOD_MS);
     }
 
