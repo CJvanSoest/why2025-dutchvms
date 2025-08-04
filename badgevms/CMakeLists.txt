@@ -9,13 +9,13 @@ idf_component_register(
      "device.c"
      "drivers/badgevms_i2c_bus.c"
      "drivers/bosch_bmi270.c"
+     "drivers/esp-serial-flasher/slave_c6_flasher.c"
+     "drivers/esp-serial-flasher/why2025_firmware.c"
      "drivers/fatfs.c"
      "drivers/st7703.c"
      "drivers/tca8418.c"
      "drivers/tty.c"
      "drivers/wifi.c"
-     "drivers/esp-serial-flasher/why2025_firmware.c"
-     "drivers/esp-serial-flasher/slave_c6_flasher.c"
      "logical_names.c"
      "memory.c"
      "memory_heap_caps.c"
@@ -23,6 +23,7 @@ idf_component_register(
      "pathfuncs.c"
      "task.c"
      "thirdparty/dlmalloc.c"
+     "thirdparty/tomlc17.c"
      "user_event.c"
      "why2025_firmware.c"
      "wrapped_funcs.c"
@@ -95,6 +96,7 @@ target_compile_definitions(${COMPONENT_LIB} PRIVATE
 target_compile_options(${COMPONENT_LIB} PRIVATE
     -Wno-empty-body
     -Wno-stringop-overflow
+    -Wno-char-subscripts # For toml
 )
 
 #
