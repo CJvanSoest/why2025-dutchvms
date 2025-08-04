@@ -16,12 +16,16 @@
 
 #pragma once
 
-#include "thirdparty/dlmalloc.h"
-
 #include <stdio.h>
 
 #include <fcntl.h>
 #include <unistd.h>
+
+void *dlmalloc(size_t size);
+void dlfree(void *_Nullable ptr);
+void *dlcalloc(size_t nmemb, size_t size);
+void *dlrealloc(void *_Nullable ptr, size_t size);
+void *dlreallocarray(void *_Nullable ptr, size_t nmemb, size_t size);
 
 ssize_t why_write(int fd, void const *buf, size_t count);
 ssize_t why_read(int fd, void *buf, size_t count);
