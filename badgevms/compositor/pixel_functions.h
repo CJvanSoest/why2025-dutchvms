@@ -83,6 +83,24 @@ __attribute__((always_inline)) inline static window_rect_t rotate_rect(window_re
     return ret;
 }
 
+__attribute__((always_inline)) inline static bool rect_intersects(window_rect_t a, window_rect_t b) {
+    return (a.x < b.x + b.w) && (a.x + a.w > b.x) && (a.y < b.y + b.h) && (a.y + a.h > b.y);
+}
+
+__attribute__((always_inline)) inline static window_rect_t rect_intersection(window_rect_t a, window_rect_t b) {
+    int left   = (a.x > b.x) ? a.x : b.x;
+    int top    = (a.y > b.y) ? a.y : b.y;
+    int right  = ((a.x + a.w) < (b.x + b.w)) ? (a.x + a.w) : (b.x + b.w);
+    int bottom = ((a.y + a.h) < (b.y + b.h)) ? (a.y + a.h) : (b.y + b.h);
+
+    return (
+        window_rect_t
+    ){.x = left, .y = top, .w = (right > left) ? (right - left) : 0, .h = (bottom > top) ? (bottom - top) : 0};
+}
+
+small_rect_array_t rect_subtract(window_rect_t a, window_rect_t b);
+void               merge_rectangles(rect_array_t *arr);
+
 void draw_pixel_rotated(uint16_t *fb, int x, int y, uint16_t color);
 void draw_filled_rect_rotated(uint16_t *fb, int x, int y, int width, int height, uint16_t color);
 void draw_rect_rotated(uint16_t *fb, int x, int y, int width, int height, uint16_t color);

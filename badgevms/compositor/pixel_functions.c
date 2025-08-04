@@ -114,3 +114,112 @@ IRAM_ATTR void draw_text_rotated(uint16_t *fb, char const *text, int x, int y, u
         draw_char_rotated(fb, text[i], x + i * (FONT_WIDTH + 1), y, color);
     }
 }
+
+void merge_rectangles(rect_array_t *arr) {
+    bool merged_any;
+
+    do {
+        merged_any = false;
+
+        // Try horizontal merging
+        for (int i = 0; i < arr->count && !merged_any; i++) {
+            for (int j = i + 1; j < arr->count; j++) {
+                window_rect_t *a = &arr->rects[i];
+                window_rect_t *b = &arr->rects[j];
+
+                // Can merge horizontally?
+                if (a->y == b->y && a->h == b->h) {
+                    if (a->x + a->w == b->x) {
+                        a->w += b->w;
+                        memmove(&arr->rects[j], &arr->rects[j + 1], (arr->count - j - 1) * sizeof(window_rect_t));
+                        arr->count--;
+                        merged_any = true;
+                        break;
+                    } else if (b->x + b->w == a->x) {
+                        b->w += a->w;
+                        b->x  = b->x;
+                        memmove(&arr->rects[i], &arr->rects[i + 1], (arr->count - i - 1) * sizeof(window_rect_t));
+                        arr->count--;
+                        merged_any = true;
+                        break;
+                    }
+                }
+            }
+        }
+
+        // Try vertical merging
+        if (!merged_any) {
+            for (int i = 0; i < arr->count && !merged_any; i++) {
+                for (int j = i + 1; j < arr->count; j++) {
+                    window_rect_t *a = &arr->rects[i];
+                    window_rect_t *b = &arr->rects[j];
+
+                    // Can merge vertically?
+                    if (a->x == b->x && a->w == b->w) {
+                        if (a->y + a->h == b->y) {
+                            a->h += b->h;
+                            memmove(&arr->rects[j], &arr->rects[j + 1], (arr->count - j - 1) * sizeof(window_rect_t));
+                            arr->count--;
+                            merged_any = true;
+                            break;
+                        } else if (b->y + b->h == a->y) {
+                            b->h += a->h;
+                            memmove(&arr->rects[i], &arr->rects[i + 1], (arr->count - i - 1) * sizeof(window_rect_t));
+                            arr->count--;
+                            merged_any = true;
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+    } while (merged_any);
+}
+
+small_rect_array_t rect_subtract(window_rect_t a, window_rect_t b) {
+    small_rect_array_t result = {0};
+
+    // No overlap
+    if (!rect_intersects(a, b)) {
+        result.rects[0] = a;
+        result.count    = 1;
+        return result;
+    }
+
+    window_rect_t overlap = rect_intersection(a, b);
+
+    // Completely covered
+    if (overlap.x == a.x && overlap.y == a.y && overlap.w == a.w && overlap.h == a.h) {
+        return result;
+    }
+
+    // The "degenerate" case is one window in the middle of another
+    // this creates a "border" from this window, with a maximum of 4
+    // pieces.
+
+    // Left
+    if (overlap.x > a.x) {
+        result.rects[result.count++] = (window_rect_t){.x = a.x, .y = a.y, .w = overlap.x - a.x, .h = a.h};
+    }
+
+    // Right
+    if (overlap.x + overlap.w < a.x + a.w) {
+        result.rects[result.count++] =
+            (window_rect_t){.x = overlap.x + overlap.w, .y = a.y, .w = (a.x + a.w) - (overlap.x + overlap.w), .h = a.h};
+    }
+
+    // Top
+    if (overlap.y > a.y) {
+        result.rects[result.count++] = (window_rect_t){.x = overlap.x, .y = a.y, .w = overlap.w, .h = overlap.y - a.y};
+    }
+
+    // Bottom
+    if (overlap.y + overlap.h < a.y + a.h) {
+        result.rects[result.count++] = (window_rect_t){.x = overlap.x,
+                                                       .y = overlap.y + overlap.h,
+                                                       .w = overlap.w,
+                                                       .h = (a.y + a.h) - (overlap.y + overlap.h)};
+    }
+
+    return result;
+}

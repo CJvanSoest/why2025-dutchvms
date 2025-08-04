@@ -27,6 +27,18 @@
 #define TOP_BAR_PX  50
 #define SIDE_BAR_PX 0
 
+#define MAX_VISIBLE_RECTS 64
+
+typedef struct {
+    window_rect_t rects[MAX_VISIBLE_RECTS];
+    int           count;
+} rect_array_t;
+
+typedef struct {
+    window_rect_t rects[4];
+    int           count;
+} small_rect_array_t;
+
 typedef struct managed_framebuffer {
     framebuffer_t       framebuffer;
     int                 w;
@@ -36,7 +48,6 @@ typedef struct managed_framebuffer {
     size_t              num_pages;
     atomic_flag         clean;
     atomic_bool         active;
-    SemaphoreHandle_t   ready;
 } managed_framebuffer_t;
 
 typedef struct window {
@@ -47,6 +58,9 @@ typedef struct window {
     char                  *title;
 
     window_rect_t rect;
+    // Store the previous rect if we go fullscreen/maximized
+    window_rect_t rect_orig;
+    rect_array_t  visible;
     task_info_t  *task_info;
     QueueHandle_t event_queue;
 

@@ -23,5 +23,11 @@
 
 #define FRAMEBUFFER_BYTES (FRAMEBUFFER_MAX_W * FRAMEBUFFER_MAX_W * FRAMEBUFFER_BPP)
 
+// Maximum numer of framebuffers associated with a window
 #define WINDOW_MAX_FRAMEBUFFER 2
-#define WINDOW_MAX_EVENTS      10
+
+// Maximum number of pending events for a window
+#define WINDOW_MAX_EVENTS 10
+
+// Maximum windows allowed on the screen
+#define MAX_WINDOWS 10
