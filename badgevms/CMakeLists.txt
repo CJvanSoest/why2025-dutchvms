@@ -27,10 +27,10 @@ idf_component_register(
     INCLUDE_DIRS
      ${CMAKE_CURRENT_SOURCE_DIR}/
      ${CMAKE_CURRENT_SOURCE_DIR}/include
-     ${CMAKE_CURRENT_SOURCE_DIR}/thirdparty
     PRIV_REQUIRES
      "app_update"
      "elf_loader"
+     "esp-tls"
      "esp_driver_ppa"
      "esp_http_client"
      "esp_hw_support"

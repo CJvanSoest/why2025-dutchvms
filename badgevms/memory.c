@@ -16,7 +16,7 @@
 
 #include "memory.h"
 
-#include "dlmalloc.h"
+#include "thirdparty/dlmalloc.h"
 #include "esp_cache.h"
 #include "esp_log.h"
 #include "esp_mmu_map.h"

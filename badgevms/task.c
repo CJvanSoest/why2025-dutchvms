@@ -22,6 +22,7 @@
 #include "compositor/compositor_private.h"
 #include "curl/curl.h"
 #include "esp_elf.h"
+#include "esp_tls.h"
 #include "esp_log.h"
 #include "hal/cache_hal.h"
 #include "hal/cache_ll.h"
@@ -30,7 +31,7 @@
 #include "hal/mmu_ll.h"
 #include "hal/mmu_types.h"
 #include "hash_helper.h"
-#include "khash.h"
+#include "thirdparty/khash.h"
 #include "memory.h"
 #include "why_io.h"
 
@@ -257,6 +258,7 @@ static void task_thread_destroy(task_thread_t *thread) {
                         }
                         break;
                     case RES_OTA: ota_session_abort(ptr); break;
+                    case RES_ESP_TLS: esp_tls_conn_destroy(ptr); break;
                     default: ESP_LOGE(TAG, "Unknown resource type %i in thread_delete", type);
                 }
             }

@@ -16,15 +16,11 @@ endif()
 
 idf_component_register(SRCS "${srcs}"
                     INCLUDE_DIRS ${CMAKE_CURRENT_SOURCE_DIR} esp-tls-crypto
-                    PRIV_INCLUDE_DIRS "private_include" "../../badgevms"
+                    PRIV_INCLUDE_DIRS "private_include" "../../" "../../badgevms/include"
                     # mbedtls is public requirements because esp_tls.h
                     # includes mbedtls header files.
                     REQUIRES mbedtls
                     PRIV_REQUIRES ${priv_req})
-
-target_compile_options(${COMPONENT_LIB} PRIVATE
-    -include why_io_port.h
-)
 
 if(CONFIG_ESP_TLS_USING_WOLFSSL)
     idf_component_get_property(wolfssl esp-wolfssl COMPONENT_LIB)

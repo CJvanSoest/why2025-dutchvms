@@ -21,6 +21,8 @@
 #include <fcntl.h>
 #include <errno.h>
 
+#include "badgevms/task.h"
+
 #if CONFIG_IDF_TARGET_LINUX && !ESP_TLS_WITH_LWIP
 #include <arpa/inet.h>
 #include <netinet/in.h>
@@ -165,6 +167,7 @@ int esp_tls_conn_destroy(esp_tls_t *tls)
             free(tls->client_session);
         }
 #endif // CONFIG_MBEDTLS_SSL_PROTO_TLS1_3 && CONFIG_ESP_TLS_CLIENT_SESSION_TICKETS
+        task_record_resource_free(RES_ESP_TLS, tls);
         free(tls);
         tls = NULL;
         return ret;
@@ -189,6 +192,7 @@ esp_tls_t *esp_tls_init(void)
     tls->client_session = NULL;
     tls->client_session_len = 0;
 #endif // CONFIG_MBEDTLS_SSL_PROTO_TLS1_3 && CONFIG_ESP_TLS_CLIENT_SESSION_TICKETS
+    task_record_resource_alloc(RES_ESP_TLS, tls);
     return tls;
 }
 

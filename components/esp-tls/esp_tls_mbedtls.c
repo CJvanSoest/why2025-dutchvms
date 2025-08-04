@@ -21,6 +21,8 @@
 #include "esp_log.h"
 #include "esp_check.h"
 
+#include "badgevms/task.h"
+
 #ifdef CONFIG_MBEDTLS_HARDWARE_ECDSA_SIGN
 #include "ecdsa/ecdsa_alt.h"
 #endif
@@ -1101,6 +1103,7 @@ void esp_mbedtls_server_session_delete(esp_tls_t *tls)
     if (tls != NULL) {
         esp_mbedtls_cleanup(tls);
         esp_tls_internal_event_tracker_destroy(tls->error_handle);
+        task_record_resource_free(RES_ESP_TLS, tls);
         free(tls);
     }
 };

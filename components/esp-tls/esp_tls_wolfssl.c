@@ -19,6 +19,8 @@
 #include <errno.h>
 #include "esp_log.h"
 
+#include "badgevms/task.h"
+
 static unsigned char *global_cacert = NULL;
 static unsigned int global_cacert_pem_bytes = 0;
 static const char *TAG = "esp-tls-wolfssl";
@@ -547,6 +549,7 @@ void esp_wolfssl_server_session_delete(esp_tls_t *tls)
     if (tls != NULL) {
         esp_wolfssl_cleanup(tls);
         esp_tls_internal_event_tracker_destroy(tls->error_handle);
+        task_record_resource_free(RES_ESP_TLS, tls);
         free(tls);
     }
 }

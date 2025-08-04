@@ -16,8 +16,6 @@
 
 #pragma once
 
-#include "khash.h"
-
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdlib.h>

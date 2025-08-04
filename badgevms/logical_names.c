@@ -27,7 +27,7 @@
 #include "logical_names.h"
 
 #include "hash_helper.h"
-#include "khash.h"
+#include "thirdparty/khash.h"
 
 #include <stdio.h>
 

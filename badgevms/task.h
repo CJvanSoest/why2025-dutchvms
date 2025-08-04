@@ -17,10 +17,10 @@
 #pragma once
 
 #include "badgevms/device.h"
-#include "dlmalloc.h"
+#include "thirdparty/dlmalloc.h"
+#include "thirdparty/khash.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
-#include "khash.h"
 #include "memory.h"
 
 #include <stdatomic.h>
@@ -47,6 +47,7 @@ typedef enum {
     RES_OTA,
     RES_WINDOW,
     RES_DEVICE,
+    RES_ESP_TLS,
     RES_RESOURCE_TYPE_MAX
 } task_resource_type_t;
 

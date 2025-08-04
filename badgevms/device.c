@@ -19,7 +19,7 @@
 #include "esp_log.h"
 #include "freertos/FreeRTOS.h"
 #include "hash_helper.h"
-#include "khash.h"
+#include "thirdparty/khash.h"
 
 KHASH_MAP_INIT_STR(devtable, void *);
 

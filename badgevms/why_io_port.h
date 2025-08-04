@@ -20,6 +20,11 @@
 #include "esp_log.h"
 #include "why_io.h"
 
+#undef malloc
+#undef calloc
+#undef realloc
+#undef free
+
 #define malloc  dlmalloc
 #define calloc  dlcalloc
 #define realloc dlrealloc

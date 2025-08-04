@@ -14,7 +14,7 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include "dlmalloc.h"
+#include "thirdparty/dlmalloc.h"
 #include "esp_attr.h"
 #include "esp_event.h"
 #include "esp_log.h"

@@ -15,7 +15,7 @@
  */
 
 #include "badgevms/pathfuncs.h"
-#include "dlmalloc.h"
+#include "thirdparty/dlmalloc.h"
 #include "esp_flash.h"
 #include "esp_log.h"
 #include "logical_names.h"

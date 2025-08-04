@@ -17,7 +17,7 @@
 #pragma once
 
 #include "buddy_alloc.h"
-#include "dlmalloc.h"
+#include "thirdparty/dlmalloc.h"
 #include "esp_log.h"
 #include "soc/soc.h"
 
