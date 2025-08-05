@@ -49,7 +49,7 @@ bool BADGEVMS_CreateWindow(SDL_VideoDevice *_this, SDL_Window *window, SDL_Prope
     }
 
     window_size_t size = { window->w, window->h };
-    data->badgevms_window = window_create(window->title, size, WINDOW_FLAG_NONE);
+    data->badgevms_window = window_create(window->title, size, WINDOW_FLAG_DOUBLE_BUFFERED);
     if (!data->badgevms_window) {
         SDL_free(data);
         return SDL_SetError("Could not create BadgeVMS window");

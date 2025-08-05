@@ -16,6 +16,8 @@
 
 #pragma once
 
+#define BADGEVMS_BYTESPERPIXEL(format) ((format) & 0xFF)
+
 // From SDL3
 typedef enum {
     BADGEVMS_PIXELFORMAT_UNKNOWN       = 0,

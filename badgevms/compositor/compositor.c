@@ -23,6 +23,7 @@
 #include "compositor_private.h"
 #include "driver/ppa.h"
 #include "esp_cache.h"
+#include "esp_ipc.h"
 #include "esp_log.h"
 #include "esp_private/esp_cache_private.h"
 #include "font.h"
@@ -37,6 +38,13 @@
 #include <sys/time.h>
 
 #define TAG "compositor"
+
+#define SWAP(x, y)                                                                                                     \
+    do {                                                                                                               \
+        typeof(x) SWAP = x;                                                                                            \
+        x              = y;                                                                                            \
+        y              = SWAP;                                                                                         \
+    } while (0)
 
 static TaskHandle_t  compositor_handle;
 static lcd_device_t *lcd_device;
@@ -54,14 +62,15 @@ static int  background_damaged    = 7;
 static int  decoration_damaged    = 7;
 static bool visible_regions_valid = false;
 
-typedef enum { WINDOW_CREATE, WINDOW_DESTROY, WINDOW_FLAGS } compositor_command_t;
+typedef enum { WINDOW_CREATE, WINDOW_DESTROY, WINDOW_FLAGS, FRAMEBUFFER_SWAP } compositor_command_t;
 
 typedef struct {
-    compositor_command_t command;
-    window_t            *window;
-    window_flag_t        flags;
-    int                  fb_num;
-    TaskHandle_t         caller;
+    compositor_command_t   command;
+    window_t              *window;
+    window_flag_t          flags;
+    managed_framebuffer_t *fb_a;
+    managed_framebuffer_t *fb_b;
+    TaskHandle_t           caller;
 } compositor_message_t;
 
 rotation_angle_t rotation = ROTATION_ANGLE_270;
@@ -286,9 +295,69 @@ window_rect_t content_to_framebuffer_rect(window_rect_t content_rect, window_t *
     return fb_rect;
 }
 
-framebuffer_t *framebuffer_allocate(uint32_t w, uint32_t h, pixel_format_t format) {
-    short framebuffer_bpp = 2;
+static void reassign_vaddr(uintptr_t new_vaddr_start, size_t num_pages, allocation_range_t *head) {
+    // we go backwards because we start from the highest address
+    // and don't forget our guard page
+    uintptr_t cur_vaddr_offset = new_vaddr_start + ((num_pages - 1) * SOC_MMU_PAGE_SIZE);
 
+    allocation_range_t *r = head;
+    while (r) {
+        cur_vaddr_offset -= r->size;
+        // ESP_LOGW(TAG, "Swapping vaddr %08lx with %08lx", r->vaddr_start, cur_vaddr_offset);
+        r->vaddr_start    = cur_vaddr_offset;
+        r                 = r->next;
+    }
+}
+
+static void framebuffer_swap(managed_framebuffer_t *fb_a, managed_framebuffer_t *fb_b) {
+    if (!fb_a || !fb_b || !fb_a->framebuffer.pixels || !fb_b->framebuffer.pixels) {
+        return;
+    }
+
+    // ESP_LOGV(TAG, "Attempting to swap framebuffers %p and %p", fb_a, fb_b);
+
+    esp_cache_msync(
+        fb_a->framebuffer.pixels,
+        fb_a->num_pages * SOC_MMU_PAGE_SIZE,
+        ESP_CACHE_MSYNC_FLAG_DIR_C2M | ESP_CACHE_MSYNC_FLAG_INVALIDATE
+    );
+    esp_cache_msync(
+        fb_b->framebuffer.pixels,
+        fb_b->num_pages * SOC_MMU_PAGE_SIZE,
+        ESP_CACHE_MSYNC_FLAG_DIR_C2M | ESP_CACHE_MSYNC_FLAG_INVALIDATE
+    );
+
+    framebuffer_unmap_pages(fb_a->head_pages);
+    framebuffer_unmap_pages(fb_b->head_pages);
+
+    uintptr_t fb_a_vaddr = fb_a->tail_pages->vaddr_start;
+    uintptr_t fb_b_vaddr = fb_b->tail_pages->vaddr_start;
+
+    reassign_vaddr(fb_b_vaddr, fb_a->num_pages, fb_a->head_pages);
+    reassign_vaddr(fb_a_vaddr, fb_b->num_pages, fb_b->head_pages);
+
+    // Caches are already invalidated
+    framebuffer_map_pages(fb_a->head_pages, fb_a->tail_pages);
+    framebuffer_map_pages(fb_b->head_pages, fb_b->tail_pages);
+}
+
+// We need to ensure that we don't interfere with task switching
+static void framebuffer_swap_on_other_core(void *arg) {
+    compositor_message_t *message = (compositor_message_t *)arg;
+    framebuffer_swap(message->fb_a, message->fb_b);
+    if (message->caller) {
+        if (eTaskGetState(message->caller) != eDeleted) {
+            xTaskNotifyGiveIndexed(message->caller, 0);
+        }
+    }
+    free(message);
+}
+
+framebuffer_t *framebuffer_allocate(uint32_t w, uint32_t h, pixel_format_t format) {
+    // Don't use BADGEVMS_BYTESPERPIXEL here because we also want to
+    // clamp the pixel formats we want to support here anyway
+
+    short framebuffer_bpp = 2;
     switch (format) {
         case BADGEVMS_PIXELFORMAT_BGRA8888: // fallthrough
         case BADGEVMS_PIXELFORMAT_RGBA8888: // fallthrough
@@ -316,7 +385,7 @@ framebuffer_t *framebuffer_allocate(uint32_t w, uint32_t h, pixel_format_t forma
     }
 
     allocation_range_t *tail_range = NULL;
-    if (!pages_allocate(vaddr_start, num_pages - 1, &framebuffer->pages, &tail_range)) {
+    if (!pages_allocate(vaddr_start, num_pages - 1, &framebuffer->head_pages, &framebuffer->tail_pages)) {
         ESP_LOGE(TAG, "No physical memory pages for frame buffer");
         framebuffer_vaddr_deallocate(vaddr_start);
         free(framebuffer);
@@ -326,12 +395,12 @@ framebuffer_t *framebuffer_allocate(uint32_t w, uint32_t h, pixel_format_t forma
     ESP_LOGI(
         TAG,
         "Attempting to map our vaddr %p head_range %p tail_range %p",
-        (void *)framebuffer->pages->vaddr_start,
-        framebuffer->pages,
+        (void *)framebuffer->head_pages->vaddr_start,
+        framebuffer->head_pages,
         tail_range
     );
 
-    framebuffer_map_pages(framebuffer->pages, tail_range);
+    framebuffer_map_pages(framebuffer->head_pages, framebuffer->tail_pages);
     framebuffer->framebuffer.pixels = (uint16_t *)vaddr_start;
 
     framebuffer->framebuffer.w      = w;
@@ -342,7 +411,6 @@ framebuffer_t *framebuffer_allocate(uint32_t w, uint32_t h, pixel_format_t forma
     framebuffer->h                  = h;
     framebuffer->format             = format;
     framebuffer->num_pages          = num_pages;
-    framebuffer->fb_dirty           = 7;
     atomic_flag_test_and_set(&framebuffer->clean);
 
     memset(framebuffer->framebuffer.pixels, 0, (w * h * framebuffer_bpp));
@@ -362,8 +430,8 @@ framebuffer_t *framebuffer_allocate(uint32_t w, uint32_t h, pixel_format_t forma
 
 void framebuffer_free(managed_framebuffer_t *framebuffer) {
     if (framebuffer) {
-        framebuffer_unmap_pages(framebuffer->pages);
-        pages_deallocate(framebuffer->pages);
+        framebuffer_unmap_pages(framebuffer->head_pages);
+        pages_deallocate(framebuffer->head_pages);
         framebuffer_vaddr_deallocate((uintptr_t)framebuffer->framebuffer.pixels);
 
         free(framebuffer);
@@ -410,9 +478,13 @@ static void IRAM_ATTR NOINLINE_ATTR compositor(void *ignored) {
         compositor_message_t message;
 
         while (xQueueReceive(compositor_queue, &message, 0) == pdTRUE) {
+            bool skip_call = false;
             ++processed;
             switch (message.command) {
-                case WINDOW_CREATE: push_window(message.window); break;
+                case WINDOW_CREATE:
+                    push_window(message.window);
+                    mark_scene_damaged();
+                    break;
                 case WINDOW_DESTROY:
                     remove_window(message.window);
                     vQueueDelete(message.window->event_queue);
@@ -424,6 +496,7 @@ static void IRAM_ATTR NOINLINE_ATTR compositor(void *ignored) {
 
                     free(message.window->title);
                     free(message.window);
+                    mark_scene_damaged();
                     break;
                 case WINDOW_FLAGS:
                     // Preserve the double buffered flag
@@ -447,13 +520,22 @@ static void IRAM_ATTR NOINLINE_ATTR compositor(void *ignored) {
                         }
                     }
                     message.window->flags = message.flags;
+                    mark_scene_damaged();
+                    break;
+                case FRAMEBUFFER_SWAP:
+                    // compositor_message_t *m = malloc(sizeof(compositor_message_t));
+                    // Freed by IPC thread
+                    // memcpy(m, &message, sizeof(compositor_message_t));
+                    framebuffer_swap(message.fb_a, message.fb_b);
+                    // esp_ipc_call(1, &framebuffer_swap_on_other_core, m);
+                    //  The other core will answer
+                    //  skip_call = true;
                     break;
                 default: ESP_LOGE(TAG, "Unknown command %u", message.command);
             }
 
-            mark_scene_damaged();
 
-            if (message.caller) {
+            if (message.caller && !skip_call) {
                 if (eTaskGetState(message.caller) != eDeleted) {
                     xTaskNotifyGiveIndexed(message.caller, 0);
                 }
@@ -599,12 +681,12 @@ static void IRAM_ATTR NOINLINE_ATTR compositor(void *ignored) {
                 bool need_content_draw    = false;
 
                 if (is_clean) {
-                    if (framebuffer->fb_dirty & (1 << cur_fb)) {
+                    if (window->fb_dirty & (1 << cur_fb)) {
                         need_content_draw = true;
                     }
                 } else {
-                    framebuffer->fb_dirty = 7;
-                    need_content_draw     = true;
+                    window->fb_dirty  = 7;
+                    need_content_draw = true;
                 }
 
                 if (framebuffer_cleared || window == window_stack) {
@@ -668,8 +750,8 @@ static void IRAM_ATTR NOINLINE_ATTR compositor(void *ignored) {
                         if (ppa_result != ESP_OK) {
                             printf("PPA operation failed: %s\n", esp_err_to_name(ppa_result));
                         } else {
-                            changes                = true;
-                            framebuffer->fb_dirty &= ~(1 << cur_fb);
+                            changes           = true;
+                            window->fb_dirty &= ~(1 << cur_fb);
                         }
                     }
 
@@ -743,23 +825,27 @@ framebuffer_t *window_framebuffer_create(window_t *window, window_size_t size, p
     if (window->framebuffers[0] || window->framebuffers[1]) {
         return NULL;
     }
+    window->front_fb = 0;
+    window->back_fb  = 0;
 
     window->framebuffers[0] = window_framebuffer_allocate(window, size, pixel_format);
     if (!window->framebuffers[0]) {
-        ESP_LOGW(TAG, "Unable to allocate framebuffer 0 for window %p", window);
+        ESP_LOGW(TAG, "Unable to allocate framebuffer 0 for window %p, task %u", window, window->task_info->pid);
         return NULL;
     }
 
-    window->framebuffers[1] = window_framebuffer_allocate(window, size, pixel_format);
-    if (!window->framebuffers[1]) {
-        ESP_LOGW(TAG, "Unable to allocate framebuffer 1 for window %p", window);
-        framebuffer_free(window->framebuffers[0]);
-        window->framebuffers[0] = NULL;
-        return NULL;
+    if (window->flags & WINDOW_FLAG_DOUBLE_BUFFERED) {
+        window->framebuffers[1] = window_framebuffer_allocate(window, size, pixel_format);
+        if (!window->framebuffers[1]) {
+            ESP_LOGW(TAG, "Unable to allocate framebuffer 1 for window %p", window);
+            framebuffer_free(window->framebuffers[0]);
+            window->framebuffers[0] = NULL;
+            return NULL;
+        }
+        window->back_fb = 1;
     }
 
-    window->front_fb = 0;
-    window->back_fb  = 1;
+    window->fb_dirty = 7;
 
     return (framebuffer_t *)window->framebuffers[window->back_fb];
 }
@@ -800,6 +886,7 @@ window_t *window_create(char const *title, window_size_t size, window_flag_t fla
     window->rect.h    = size.h;
 
     task_record_resource_alloc(RES_WINDOW, window);
+
     compositor_message_t message = {
         .command = WINDOW_CREATE,
         .window  = window,
@@ -940,27 +1027,72 @@ pixel_format_t window_framebuffer_format_get(window_handle_t window) {
     return window->framebuffers[0]->format;
 }
 
-framebuffer_t *window_present(window_t *window, bool block, window_rect_t *rects, int num_rects) {
+#if 0
+static inline void copy_framebuffer_rect(managed_framebuffer_t *dst, managed_framebuffer_t *src, window_rect_t rect) {
+    if (rect.x == 0 && rect.y == 0 && rect.w == dst->w && rect.h == dst->h) {
+        // Full rect damage
+        memcpy(dst->framebuffer.pixels, src->framebuffer.pixels, dst->num_pages * SOC_MMU_PAGE_SIZE);
+        return;
+    }
+
+    int max_x = MIN(dst->w, src->w);
+    int max_y = MIN(dst->h, src->h);
+
+    rect.x = MAX(0, MIN(rect.x, max_x));
+    rect.y = MAX(0, MIN(rect.y, max_y));
+    rect.w = MIN(rect.w, max_x - rect.x);
+    rect.h = MIN(rect.h, max_y - rect.y);
+
+    if (rect.w <= 0 || rect.h <= 0) {
+        return;
+    }
+
+    int      bytes_per_pixel = BADGEVMS_BYTESPERPIXEL(dst->format);
+    uint8_t *dst_pixels      = (uint8_t *)dst->framebuffer.pixels;
+    uint8_t *src_pixels      = (uint8_t *)src->framebuffer.pixels;
+
+    int dst_stride = dst->w * bytes_per_pixel;
+    int src_stride = src->w * bytes_per_pixel;
+    int copy_width = rect.w * bytes_per_pixel;
+
+    for (int y = 0; y < rect.h; y++) {
+        uint8_t *dst_row = dst_pixels + ((rect.y + y) * dst_stride) + (rect.x * bytes_per_pixel);
+        uint8_t *src_row = src_pixels + ((rect.y + y) * src_stride) + (rect.x * bytes_per_pixel);
+        memcpy(dst_row, src_row, copy_width);
+    }
+}
+#endif
+
+void window_present(window_t *window, bool block, window_rect_t *rects, int num_rects) {
     if (!window || !window->framebuffers[0]) {
-        return NULL;
+        return;
     }
 
     managed_framebuffer_t *front_buffer = NULL;
     managed_framebuffer_t *back_buffer  = NULL;
 
     if (window->flags & WINDOW_FLAG_DOUBLE_BUFFERED && window->framebuffers[1]) {
-        int old_front    = window->front_fb;
-        window->front_fb = window->back_fb;
-        window->back_fb  = old_front;
-        front_buffer     = window->framebuffers[window->front_fb];
-    } else {
         front_buffer = window->framebuffers[window->front_fb];
         back_buffer  = window->framebuffers[window->back_fb];
-        memcpy(
-            front_buffer->framebuffer.pixels,
-            back_buffer->framebuffer.pixels,
-            window->framebuffers[0]->num_pages * SOC_MMU_PAGE_SIZE
-        );
+
+        if (!front_buffer || !back_buffer) {
+            abort();
+        }
+
+        compositor_message_t message = {
+            .command = FRAMEBUFFER_SWAP,
+            .fb_a    = front_buffer,
+            .fb_b    = back_buffer,
+            .caller  = xTaskGetCurrentTaskHandle(),
+        };
+
+        xQueueSend(compositor_queue, &message, portMAX_DELAY);
+        ulTaskNotifyTakeIndexed(0, pdTRUE, portMAX_DELAY);
+
+        // We've waited long enough
+        block = false;
+    } else {
+        front_buffer = window->framebuffers[window->front_fb];
     }
 
     atomic_flag_clear(&front_buffer->clean);
@@ -968,8 +1100,6 @@ framebuffer_t *window_present(window_t *window, bool block, window_rect_t *rects
     if (block) {
         ulTaskNotifyTakeIndexed(1, pdTRUE, portMAX_DELAY);
     }
-
-    return (framebuffer_t *)window->framebuffers[window->back_fb];
 }
 
 event_t window_event_poll(window_t *window, bool block, uint32_t timeout_msec) {

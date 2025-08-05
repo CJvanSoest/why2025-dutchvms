@@ -116,7 +116,7 @@ int main(int argc, char *argv[]) {
         struct timespec post_start_time;
         clock_gettime(CLOCK_MONOTONIC, &post_start_time);
 
-        framebuffer = window_present(window, true, NULL, 0);
+        window_present(window, true, NULL, 0);
 
         // Calculate how long the frame took
         clock_gettime(CLOCK_MONOTONIC, &end_time);

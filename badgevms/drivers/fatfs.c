@@ -90,7 +90,7 @@ static ssize_t fatfs_lseek(void *dev, int fd, off_t offset, int whence) {
 
 device_t *fatfs_create_spi(char const *devname, char const *partname, bool rw) {
     esp_vfs_fat_mount_config_t const mount_config = {
-        .max_files              = 4,
+        .max_files              = 256,
         .format_if_mount_failed = false,
         .allocation_unit_size   = CONFIG_WL_SECTOR_SIZE,
         .use_one_fat            = false,
@@ -125,7 +125,7 @@ error:
 
 device_t *fatfs_create_sd(char const *devname, bool rw) {
     esp_vfs_fat_mount_config_t const mount_config = {
-        .max_files              = 4,
+        .max_files              = 256,
         .format_if_mount_failed = false,
         .allocation_unit_size   = CONFIG_WL_SECTOR_SIZE,
         .use_one_fat            = false,

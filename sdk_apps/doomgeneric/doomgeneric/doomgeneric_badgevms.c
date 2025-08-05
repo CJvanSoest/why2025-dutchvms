@@ -159,8 +159,7 @@ void DG_Init()
 
 void DG_DrawFrame()
 {
-    framebuffer = window_present(window, false, NULL, 0);
-    DG_ScreenBuffer = (void*)framebuffer->pixels;
+    window_present(window, false, NULL, 0);
     handleKeyInput();
 }
 

@@ -166,9 +166,11 @@ __attribute__((always_inline)) static inline void
         uint32_t entry = mmu_ll_read_entry(mmu_id, entry_id);
         if (entry) {
             esp_rom_printf(
-                "Entry %u was already mapped, currently mapped page 0x%08x\n",
+                "Entry %u (0x%08lX) was already mapped, currently mapped page 0x%08x, wanted 0x%08x\n",
                 entry_id,
-                (entry & ~0xC00) << 16
+                vaddr,
+                (entry & ~0xC00) << 16,
+                paddr
             );
             esp_system_abort("Unexpected mmu state");
         }
@@ -201,7 +203,7 @@ __attribute__((always_inline)) static inline void
         entry_id       = mmu_ll_get_entry_id(mmu_id, vaddr);
         uint32_t entry = mmu_ll_read_entry(mmu_id, entry_id);
         if (!entry) {
-            esp_rom_printf("Entry %u was not mapped\n", entry_id);
+            esp_rom_printf("Entry %u (0x%08lx) was not mapped\n", entry_id, vaddr);
             esp_system_abort("Unexpected mmu state");
         }
         mmu_ll_set_entry_invalid(mmu_id, entry_id);
@@ -248,6 +250,7 @@ IRAM_ATTR void remap_task(task_info_t *task_info) {
 
     uint32_t mmu_id = mmu_hal_get_id_from_target(MMU_TARGET_PSRAM0);
 
+    critical_enter();
     allocation_range_t *r = task_info->thread->pages;
     while (r) {
         why_mmu_hal_map_region(mmu_id, MMU_TARGET_PSRAM0, r->vaddr_start, r->paddr_start, r->size);
@@ -257,6 +260,7 @@ IRAM_ATTR void remap_task(task_info_t *task_info) {
     // Invalidate all caches at once
     invalidate_caches(task_info->thread->start, task_info->thread->size);
     current_mapped_task = task_info->pid;
+    critical_exit();
 }
 
 void IRAM_ATTR unmap_task(task_info_t *task_info) {
@@ -279,13 +283,14 @@ void IRAM_ATTR unmap_task(task_info_t *task_info) {
 
     uint32_t mmu_id = why_mmu_hal_get_id_from_target(MMU_TARGET_PSRAM0);
 
+    critical_enter();
     writeback_caches(task_info->thread->start, task_info->thread->size);
 
     while (r) {
         why_mmu_hal_unmap_region(mmu_id, r->vaddr_start, r->size);
         r = r->next;
     }
-
+    critical_exit();
 out:
     current_mapped_task = 0;
 }

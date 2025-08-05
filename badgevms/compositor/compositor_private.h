@@ -44,10 +44,10 @@ typedef struct managed_framebuffer {
     int                 w;
     int                 h;
     pixel_format_t      format;
-    allocation_range_t *pages;
+    allocation_range_t *head_pages;
+    allocation_range_t *tail_pages;
     size_t              num_pages;
     atomic_flag         clean;
-    int                 fb_dirty;
 } managed_framebuffer_t;
 
 typedef struct window {
@@ -56,6 +56,7 @@ typedef struct window {
     uint8_t                back_fb;
     window_flag_t          flags;
     char                  *title;
+    int                    fb_dirty;
 
     window_rect_t rect;
     // Store the previous rect if we go fullscreen/maximized

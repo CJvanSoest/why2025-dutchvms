@@ -87,7 +87,7 @@ void ping_badgehub_test(app_state_t *app) {
 
 void run_tests(app_state_t *app, int fb_num) {
     device_id_test(app);
-    app->fb = window_present(app->window, true, NULL, 0);
+    window_present(app->window, true, NULL, 0);
     ping_badgehub_test(app);
-    app->fb = window_present(app->window, true, NULL, 0);
+    window_present(app->window, true, NULL, 0);
 }

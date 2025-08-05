@@ -165,7 +165,7 @@ int main() {
     memset(app.fb->pixels, 0x55, 720 * 720 * 2);
 
     render_ui(&app);
-    app.fb = window_present(app.window, true, NULL, 0);
+    window_present(app.window, true, NULL, 0);
 
     run_tests(&app, fb_num);
 
@@ -201,7 +201,7 @@ int main() {
         frame_counter++;
         check_stuck_keys(&app, frame_counter * 16000000ULL);
 
-        app.fb = window_present(app.window, true, NULL, 0);
+        window_present(app.window, true, NULL, 0);
     }
 
     window_destroy(app.window);

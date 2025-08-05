@@ -72,7 +72,7 @@ window_size_t window_framebuffer_size_set(window_handle_t window, window_size_t 
 pixel_format_t window_framebuffer_format_get(window_handle_t window);
 
 framebuffer_t *window_framebuffer_get(window_handle_t window);
-framebuffer_t *window_present(window_handle_t window, bool block, window_rect_t *rects, int num_rects);
+void window_present(window_handle_t window, bool block, window_rect_t *rects, int num_rects);
 
 event_t window_event_poll(window_handle_t window, bool block, uint32_t timeout_msec);
 

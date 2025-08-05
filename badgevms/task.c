@@ -331,7 +331,6 @@ void IRAM_ATTR cerberos() {
 }
 
 void IRAM_ATTR __wrap_xt_unhandled_exception(void *frame) {
-#if 0
     task_info_t *task_info = get_task_info();
     if (task_info && task_info->pid) {
         esp_rom_printf("Task %u caused an unhandled exception, Cerberos will deal with it\n", task_info->pid);
@@ -341,7 +340,6 @@ void IRAM_ATTR __wrap_xt_unhandled_exception(void *frame) {
                          : "r"(cerberos)
                          : "t0", "memory");
     }
-#endif
     __real_xt_unhandled_exception(frame);
 }
 
