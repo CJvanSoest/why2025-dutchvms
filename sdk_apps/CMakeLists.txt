@@ -176,12 +176,12 @@ build_app(process_test
      process_test/main.c
 )
 
-build_app(style_test
-    SOURCES
-     style_test/main.c
-     style_test/thirdparty/microui.c
-     style_test/test_drawing_helper.c
-)
+#build_app(style_test
+#    SOURCES
+#     style_test/main.c
+#     style_test/thirdparty/microui.c
+#     style_test/test_drawing_helper.c
+#)
 
 build_app(doom
     SOURCES
