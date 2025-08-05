@@ -302,7 +302,7 @@ static int _why_open(char const *pathname, int flags, mode_t mode, device_t **de
     }
 
     *device = device_get(parsed_path.device);
-    if (!device) {
+    if (!*device) {
         goto out;
     }
 
