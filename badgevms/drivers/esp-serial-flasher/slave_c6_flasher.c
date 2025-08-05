@@ -11,6 +11,7 @@ static const char *TAG = "slave_c6_flasher";
 
 esp_err_t flash_slave_c6_if_needed()
 {
+    esp_err_t ret = ESP_OK;
     why2025_binaries_t bin;
 
     const loader_esp32_config_t config = {
@@ -21,12 +22,6 @@ esp_err_t flash_slave_c6_if_needed()
         .reset_trigger_pin = GPIO_NUM_12,
         .gpio0_trigger_pin = GPIO_NUM_13,
     };
-
-    if (!get_why2025_binaries(&bin)) {
-        ESP_LOGW(TAG, "Couldn't open firmware files, skipping");
-        free_why2025_binaries(&bin);
-        return ESP_FAIL;
-    }
 
     if (loader_port_esp32_init(&config) != ESP_LOADER_SUCCESS)
     {
@@ -42,6 +37,11 @@ esp_err_t flash_slave_c6_if_needed()
         {
             ESP_LOGE(TAG, "wrong target, expecting ESP32C6_CHIP");
             return ESP_FAIL;
+        }
+
+        if (!get_why2025_binaries(&bin)) {
+            ESP_LOGW(TAG, "Couldn't open firmware files, skipping");
+            goto out;
         }
 
         if (esp_loader_flash_verify_known_md5(bin.boot.addr, bin.boot.size, bin.boot.md5) != ESP_LOADER_SUCCESS)
@@ -74,6 +74,7 @@ esp_err_t flash_slave_c6_if_needed()
             ESP_LOGI(TAG, "Application MD5 match, skipping...");
         }
 
+out:
         ESP_LOGI(TAG, "Resetting C6!");
         esp_loader_reset_target();
 
