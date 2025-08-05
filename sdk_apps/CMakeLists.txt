@@ -156,6 +156,12 @@ build_app(wifi_test
      wifi_test/wifi_test.c
 )
 
+build_app(socket_test
+    SOURCES
+     socket_test/socket_test.c
+)
+
+
 build_app(curl_test
     SOURCES
      curl_test/curl_test.c
