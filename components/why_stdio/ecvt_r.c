@@ -69,7 +69,7 @@ ecvt_r (double invalue,
             ngot = ndigit;
         ndigit = ngot;
     } else {
-        ngot = __dtoa_engine(invalue, &dtoa, ndigit, false, 0);
+        ngot = __why_dtoa_engine(invalue, &dtoa, ndigit, false, 0);
         *sign = !!(dtoa.flags & DTOA_MINUS);
         *decpt = dtoa.exp + 1;
     }

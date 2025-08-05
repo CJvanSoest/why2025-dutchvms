@@ -55,6 +55,6 @@ __weak_reference(__posix_stderr,why_stderr);
 __attribute__((destructor (101)))
 static void posix_exit(void)
 {
-    fflush(why_stderr);
+    why_fflush(why_stderr);
 }
 #endif

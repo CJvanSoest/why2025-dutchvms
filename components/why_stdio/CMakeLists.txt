@@ -2,11 +2,11 @@ idf_component_register( SRCS
   ctype.c
   asnprintf.c
   asprintf.c
-  #atold_engine.c
+  atold_engine.c
   bufio.c
   clearerr.c
   #compare_exchange.c
-  #dtox_engine.c
+  dtox_engine.c
   #ecvt.c
   #ecvtf.c
   #ecvtf_r.c
@@ -37,7 +37,7 @@ idf_component_register( SRCS
   filestrput.c
   #filewstrget.c
   #flockfile.c
-  #fmemopen.c
+  fmemopen.c
   fopen.c
   fprintf.c
   fputc.c
@@ -45,27 +45,27 @@ idf_component_register( SRCS
   #fputwc.c
   #fputws.c
   fread.c
-  #freopen.c
+  freopen.c
   fscanf.c
   fseek.c
   fseeko.c
   ftell.c
   ftello.c
-  #ftox_engine.c
+  ftox_engine.c
   #ftrylockfile.c
   #funlockfile.c
-  #funopen.c
+  funopen.c
   #fwide.c
   #fwprintf.c
   fwrite.c
   #fwscanf.c
-  #gcvt.c
-  #gcvtf.c
-  #gcvtl.c
-  #getchar.c
-  #getdelim.c
-  #getline.c
-  #gets.c
+  gcvt.c
+  gcvtf.c
+  gcvtl.c
+  getchar.c
+  getdelim.c
+  getline.c
+  gets.c
   #getwchar.c
   dtoa_engine.c
   dtox_engine.c
@@ -120,7 +120,7 @@ idf_component_register( SRCS
   #ungetwc.c
   vasnprintf.c
   vasprintf.c
-  #vffprintf.c
+  vffprintf.c
   #vffscanf.c
   #vfiprintf.c
   #vfiscanf.c
@@ -132,8 +132,8 @@ idf_component_register( SRCS
   vfscanf.c
   #vfwprintf.c
   #vfwscanf.c
-  #vprintf.c
-  #vscanf.c
+  vprintf.c
+  vscanf.c
   vsnprintf.c
   vsprintf.c
   vsscanf.c

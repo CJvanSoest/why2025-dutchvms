@@ -37,7 +37,7 @@
 
 #ifdef __STDIO_BUFIO_LOCKING
 void
-__bufio_lock_init(FILE *f)
+__why_bufio_lock_init(FILE *f)
 {
     struct __file_bufio *bf = (struct __file_bufio *) f;
     __LIBC_LOCK();
@@ -48,7 +48,7 @@ __bufio_lock_init(FILE *f)
 #endif
 
 int
-__bufio_flush_locked(FILE *f)
+__why_bufio_flush_locked(FILE *f)
 {
 	struct __file_bufio *bf = (struct __file_bufio *) f;
         char *buf;
@@ -87,7 +87,7 @@ __bufio_flush_locked(FILE *f)
 }
 
 
-int __bufio_fill_locked(FILE *f)
+int __why_bufio_fill_locked(FILE *f)
 {
 	struct __file_bufio *bf = (struct __file_bufio *) f;
         ssize_t len;
@@ -111,38 +111,38 @@ int __bufio_fill_locked(FILE *f)
 }
 
 int
-__bufio_flush(FILE *f)
+__why_bufio_flush(FILE *f)
 {
         int ret;
 
-	__bufio_lock(f);
-        ret = __bufio_flush_locked(f);
-	__bufio_unlock(f);
+	__why_bufio_lock(f);
+        ret = __why_bufio_flush_locked(f);
+	__why_bufio_unlock(f);
 	return ret;
 }
 
 /* Set I/O direction, flushing when it changes */
 int
-__bufio_setdir_locked(FILE *f, uint8_t dir)
+__why_bufio_setdir_locked(FILE *f, uint8_t dir)
 {
 	struct __file_bufio *bf = (struct __file_bufio *) f;
         int ret = 0;
 
         if (bf->dir != dir) {
-                ret = __bufio_flush_locked(f);
+                ret = __why_bufio_flush_locked(f);
                 bf->dir = dir;
         }
         return ret;
 }
 
 int
-__bufio_put(char c, FILE *f)
+__why_bufio_put(char c, FILE *f)
 {
 	struct __file_bufio *bf = (struct __file_bufio *) f;
         int ret = (unsigned char) c;
 
-	__bufio_lock(f);
-        if (__bufio_setdir_locked(f, __SWR) < 0) {
+	__why_bufio_lock(f);
+        if (__why_bufio_setdir_locked(f, __SWR) < 0) {
                 ret = _FDEV_ERR;
                 goto bail;
         }
@@ -151,11 +151,11 @@ __bufio_put(char c, FILE *f)
 
 	/* flush if full, or if sending newline when linebuffered */
 	if (bf->len >= bf->size || (c == '\n' && (bf->bflags & __BLBF)))
-		if (__bufio_flush_locked(f) < 0)
+		if (__why_bufio_flush_locked(f) < 0)
                         ret = _FDEV_ERR;
 
 bail:
-	__bufio_unlock(f);
+	__why_bufio_unlock(f);
 	return ret;
 }
 
@@ -163,15 +163,15 @@ extern FILE *const stdin __weak;
 extern FILE *const stdout __weak;
 
 int
-__bufio_get(FILE *f)
+__why_bufio_get(FILE *f)
 {
 	struct __file_bufio *bf = (struct __file_bufio *) f;
         int ret;
         bool flushed = false;
 
 again:
-	__bufio_lock(f);
-        if (__bufio_setdir_locked(f, __SRD) < 0) {
+	__why_bufio_lock(f);
+        if (__why_bufio_setdir_locked(f, __SRD) < 0) {
                 ret = _FDEV_ERR;
                 goto bail;
         }
@@ -189,13 +189,13 @@ again:
                 if (!flushed) {
                         flushed = true;
                         if (&stdin != NULL && &stdout != NULL && f == stdin) {
-                                __bufio_unlock(f);
-                                fflush(stdout);
+                                __why_bufio_unlock(f);
+                                why_fflush(stdout);
                                 goto again;
                         }
 		}
 
-                ret = __bufio_fill_locked(f);
+                ret = __why_bufio_fill_locked(f);
                 if (ret)
                     goto bail;
 	}
@@ -206,18 +206,18 @@ again:
 	 */
 	ret = (unsigned char) bf->buf[bf->off++];
 bail:
-	__bufio_unlock(f);
+	__why_bufio_unlock(f);
 	return ret;
 }
 
 off_t
-__bufio_seek(FILE *f, off_t offset, int whence)
+__why_bufio_seek(FILE *f, off_t offset, int whence)
 {
 	struct __file_bufio *bf = (struct __file_bufio *) f;
 	off_t ret;
 
-	__bufio_lock(f);
-        if (__bufio_setdir_locked(f, __SRD) < 0) {
+	__why_bufio_lock(f);
+        if (__why_bufio_setdir_locked(f, __SRD) < 0) {
                 ret = _FDEV_ERR;
         } else {
                 /* compute offset of the first char in the buffer */
@@ -247,17 +247,17 @@ __bufio_seek(FILE *f, off_t offset, int whence)
                         break;
                 }
         }
-        __bufio_unlock(f);
+        __why_bufio_unlock(f);
         return ret;
 }
 
 int
-__bufio_setvbuf(FILE *f, char *buf, int mode, size_t size)
+__why_bufio_setvbuf(FILE *f, char *buf, int mode, size_t size)
 {
 	struct __file_bufio *bf = (struct __file_bufio *) f;
         int ret = -1;
 
-	__bufio_lock(f);
+	__why_bufio_lock(f);
         bf->bflags &= ~__BLBF;
         switch (mode) {
         case _IONBF:
@@ -274,7 +274,7 @@ __bufio_setvbuf(FILE *f, char *buf, int mode, size_t size)
         }
         if (bf->bflags & __BALL) {
                 if (buf) {
-                        free(bf->buf);
+                        why_free(bf->buf);
                         bf->bflags &= ~__BALL;
                 } else {
                         /*
@@ -296,23 +296,23 @@ __bufio_setvbuf(FILE *f, char *buf, int mode, size_t size)
         bf->size = size;
         ret = 0;
 bail:
-        __bufio_unlock(f);
+        __why_bufio_unlock(f);
         return ret;
 }
 
 int
-__bufio_close(FILE *f)
+__why_bufio_close(FILE *f)
 {
 	struct __file_bufio *bf = (struct __file_bufio *) f;
 	int ret = 0;
 
-	__bufio_lock(f);
-        ret = __bufio_flush_locked(f);
+	__why_bufio_lock(f);
+        ret = __why_bufio_flush_locked(f);
 
         if (bf->bflags & __BALL)
                 why_free(bf->buf);
 
-	__bufio_lock_close(f);
+	__why_bufio_lock_close(f);
 
         /*
          * Don't close the fd or free the FILE for things not

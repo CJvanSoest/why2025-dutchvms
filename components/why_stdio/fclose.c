@@ -37,7 +37,7 @@ why_fclose(FILE *f)
         struct __file_close *cf = (struct __file_close *) f;
 
 #ifdef __STDIO_LOCKING
-        fflush(f);
+        why_fflush(f);
 	__flockfile_close(f);
 #endif
         if ((f->flags & __SCLOSE) && cf->close) {

@@ -36,10 +36,10 @@
 #include "stdio_private.h"
 
 char *
-gcvtf (float invalue,
+why_gcvtf (float invalue,
        int ndigit,
        char *buf)
 {
-	__f_sprintf(buf, "%.*g", ndigit, __printf_float(invalue));
+	__f_why_sprintf(buf, "%.*g", ndigit, __why_printf_float(invalue));
 	return buf;
 }

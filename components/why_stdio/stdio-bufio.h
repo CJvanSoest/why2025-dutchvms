@@ -87,9 +87,9 @@ struct __file_bufio {
 
 #define FDEV_SETUP_BUFIO(_fd, _buf, _size, _read, _write, _lseek, _close, _rwflag, _bflags) \
         {                                                               \
-                .xfile = FDEV_SETUP_EXT(__bufio_put, __bufio_get,     \
-                                        __bufio_flush, __bufio_close,   \
-                                        __bufio_seek, __bufio_setvbuf,  \
+                .xfile = FDEV_SETUP_EXT(__why_bufio_put, __why_bufio_get,     \
+                                        __why_bufio_flush, __why_bufio_close,   \
+                                        __why_bufio_seek, __why_bufio_setvbuf,  \
                                         (_rwflag) | __SBUF),            \
                 .ptr = (void *) (intptr_t) (_fd),                       \
                 .dir = 0,                                               \
@@ -107,9 +107,9 @@ struct __file_bufio {
 
 #define FDEV_SETUP_BUFIO_PTR(_ptr, _buf, _size, _read, _write, _lseek, _close, _rwflag, _bflags) \
         {                                                               \
-                .xfile = FDEV_SETUP_EXT(__bufio_put, __bufio_get,     \
-                                        __bufio_flush, __bufio_close,   \
-                                        __bufio_seek, __bufio_setvbuf,  \
+                .xfile = FDEV_SETUP_EXT(__why_bufio_put, __why_bufio_get,     \
+                                        __why_bufio_flush, __why_bufio_close,   \
+                                        __why_bufio_seek, __why_bufio_setvbuf,  \
                                         (_rwflag) | __SBUF),            \
                 .ptr = _ptr,                                            \
                 .dir = 0,                                               \
@@ -127,10 +127,10 @@ struct __file_bufio {
 
 #ifdef __STDIO_BUFIO_LOCKING
 void
-__bufio_lock_init(FILE *f);
+__why_bufio_lock_init(FILE *f);
 #endif
 
-static inline void __bufio_lock_close(FILE *f) {
+static inline void __why_bufio_lock_close(FILE *f) {
 #ifdef __STDIO_BUFIO_LOCKING
         struct __file_bufio *bf = (struct __file_bufio *) f;
         if (bf->lock) {
@@ -141,7 +141,7 @@ static inline void __bufio_lock_close(FILE *f) {
 	(void) f;
 }
 
-static inline void __bufio_lock(FILE *f) {
+static inline void __why_bufio_lock(FILE *f) {
 #ifdef __STDIO_BUFIO_LOCKING
         struct __file_bufio *bf = (struct __file_bufio *) f;
         if (!bf->lock)
@@ -151,7 +151,7 @@ static inline void __bufio_lock(FILE *f) {
 	(void) f;
 }
 
-static inline void __bufio_unlock(FILE *f) {
+static inline void __why_bufio_unlock(FILE *f) {
 	(void) f;
 #ifdef __STDIO_BUFIO_LOCKING
         struct __file_bufio *bf = (struct __file_bufio *) f;
@@ -160,30 +160,30 @@ static inline void __bufio_unlock(FILE *f) {
 }
 
 int
-__bufio_flush_locked(FILE *f);
+__why_bufio_flush_locked(FILE *f);
 
 int
-__bufio_fill_locked(FILE *f);
+__why_bufio_fill_locked(FILE *f);
 
 int
-__bufio_setdir_locked(FILE *f, uint8_t dir);
+__why_bufio_setdir_locked(FILE *f, uint8_t dir);
 
 int
-__bufio_flush(FILE *f);
+__why_bufio_flush(FILE *f);
 
 int
-__bufio_put(char c, FILE *f);
+__why_bufio_put(char c, FILE *f);
 
 int
-__bufio_get(FILE *f);
+__why_bufio_get(FILE *f);
 
 off_t
-__bufio_seek(FILE *f, off_t offset, int whence);
+__why_bufio_seek(FILE *f, off_t offset, int whence);
 
 int
-__bufio_setvbuf(FILE *f, char *buf, int mode, size_t size);
+__why_bufio_setvbuf(FILE *f, char *buf, int mode, size_t size);
 
 int
-__bufio_close(FILE *f);
+__why_bufio_close(FILE *f);
 
 #endif /* _STDIO_BUFIO_H_ */

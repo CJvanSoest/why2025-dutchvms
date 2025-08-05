@@ -38,7 +38,7 @@
 #define INCR    16
 
 _ssize_t
-getdelim (char **restrict lineptr, size_t *restrict nptr,
+why_getdelim (char **restrict lineptr, size_t *restrict nptr,
           int delim, FILE *restrict stream)
 {
     char *line = *lineptr;
@@ -47,7 +47,7 @@ getdelim (char **restrict lineptr, size_t *restrict nptr,
 
     __flockfile(stream);
     for (;;) {
-        int c = getc_unlocked(stream);
+        int c = why_getc_unlocked(stream);
         if (c == EOF)
             break;
 

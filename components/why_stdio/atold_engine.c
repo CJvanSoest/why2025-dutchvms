@@ -107,7 +107,7 @@ static const long double pwr_m10 [NPOW_10] = {
 };
 
 long double
-__atold_engine(_u128 m10, int e10)
+__why_atold_engine(_u128 m10, int e10)
 {
     long double flt = _u128_to_ld(m10);
     int pwr;

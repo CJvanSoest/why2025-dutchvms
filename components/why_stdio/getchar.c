@@ -31,26 +31,26 @@
 
 #include "stdio_private.h"
 
-#undef getchar
+#undef why_getchar
 
 int
-getchar(void)
+why_getchar(void)
 {
-	return getc(stdin);
+	return why_getc(stdin);
 }
 
-#undef getchar_unlocked
+#undef why_getchar_unlocked
 
 #ifdef __STDIO_LOCKING
 int
-getchar_unlocked(void)
+why_getchar_unlocked(void)
 {
-	return getc_unlocked(stdin);
+	return why_getc_unlocked(stdin);
 }
 #else
 #ifdef __strong_reference
-__strong_reference(getchar, getchar_unlocked);
+__strong_reference(why_getchar, why_getchar_unlocked);
 #else
-int getchar_unlocked(void) { return getchar(); }
+int why_getchar_unlocked(void) { return why_getchar(); }
 #endif
 #endif

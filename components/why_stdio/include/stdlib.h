@@ -342,7 +342,7 @@ int	unsetenv (const char *__string);
 #endif
 size_t	wcstombs (char *__restrict, const wchar_t *__restrict, size_t);
 int	wctomb (char *, wchar_t);
-void   *valloc (size_t) __warn_unused_result __alloc_size(1) __nothrow;
+void   *why_valloc (size_t) __warn_unused_result __alloc_size(1) __nothrow;
 #if __SVID_VISIBLE || __XSI_VISIBLE >= 4
 char   *l64a (long __input);
 #endif

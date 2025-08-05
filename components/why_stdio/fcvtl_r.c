@@ -70,11 +70,11 @@ fcvtl_r (long double invalue,
         if (ndecimal < 0)
             dtoa_decimal = 0;
 #ifdef _NEED_IO_FLOAT_LARGE
-        ndigit = __ldtoa_engine(invalue, &dtoa, LDTOA_MAX_DIG, true, ndecimal);
+        ndigit = __why_ldtoa_engine(invalue, &dtoa, LDTOA_MAX_DIG, true, ndecimal);
 #elif __SIZEOF_LONG_DOUBLE__ == 8
-        ndigit = __dtoa_engine((FLOAT64) invalue, &dtoa, DTOA_MAX_DIG, true, ndecimal);
+        ndigit = __why_dtoa_engine((FLOAT64) invalue, &dtoa, DTOA_MAX_DIG, true, ndecimal);
 #elif __SIZEOF_LONG_DOUBLE__ == 4
-        ndigit = __ftoa_engine ((float) invalue, &dtoa, FTOA_MAX_DIG, true, ndecimal);
+        ndigit = __why_ftoa_engine ((float) invalue, &dtoa, FTOA_MAX_DIG, true, ndecimal);
 #endif
         *sign = !!(dtoa.flags & DTOA_MINUS);
 

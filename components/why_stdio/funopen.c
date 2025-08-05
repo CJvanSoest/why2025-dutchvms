@@ -38,7 +38,7 @@
 #include <stdio-bufio.h>
 
 FILE *
-funopen (const void *cookie,
+why_funopen (const void *cookie,
          ssize_t (*readfn)(void *cookie, void *buf, size_t n),
          ssize_t (*writefn)(void *cookie, const void *buf, size_t n),
          __off_t (*seekfn)(void *cookie, __off_t off, int whence),

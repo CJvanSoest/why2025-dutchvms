@@ -59,8 +59,8 @@ why_fread(void *ptr, size_t size, size_t nmemb, FILE *stream)
                 bool flushed = false;
 
         again:
-                __bufio_lock(stream);
-                __bufio_setdir_locked(stream, __SRD);
+                __why_bufio_lock(stream);
+                __why_bufio_setdir_locked(stream, __SRD);
 
                 /* Deal with any pending unget */
                 if ((unget = __atomic_exchange_ungetc(&stream->unget, 0)) != 0) {
@@ -84,14 +84,14 @@ why_fread(void *ptr, size_t size, size_t nmemb, FILE *stream)
                                 if (!flushed) {
                                         flushed = true;
                                         if (&stdin != NULL && &stdout != NULL && stream == stdin) {
-                                                __bufio_unlock(stream);
-                                                fflush(stdout);
+                                                __why_bufio_unlock(stream);
+                                                why_fflush(stdout);
                                                 goto again;
                                         }
                                 }
                                 if (bytes < (size_t) bf->size) {
                                         /* Small reads go through the buffer */
-                                        int ret = __bufio_fill_locked(stream);
+                                        int ret = __why_bufio_fill_locked(stream);
                                         if (ret) {
                                                 stream->flags |= (ret == _FDEV_ERR)? __SERR: __SEOF; 
                                                 break;
@@ -113,7 +113,7 @@ why_fread(void *ptr, size_t size, size_t nmemb, FILE *stream)
                                 }
                         }
                 }
-                __bufio_unlock(stream);
+                __why_bufio_unlock(stream);
                 __funlock_return(stream, (cp - (uint8_t *) ptr) / size);
         }
 #endif

@@ -60,7 +60,7 @@
  */
 
 # if __IO_DEFAULT != PRINTF_VARIANT || defined(WIDE_CHARS)
-#  define vfprintf PRINTF_NAME
+#  define why_vfprintf PRINTF_NAME
 # endif
 
 #ifdef WIDE_CHARS
@@ -337,7 +337,7 @@ typedef struct {
  * target_argno so that the outer printf code can then extract it.
  */
 static void
-skip_to_arg(const CHAR *fmt_orig, my_va_list *ap, int target_argno)
+why_skip_to_arg(const CHAR *fmt_orig, my_va_list *ap, int target_argno)
 {
     unsigned c;		/* holds a char from the format string */
     uint16_t flags;
@@ -675,7 +675,7 @@ int why_vfprintf (FILE * stream, const CHAR *fmt, va_list ap_orig)
                     if (argno) {
                         va_end(ap);
                         va_copy(ap, ap_orig);
-                        skip_to_arg(fmt_orig, &my_ap, (flags & FL_PREC) ? prec : width);
+                        why_skip_to_arg(fmt_orig, &my_ap, (flags & FL_PREC) ? prec : width);
                         if (flags & FL_PREC)
                             prec = va_arg(ap, int);
                         else
@@ -701,7 +701,7 @@ int why_vfprintf (FILE * stream, const CHAR *fmt, va_list ap_orig)
         if (argno) {
             va_end(ap);
             va_copy(ap, ap_orig);
-            skip_to_arg(fmt_orig, &my_ap, argno);
+            why_skip_to_arg(fmt_orig, &my_ap, argno);
         }
 #endif
 
@@ -1387,7 +1387,7 @@ int why_vfprintf (FILE * stream, const CHAR *fmt, va_list ap_orig)
 
 #if !defined(VFPRINTF_S) && !defined(WIDE_CHARS)
 # if PRINTF_VARIANT == __IO_DEFAULT
-#  undef vfprintf
+#  undef why_vfprintf
 #  ifdef __strong_reference
 __strong_reference(why_vfprintf, PRINTF_NAME);
 #  else

@@ -50,7 +50,7 @@
 		_a < _b ? _a : _b; })
 
 int
-__ldtoa_engine(long double x, struct dtoa *dtoa, int max_digits, bool fmode, int max_decimals)
+__why_ldtoa_engine(long double x, struct dtoa *dtoa, int max_digits, bool fmode, int max_decimals)
 {
     int i;
 

@@ -48,7 +48,7 @@
 #endif
 
 FLOAT64
-__atod_engine(uint64_t u64, int exp)
+__why_atod_engine(uint64_t u64, int exp)
 {
     FLOAT64 flt = u64;
 

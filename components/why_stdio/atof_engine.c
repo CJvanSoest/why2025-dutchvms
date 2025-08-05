@@ -44,7 +44,7 @@
 #endif
 
 float
-__atof_engine(uint32_t u32, int exp)
+__why_atof_engine(uint32_t u32, int exp)
 {
     float flt = u32;
 

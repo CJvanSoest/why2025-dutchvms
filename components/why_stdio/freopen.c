@@ -36,7 +36,7 @@
 #include "stdio_private.h"
 
 FILE *
-freopen(const char *pathname, const char *mode, FILE *stream)
+why_freopen(const char *pathname, const char *mode, FILE *stream)
 {
 	FILE *ret = NULL;
 	struct __file_bufio *pf = (struct __file_bufio *) stream;
@@ -57,13 +57,13 @@ freopen(const char *pathname, const char *mode, FILE *stream)
 	if (!(stream->flags & __SBUF))
 		goto exit;
 
-	fd = open(pathname, open_flags, 0666);
+	fd = why_open(pathname, open_flags, 0666);
 	if (fd < 0)
 		goto exit;
 
-        fflush(stream);
+        why_fflush(stream);
 
-        __bufio_lock(stream);
+        __why_bufio_lock(stream);
         why_close((int)(intptr_t) (pf->ptr));
         (void) __atomic_exchange_ungetc(&stream->unget, 0);
         stream->flags = (stream->flags & ~(__SRD|__SWR|__SERR|__SEOF)) | stdio_flags;
@@ -77,7 +77,7 @@ freopen(const char *pathname, const char *mode, FILE *stream)
         pf->close_int = why_close;
 
         ret = stream;
-	__bufio_unlock(stream);
+	__why_bufio_unlock(stream);
 exit:
 	__funlock_return(stream, ret);
 }

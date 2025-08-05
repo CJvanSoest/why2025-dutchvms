@@ -84,7 +84,7 @@ fdevclose(FILE *f)
 {
 	int ret = 0;
 
-        fflush(f);
+        why_fflush(f);
 	why_free(f);
 	return ret;
 }

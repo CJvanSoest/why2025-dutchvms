@@ -48,7 +48,7 @@ struct __file_mem {
 };
 
 static int
-__fmem_put(char c, FILE *f)
+__why_fmem_put(char c, FILE *f)
 {
     struct __file_mem *mf = (struct __file_mem *)f;
     size_t pos = mf->mflags & __MAPP ? mf->size : mf->pos;
@@ -74,7 +74,7 @@ __fmem_put(char c, FILE *f)
 }
 
 static int
-__fmem_get(FILE *f)
+__why_fmem_get(FILE *f)
 {
     struct __file_mem *mf = (struct __file_mem *)f;
     if ((f->flags & __SRD) == 0) {
@@ -87,7 +87,7 @@ __fmem_get(FILE *f)
 }
 
 static int
-__fmem_flush(FILE *f)
+__why_fmem_flush(FILE *f)
 {
     struct __file_mem *mf = (struct __file_mem *)f;
     if ((f->flags & __SWR) && mf->pos < mf->bufsize) {
@@ -100,7 +100,7 @@ __fmem_flush(FILE *f)
 }
 
 static off_t
-__fmem_seek(FILE *f, off_t pos, int whence)
+__why_fmem_seek(FILE *f, off_t pos, int whence)
 {
     struct __file_mem *mf = (struct __file_mem *)f;
 
@@ -122,20 +122,20 @@ __fmem_seek(FILE *f, off_t pos, int whence)
 }
 
 static int
-__fmem_close(FILE *f)
+__why_fmem_close(FILE *f)
 {
     struct __file_mem *mf = (struct __file_mem *)f;
 
     if (mf->mflags & __MALL)
         why_free(mf->buf);
     else
-        __fmem_flush(f);
+        __why_fmem_flush(f);
     why_free(f);
     return 0;
 }
 
 FILE *
-fmemopen(void *buf, size_t size, const char *mode)
+why_fmemopen(void *buf, size_t size, const char *mode)
 {
     int stdio_flags;
     int open_flags;
@@ -192,8 +192,8 @@ fmemopen(void *buf, size_t size, const char *mode)
     }
 
     *mf = (struct __file_mem){
-        .xfile = FDEV_SETUP_EXT(__fmem_put, __fmem_get, __fmem_flush,
-                                __fmem_close, __fmem_seek, NULL, stdio_flags),
+        .xfile = FDEV_SETUP_EXT(__why_fmem_put, __why_fmem_get, __why_fmem_flush,
+                                __why_fmem_close, __why_fmem_seek, NULL, stdio_flags),
         .buf = buf,
         .size = initial_size,
         .bufsize = size,

@@ -90,7 +90,7 @@
 #define LDTOX_NDIGS     (__LDBL_MANT_DIG__ + 3) / 4
 
 int
-__ldtox_engine(long double x, struct dtoa *dtoa, int prec, unsigned char case_convert)
+__why_ldtox_engine(long double x, struct dtoa *dtoa, int prec, unsigned char case_convert)
 {
     _u128 fi, s;
     int exp;

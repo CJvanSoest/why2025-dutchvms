@@ -203,11 +203,11 @@ extern FILE *const stderr;
                 .flush = (__flush),                 \
 	}
 
-FILE *fdevopen(int (*__put)(char, FILE*), int (*__get)(FILE*), int(*__flush)(FILE *));
+FILE *why_fdevopen(int (*__put)(char, FILE*), int (*__get)(FILE*), int(*__flush)(FILE *));
 int	why_fclose(FILE *__stream);
-int	fflush(FILE *stream);
+int	why_fflush(FILE *stream);
 
-# define fdev_close(f) (fflush(f))
+# define fdev_close(f) (why_fflush(f))
 
 /* Check for old-style printf selection symbols */
 
@@ -493,7 +493,7 @@ int why_vfprintf_s(FILE *__restrict stream, const char *__restrict fmt,
 /*@}*/
 
 static __inline __uint32_t
-__printf_float(float f)
+__why_printf_float(float f)
 {
 	union {
 		float		f;
@@ -539,7 +539,7 @@ __printf_float(float f)
 #  define _HAS_IO_PERCENT_B
 # endif
 #elif _PICOLIBC_PRINTF == __IO_VARIANT_FLOAT
-# define printf_float(x) __printf_float(x)
+# define why_printf_float(x) __why_printf_float(x)
 # define _HAS_IO_LONG_LONG
 # define _HAS_IO_POS_ARGS
 # define _HAS_IO_C99_FORMATS

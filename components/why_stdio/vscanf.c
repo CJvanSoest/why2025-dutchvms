@@ -32,8 +32,7 @@
 #include "stdio_private.h"
 
 int
-vscanf(const char *fmt, va_list ap)
+why_vscanf(const char *fmt, va_list ap)
 {
-
-	return vfscanf(stdin, fmt, ap);
+	return why_vfscanf(stdin, fmt, ap);
 }

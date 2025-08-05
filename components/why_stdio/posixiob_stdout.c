@@ -50,5 +50,5 @@ __weak_reference(__posix_stdout,why_stdout);
 __attribute__((destructor (101)))
 static void posix_exit(void)
 {
-    fflush(why_stdout);
+    why_fflush(why_stdout);
 }

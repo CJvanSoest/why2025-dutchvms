@@ -32,8 +32,8 @@
 #include "stdio_private.h"
 
 int
-vprintf(const char *fmt, va_list ap)
+why_vprintf(const char *fmt, va_list ap)
 {
 
-	return vfprintf(stdout, fmt, ap);
+	return why_vfprintf(stdout, fmt, ap);
 }

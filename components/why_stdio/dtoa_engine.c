@@ -62,7 +62,7 @@ high_bit_set(uint64_t fract)
 }
 
 int
-__dtoa_engine(FLOAT64 x, struct dtoa *dtoa, int max_digits, bool fmode, int max_decimals)
+__why_dtoa_engine(FLOAT64 x, struct dtoa *dtoa, int max_digits, bool fmode, int max_decimals)
 {
         uint64_t v = asuint64(x);
         uint64_t fract = (v << (EXPONENT_BITS + 1)) >> 1;

@@ -54,15 +54,15 @@ why_fwrite(const void *ptr, size_t size, size_t nmemb, FILE *stream)
             !mul_overflow(size, nmemb, &bytes) &&
             bytes > 0)
         {
-                __bufio_lock(stream);
-                __bufio_setdir_locked(stream, __SWR);
+                __why_bufio_lock(stream);
+                __why_bufio_setdir_locked(stream, __SWR);
 
                 if (bytes < (unsigned) bf->size) {
                         /* Small writes go through the buffer. */
                         while (bytes) {
                                 int this_time = bf->size - bf->len;
                                 if (this_time == 0) {
-                                        int ret = __bufio_flush_locked(stream);
+                                        int ret = __why_bufio_flush_locked(stream);
                                         if (ret) {
                                                 stream->flags |= ret;
                                                 break;
@@ -77,7 +77,7 @@ why_fwrite(const void *ptr, size_t size, size_t nmemb, FILE *stream)
                         }
                 } else {
                         /* Large writes go direct. */
-                        if (__bufio_flush_locked(stream) >= 0) {
+                        if (__why_bufio_flush_locked(stream) >= 0) {
                                 while (bytes) {
                                         ssize_t len = bufio_write(bf, cp, bytes);
                                         if (len <= 0) {
@@ -90,7 +90,7 @@ why_fwrite(const void *ptr, size_t size, size_t nmemb, FILE *stream)
                                 }
                         }
                 }
-                __bufio_unlock(stream);
+                __why_bufio_unlock(stream);
                 __funlock_return(stream, (cp - (uint8_t *) ptr) / size);
         }
 #endif

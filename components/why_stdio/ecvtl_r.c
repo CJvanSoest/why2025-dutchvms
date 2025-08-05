@@ -70,11 +70,11 @@ ecvtl_r (long double invalue,
         ndigit = ngot;
     } else {
 #ifdef _NEED_IO_FLOAT_LARGE
-        ngot = __ldtoa_engine(invalue, &dtoa, ndigit, false, 0);
+        ngot = __why_ldtoa_engine(invalue, &dtoa, ndigit, false, 0);
 #elif __SIZEOF_LONG_DOUBLE__ == 8
-        ngot = __dtoa_engine((FLOAT64) invalue, &dtoa, ndigit, false, 0);
+        ngot = __why_dtoa_engine((FLOAT64) invalue, &dtoa, ndigit, false, 0);
 #elif __SIZEOF_LONG_DOUBLE__ == 4
-        ngot = __ftoa_engine((float) invalue, &dtoa, ndigit, false, 0);
+        ngot = __why_ftoa_engine((float) invalue, &dtoa, ndigit, false, 0);
 #endif
         *sign = !!(dtoa.flags & DTOA_MINUS);
         *decpt = dtoa.exp + 1;

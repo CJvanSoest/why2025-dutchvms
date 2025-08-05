@@ -33,17 +33,17 @@
 #include "stdio_private.h"
 
 char *
-gets(char *str)
+why_gets(char *str)
 {
         FILE *stream = stdin;
 	char *cp = str;
 
         __flockfile(stream);
         for (;;) {
-                int c = getc_unlocked(stream);
+                int c = why_getc_unlocked(stream);
                 switch (c) {
                 case EOF:
-                        if (ferror(stream) || cp == str)
+                        if (why_ferror(stream) || cp == str)
                                 __funlock_return(stream, NULL);
                         __fallthrough;
                 case '\n':

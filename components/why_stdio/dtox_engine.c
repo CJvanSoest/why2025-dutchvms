@@ -68,7 +68,7 @@
 #elif DTOX_SIZE == 4
 
 #define _NEED_IO_FLOAT32
-#define __dtox_engine __ftox_engine
+#define __why_dtox_engine __why_ftox_engine
 
 #define DTOX_UINT       uint32_t
 #define DTOX_INT        int32_t
@@ -104,7 +104,7 @@
 #define TOCASE(c)       ((c) - case_convert)
 
 int
-__dtox_engine (DTOX_FLOAT x, struct dtoa *dtoa, int prec, unsigned char case_convert)
+__why_dtox_engine (DTOX_FLOAT x, struct dtoa *dtoa, int prec, unsigned char case_convert)
 {
     DTOX_INT fi, s;
     int exp, d;
