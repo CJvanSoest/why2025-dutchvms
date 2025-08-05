@@ -99,50 +99,46 @@ error:
     return false;
 }
 
-bool get_why2025_binaries(target_chip_t target, why2025_binaries_t *bins)
+bool get_why2025_binaries(why2025_binaries_t *bins)
 {
-    if (target == ESP32C6_CHIP) {
-        bins->boot.addr = BOOTLOADER_ADDRESS_V1;
-        bins->part.addr = PARTITION_ADDRESS;
-        bins->app.addr  = APPLICATION_ADDRESS;
-        bins->boot.data = NULL;
-        bins->part.data = NULL;
-        bins->app.data = NULL;
-        bins->boot.md5 = NULL;
-        bins->part.md5 = NULL;
-        bins->app.md5 = NULL;
+    bins->boot.addr = BOOTLOADER_ADDRESS_V1;
+    bins->part.addr = PARTITION_ADDRESS;
+    bins->app.addr  = APPLICATION_ADDRESS;
+    bins->boot.data = NULL;
+    bins->part.data = NULL;
+    bins->app.data = NULL;
+    bins->boot.md5 = NULL;
+    bins->part.md5 = NULL;
+    bins->app.md5 = NULL;
 
-        if (!read_file_size("FLASH0:[firmware]bootloader.bin", (void**)(&bins->boot.data), &bins->boot.size, false)) {
-            ESP_LOGE(TAG, "Failed to read bootloader.bin");
-            return false;
-        }
+    if (!read_file_size("FLASH0:[firmware]bootloader.bin", (void**)(&bins->boot.data), &bins->boot.size, false)) {
+        ESP_LOGE(TAG, "Failed to read bootloader.bin");
+        return false;
+    }
 
-        if (!read_file_size("FLASH0:[firmware]bootloader.bin.md5", (void**)(&bins->boot.md5), NULL, true)) {
-            ESP_LOGE(TAG, "Failed to read bootloader.bin.md5");
-            return false;
-        }
+    if (!read_file_size("FLASH0:[firmware]bootloader.bin.md5", (void**)(&bins->boot.md5), NULL, true)) {
+        ESP_LOGE(TAG, "Failed to read bootloader.bin.md5");
+        return false;
+    }
 
-        if (!read_file_size("FLASH0:[firmware]partition-table.bin", (void**)(&bins->part.data), &bins->part.size, false)) {
-            ESP_LOGE(TAG, "Failed to read partition-table.bin");
-            return false;
-        }
+    if (!read_file_size("FLASH0:[firmware]partition-table.bin", (void**)(&bins->part.data), &bins->part.size, false)) {
+        ESP_LOGE(TAG, "Failed to read partition-table.bin");
+        return false;
+    }
 
-        if (!read_file_size("FLASH0:[firmware]partition-table.bin.md5", (void**)(&bins->part.md5), NULL, true)) {
-            ESP_LOGE(TAG, "Failed to read partition-table.bin.md5");
-            return false;
-        }
+    if (!read_file_size("FLASH0:[firmware]partition-table.bin.md5", (void**)(&bins->part.md5), NULL, true)) {
+        ESP_LOGE(TAG, "Failed to read partition-table.bin.md5");
+        return false;
+    }
 
-        if (!read_file_size("FLASH0:[firmware]network_adapter.bin", (void**)(&bins->app.data), &bins->app.size, false)) {
-            ESP_LOGE(TAG, "Failed to read network_adapter.bin");
-            return false;
-        }
+    if (!read_file_size("FLASH0:[firmware]network_adapter.bin", (void**)(&bins->app.data), &bins->app.size, false)) {
+        ESP_LOGE(TAG, "Failed to read network_adapter.bin");
+        return false;
+    }
 
-        if (!read_file_size("FLASH0:[firmware]network_adapter.bin.md5", (void**)(&bins->app.md5), NULL, true)) {
-            ESP_LOGE(TAG, "Failed to read network_adapter.bin.md5");
-            return false;
-        }
-    } else {
-        abort();
+    if (!read_file_size("FLASH0:[firmware]network_adapter.bin.md5", (void**)(&bins->app.md5), NULL, true)) {
+        ESP_LOGE(TAG, "Failed to read network_adapter.bin.md5");
+        return false;
     }
 
     return true;

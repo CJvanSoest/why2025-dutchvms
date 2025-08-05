@@ -22,6 +22,12 @@ esp_err_t flash_slave_c6_if_needed()
         .gpio0_trigger_pin = GPIO_NUM_13,
     };
 
+    if (!get_why2025_binaries(&bin)) {
+        ESP_LOGW(TAG, "Couldn't open firmware files, skipping");
+        free_why2025_binaries(&bin);
+        return ESP_FAIL;
+    }
+
     if (loader_port_esp32_init(&config) != ESP_LOADER_SUCCESS)
     {
         ESP_LOGE(TAG, "serial initialization failed.");
@@ -35,12 +41,6 @@ esp_err_t flash_slave_c6_if_needed()
         if (target != ESP32C6_CHIP)
         {
             ESP_LOGE(TAG, "wrong target, expecting ESP32C6_CHIP");
-            return ESP_FAIL;
-        }
-
-        if (!get_why2025_binaries(esp_loader_get_target(), &bin)) {
-            ESP_LOGW(TAG, "Couldn't open firmware files, skipping");
-            free_why2025_binaries(&bin);
             return ESP_FAIL;
         }
 
