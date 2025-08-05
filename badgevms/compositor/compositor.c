@@ -51,6 +51,7 @@ static atomic_int cur_num_windows;
 static uint16_t  *framebuffers[3];
 
 static int  background_damaged    = 7;
+static int  decoration_damaged    = 7;
 static bool visible_regions_valid = false;
 
 typedef enum { WINDOW_CREATE, WINDOW_DESTROY, WINDOW_FLAGS } compositor_command_t;
@@ -67,6 +68,18 @@ rotation_angle_t rotation = ROTATION_ANGLE_270;
 
 #define WINDOW_MAX_W (FRAMEBUFFER_MAX_W - (2 * BORDER_PX) - SIDE_BAR_PX)
 #define WINDOW_MAX_H (FRAMEBUFFER_MAX_H - BORDER_TOP_PX - TOP_BAR_PX)
+
+#define ALL_DISPLAY_FB_MASK 7 // (1 + 2 + 4)
+
+#define WINDOW_MOVE_STEP          10
+#define WINDOW_COMMANDS_PER_FRAME 5
+#define KEYBOARD_EVENTS_PER_FRAME 10
+
+static inline void mark_scene_damaged(void) {
+    visible_regions_valid = false;
+    decoration_damaged    = ALL_DISPLAY_FB_MASK;
+    background_damaged    = ALL_DISPLAY_FB_MASK;
+}
 
 __attribute__((always_inline)) static inline ppa_srm_rotation_angle_t rotation_to_srm(rotation_angle_t rotation) {
     switch (rotation) {
@@ -209,6 +222,7 @@ void window_calculate_visible_regions(window_t *window, window_t *window_list_he
     window->visible.rects[0] = window->rect;
 
     if (!(window->flags & WINDOW_FLAG_FULLSCREEN)) {
+        // For occlusion we only care about our OWN content region
         window->visible.rects[0].x += BORDER_PX;
         window->visible.rects[0].y += BORDER_TOP_PX;
     }
@@ -221,8 +235,9 @@ void window_calculate_visible_regions(window_t *window, window_t *window_list_he
         for (int j = 0; j < window->visible.count; j++) {
             window_rect_t occluder_rect = occluder->rect;
             if (!(occluder->flags & WINDOW_FLAG_FULLSCREEN)) {
-                occluder_rect.x += BORDER_PX;
-                occluder_rect.y += BORDER_TOP_PX;
+                // But other window decorations do occlude us
+                occluder_rect.w += (BORDER_PX * 2);
+                occluder_rect.h += BORDER_TOP_PX + BORDER_PX;
             }
 
             small_rect_array_t pieces = rect_subtract(window->visible.rects[j], occluder_rect);
@@ -254,7 +269,7 @@ window_rect_t content_to_framebuffer_rect(window_rect_t content_rect, window_t *
         content_rect.y -= (window->rect.y + BORDER_TOP_PX);
     }
 
-    managed_framebuffer_t *framebuffer = window->framebuffers[window->cur_fb];
+    managed_framebuffer_t *framebuffer = window->framebuffers[window->front_fb];
 
     int start_x = (int)(content_rect.x / scale);
     int start_y = (int)(content_rect.y / scale);
@@ -326,6 +341,8 @@ framebuffer_t *framebuffer_allocate(uint32_t w, uint32_t h, pixel_format_t forma
     framebuffer->w                  = w;
     framebuffer->h                  = h;
     framebuffer->format             = format;
+    framebuffer->num_pages          = num_pages;
+    framebuffer->fb_dirty           = 7;
     atomic_flag_test_and_set(&framebuffer->clean);
 
     memset(framebuffer->framebuffer.pixels, 0, (w * h * framebuffer_bpp));
@@ -434,8 +451,7 @@ static void IRAM_ATTR NOINLINE_ATTR compositor(void *ignored) {
                 default: ESP_LOGE(TAG, "Unknown command %u", message.command);
             }
 
-            visible_regions_valid = false;
-            background_damaged    = 7;
+            mark_scene_damaged();
 
             if (message.caller) {
                 if (eTaskGetState(message.caller) != eDeleted) {
@@ -443,12 +459,13 @@ static void IRAM_ATTR NOINLINE_ATTR compositor(void *ignored) {
                 }
             }
 
-            if (processed > 5)
+            if (processed > WINDOW_COMMANDS_PER_FRAME) {
                 break;
+            }
         }
 
-        event_t events[10];
-        ssize_t res = keyboard_device->_read(keyboard_device, 0, events, sizeof(event_t) * 10);
+        event_t events[KEYBOARD_EVENTS_PER_FRAME];
+        ssize_t res = keyboard_device->_read(keyboard_device, 0, events, sizeof(event_t) * KEYBOARD_EVENTS_PER_FRAME);
         for (int i = 0; i < res / sizeof(event_t); ++i) {
             event_t *c = &events[i];
             if (c->keyboard.scancode == KEY_SCANCODE_FN) {
@@ -477,7 +494,9 @@ static void IRAM_ATTR NOINLINE_ATTR compositor(void *ignored) {
                     }
                     window_stack          = window_stack->next;
                     c->type               = EVENT_NONE;
+                    // No need to redraw the background
                     visible_regions_valid = false;
+                    decoration_damaged    = 7;
                 }
 
                 if (fn_down) {
@@ -488,24 +507,20 @@ static void IRAM_ATTR NOINLINE_ATTR compositor(void *ignored) {
                         };
                         switch (c->keyboard.scancode) {
                             case KEY_SCANCODE_UP:
-                                cur_pos.y             -= 10;
-                                background_damaged     = 7;
-                                visible_regions_valid  = false;
+                                cur_pos.y -= WINDOW_MOVE_STEP;
+                                mark_scene_damaged();
                                 break;
                             case KEY_SCANCODE_DOWN:
-                                cur_pos.y             += 10;
-                                background_damaged     = 7;
-                                visible_regions_valid  = false;
+                                cur_pos.y += WINDOW_MOVE_STEP;
+                                mark_scene_damaged();
                                 break;
                             case KEY_SCANCODE_LEFT:
-                                cur_pos.x             -= 10;
-                                background_damaged     = 7;
-                                visible_regions_valid  = false;
+                                cur_pos.x -= WINDOW_MOVE_STEP;
+                                mark_scene_damaged();
                                 break;
                             case KEY_SCANCODE_RIGHT:
-                                cur_pos.x             += 10;
-                                background_damaged     = 7;
-                                visible_regions_valid  = false;
+                                cur_pos.x += WINDOW_MOVE_STEP;
+                                mark_scene_damaged();
                                 break;
                             case KEY_SCANCODE_CROSS:
                                 window_t    *window    = window_stack;
@@ -517,6 +532,7 @@ static void IRAM_ATTR NOINLINE_ATTR compositor(void *ignored) {
 
                                 vTaskDelete(task_info->handle);
                                 xSemaphoreGive(window_stack_lock);
+                                mark_scene_damaged();
                                 continue;
                             default:
                         }
@@ -534,6 +550,7 @@ static void IRAM_ATTR NOINLINE_ATTR compositor(void *ignored) {
             }
         }
 
+        bool framebuffer_cleared = false;
         if (background_damaged & (1 << cur_fb)) {
             memset(framebuffers[cur_fb], 0xaa, FRAMEBUFFER_BYTES);
             // Make sure the ppa will see our new background
@@ -542,8 +559,9 @@ static void IRAM_ATTR NOINLINE_ATTR compositor(void *ignored) {
                 FRAMEBUFFER_BYTES,
                 ESP_CACHE_MSYNC_FLAG_DIR_C2M | ESP_CACHE_MSYNC_FLAG_INVALIDATE
             );
-            background_damaged &= ~(1 << cur_fb);
-            changes             = true;
+            background_damaged  &= ~(1 << cur_fb);
+            changes              = true;
+            framebuffer_cleared  = true;
         }
 
         if (window_stack) {
@@ -557,194 +575,133 @@ static void IRAM_ATTR NOINLINE_ATTR compositor(void *ignored) {
                     vTaskPrioritySet(window->task_info->handle, TASK_PRIORITY);
                 }
 
-                managed_framebuffer_t *framebuffer = window->framebuffers[window->cur_fb];
+                managed_framebuffer_t *framebuffer = window->framebuffers[window->front_fb];
 
                 if (!framebuffer) {
                     // Not yet allocated, or in the process of being destroyed
                     if (!visible_regions_valid) {
-                        // We expect every window to be up-to-date after this loop
                         window_calculate_visible_regions(window, window_stack, 1.0);
                     }
-
                     window = window->prev;
                     continue;
                 }
 
-                // Fill the window entirely, preserving aspect ratio and centering
                 float scale_x = ((float)window->rect.w / (float)framebuffer->w);
                 float scale_y = ((float)window->rect.h / (float)framebuffer->h);
-
-                float scale = fminf(scale_x, scale_y);
+                float scale   = fminf(scale_x, scale_y);
 
                 if (!visible_regions_valid) {
                     window_calculate_visible_regions(window, window_stack, scale);
                 }
 
-                ppa_srm_rotation_angle_t ppa_rotation = rotation_to_srm(rotation);
+                bool is_clean             = atomic_flag_test_and_set(&framebuffer->clean);
+                bool need_decoration_draw = decoration_damaged & (1 << cur_fb);
+                bool need_content_draw    = false;
 
-                bool                 rgb_swap  = false;
-                bool                 byte_swap = false;
-                ppa_srm_color_mode_t mode      = PPA_SRM_COLOR_MODE_RGB565;
-
-                switch (framebuffer->format) {
-                    case BADGEVMS_PIXELFORMAT_RGB565: rgb_swap = true; // Fallthrough
-                    case BADGEVMS_PIXELFORMAT_BGR565: break;
-                    case BADGEVMS_PIXELFORMAT_BGRA8888: rgb_swap = true; // Fallthrough
-                    case BADGEVMS_PIXELFORMAT_RGBA8888:
-                        // byte_swap = true;
-                        mode = PPA_SRM_COLOR_MODE_ARGB8888;
-                        break;
-                    case BADGEVMS_PIXELFORMAT_ARGB8888: rgb_swap = true; // Fallthrough
-                    case BADGEVMS_PIXELFORMAT_ABGR8888: mode = PPA_SRM_COLOR_MODE_ARGB8888; break;
-                    default:
+                if (is_clean) {
+                    if (framebuffer->fb_dirty & (1 << cur_fb)) {
+                        need_content_draw = true;
+                    }
+                } else {
+                    framebuffer->fb_dirty = 7;
+                    need_content_draw     = true;
                 }
 
-                bool is_clean    = atomic_flag_test_and_set(&framebuffer->clean);
-                bool drew_pixels = false;
+                if (framebuffer_cleared || window == window_stack) {
+                    need_decoration_draw = true;
+                    need_content_draw    = true;
+                }
 
-                for (int i = 0; i < window->visible.count; i++) {
-                    window_rect_t visible_content = window->visible.rects[i];
-                    window_rect_t fb_rect         = content_to_framebuffer_rect(visible_content, window, scale);
+                if (need_content_draw) {
+                    ppa_srm_rotation_angle_t ppa_rotation = rotation_to_srm(rotation);
+                    bool                     rgb_swap     = false;
+                    bool                     byte_swap    = false;
+                    ppa_srm_color_mode_t     mode         = PPA_SRM_COLOR_MODE_RGB565;
 
-                    if (fb_rect.w <= 0 || fb_rect.h <= 0) {
-                        continue;
+                    switch (framebuffer->format) {
+                        case BADGEVMS_PIXELFORMAT_RGB565: rgb_swap = true; // Fallthrough
+                        case BADGEVMS_PIXELFORMAT_BGR565: break;
+                        case BADGEVMS_PIXELFORMAT_BGRA8888: rgb_swap = true; // Fallthrough
+                        case BADGEVMS_PIXELFORMAT_RGBA8888: mode = PPA_SRM_COLOR_MODE_ARGB8888; break;
+                        case BADGEVMS_PIXELFORMAT_ARGB8888: rgb_swap = true; // Fallthrough
+                        case BADGEVMS_PIXELFORMAT_ABGR8888: mode = PPA_SRM_COLOR_MODE_ARGB8888; break;
+                        default:
                     }
 
-                    window_rect_t rotated_output = rotate_rect(visible_content, rotation);
+                    for (int i = 0; i < window->visible.count; i++) {
+                        window_rect_t visible_content = window->visible.rects[i];
+                        window_rect_t fb_rect         = content_to_framebuffer_rect(visible_content, window, scale);
 
-                    ppa_srm_oper_config_t oper_config = {
-                        .in.buffer         = framebuffer->framebuffer.pixels,
-                        .in.pic_w          = framebuffer->w,
-                        .in.pic_h          = framebuffer->h,
-                        .in.block_w        = fb_rect.w,
-                        .in.block_h        = fb_rect.h,
-                        .in.block_offset_x = fb_rect.x,
-                        .in.block_offset_y = fb_rect.y,
-                        .in.srm_cm         = mode,
+                        if (fb_rect.w <= 0 || fb_rect.h <= 0) {
+                            continue;
+                        }
 
-                        .out.buffer         = framebuffers[cur_fb],
-                        .out.buffer_size    = FRAMEBUFFER_BYTES,
-                        .out.pic_w          = FRAMEBUFFER_MAX_W,
-                        .out.pic_h          = FRAMEBUFFER_MAX_H,
-                        .out.block_offset_x = rotated_output.x,
-                        .out.block_offset_y = rotated_output.y,
-                        .out.srm_cm         = PPA_SRM_COLOR_MODE_RGB565,
+                        window_rect_t rotated_output = rotate_rect(visible_content, rotation);
 
-                        .rotation_angle = ppa_rotation,
-                        .scale_x        = scale,
-                        .scale_y        = scale,
-                        .rgb_swap       = rgb_swap,
-                        .byte_swap      = byte_swap,
-                        // .mode           = PPA_TRANS_MODE_NON_BLOCKING,
-                        .mode           = PPA_TRANS_MODE_BLOCKING,
-                    };
+                        ppa_srm_oper_config_t oper_config = {
+                            .in.buffer         = framebuffer->framebuffer.pixels,
+                            .in.pic_w          = framebuffer->w,
+                            .in.pic_h          = framebuffer->h,
+                            .in.block_w        = fb_rect.w,
+                            .in.block_h        = fb_rect.h,
+                            .in.block_offset_x = fb_rect.x,
+                            .in.block_offset_y = fb_rect.y,
+                            .in.srm_cm         = mode,
 
-                    esp_err_t ppa_result = ppa_do_scale_rotate_mirror(ppa_srm_handle, &oper_config);
-                    if (ppa_result != ESP_OK) {
-                        printf("PPA operation failed: %s\n", esp_err_to_name(ppa_result));
-                        printf(
-                            "Trying: at %ux%u size %ux%u -> %ux%u size %ux%u scale %f\n",
-                            window->rect.x,
-                            window->rect.y,
-                            window->rect.w,
-                            window->rect.h,
-                            fb_rect.x,
-                            fb_rect.y,
-                            fb_rect.w,
-                            fb_rect.h,
-                            scale
-                        );
-                    } else {
-                        drew_pixels            = true;
-                        changes                = true;
-                        framebuffer->fb_clean &= ~(1 << cur_fb);
-                    }
+                            .out.buffer         = framebuffers[cur_fb],
+                            .out.buffer_size    = FRAMEBUFFER_BYTES,
+                            .out.pic_w          = FRAMEBUFFER_MAX_W,
+                            .out.pic_h          = FRAMEBUFFER_MAX_H,
+                            .out.block_offset_x = rotated_output.x,
+                            .out.block_offset_y = rotated_output.y,
+                            .out.srm_cm         = PPA_SRM_COLOR_MODE_RGB565,
 
-                    // Currently commented out, we don't need the overhead
-#if 0
-                    // Wait for SRM to complete
-                    if (!ulTaskNotifyTakeIndexed(0, pdTRUE, 64 / portTICK_PERIOD_MS)) {
-                        ESP_LOGE(
-                            TAG,
-                            "PPA Config:"
-                            "  Input: buf=%p pic=%dx%d block=%dx%d offset=(%d,%d) cm=%d "
-                            "  Output: buf=%p size=%zu pic=%dx%d offset=(%d,%d) cm=%d "
-                            "  Transform: rot=%d scale=(%.3f,%.3f) rgb_swap=%d byte_swap=%d mode=%d "
-                            "  Context: win=(%d,%d)%dx%d vis=(%d,%d)%dx%d fb=(%d,%d)%dx%d rot_out=(%d,%d)%dx%d "
-                            "fb_dim=%dx%d fmt=%d",
-                            oper_config.in.buffer,
-                            oper_config.in.pic_w,
-                            oper_config.in.pic_h,
-                            oper_config.in.block_w,
-                            oper_config.in.block_h,
-                            oper_config.in.block_offset_x,
-                            oper_config.in.block_offset_y,
-                            oper_config.in.srm_cm,
-                            oper_config.out.buffer,
-                            oper_config.out.buffer_size,
-                            oper_config.out.pic_w,
-                            oper_config.out.pic_h,
-                            oper_config.out.block_offset_x,
-                            oper_config.out.block_offset_y,
-                            oper_config.out.srm_cm,
-                            oper_config.rotation_angle,
-                            oper_config.scale_x,
-                            oper_config.scale_y,
-                            oper_config.rgb_swap,
-                            oper_config.byte_swap,
-                            oper_config.mode,
-                            window->rect.x,
-                            window->rect.y,
-                            window->rect.w,
-                            window->rect.h,
-                            visible_content.x,
-                            visible_content.y,
-                            visible_content.w,
-                            visible_content.h,
-                            fb_rect.x,
-                            fb_rect.y,
-                            fb_rect.w,
-                            fb_rect.h,
-                            rotated_output.x,
-                            rotated_output.y,
-                            rotated_output.w,
-                            rotated_output.h,
-                            framebuffer->w,
-                            framebuffer->h,
-                            framebuffer->format
-                        );
-                        while (1) {
+                            .rotation_angle = ppa_rotation,
+                            .scale_x        = scale,
+                            .scale_y        = scale,
+                            .rgb_swap       = rgb_swap,
+                            .byte_swap      = byte_swap,
+                            .mode           = PPA_TRANS_MODE_BLOCKING,
                         };
+
+                        esp_err_t ppa_result = ppa_do_scale_rotate_mirror(ppa_srm_handle, &oper_config);
+                        if (ppa_result != ESP_OK) {
+                            printf("PPA operation failed: %s\n", esp_err_to_name(ppa_result));
+                        } else {
+                            changes                = true;
+                            framebuffer->fb_dirty &= ~(1 << cur_fb);
+                        }
                     }
-#endif
+
+                    // Notify app that content was processed
+                    if (!is_clean) {
+                        if (eTaskGetState(window->task_info->handle) != eDeleted) {
+                            xTaskNotifyGiveIndexed(window->task_info->handle, 1);
+                        }
+                    }
                 }
 
-                if (!is_clean) {
-                    if (eTaskGetState(window->task_info->handle) != eDeleted) {
-                        xTaskNotifyGiveIndexed(window->task_info->handle, 1);
-                    }
-                }
-
-                if (drew_pixels) {
-                    // No need to resync the framebuffer if nothing changed
-                    // Invalidate caches so windowbox drawing doesn't mess up the screen
+                if (need_decoration_draw && !(window->flags & WINDOW_FLAG_FULLSCREEN)) {
+                    // Cache sync before drawing decorations
                     esp_cache_msync(framebuffers[cur_fb], FRAMEBUFFER_BYTES, ESP_CACHE_MSYNC_FLAG_DIR_M2C);
 
-                    if ((!(window->flags & WINDOW_FLAG_FULLSCREEN))) {
-                        draw_window_box(framebuffers[cur_fb], window, window == window_stack);
-                        // Make sure that the PPA will see the current frame including our decorations
-                        esp_cache_msync(
-                            framebuffers[cur_fb],
-                            FRAMEBUFFER_BYTES,
-                            ESP_CACHE_MSYNC_FLAG_DIR_C2M | ESP_CACHE_MSYNC_FLAG_INVALIDATE
-                        );
-                    }
+                    draw_window_box(framebuffers[cur_fb], window, window == window_stack);
+
+                    // Cache sync after drawing decorations
+                    esp_cache_msync(
+                        framebuffers[cur_fb],
+                        FRAMEBUFFER_BYTES,
+                        ESP_CACHE_MSYNC_FLAG_DIR_C2M | ESP_CACHE_MSYNC_FLAG_INVALIDATE
+                    );
+                    changes = true;
                 }
 
                 window = window->prev;
             } while (window != window_stack->prev);
 
-            visible_regions_valid = true;
+            // Mark decorations as clean for this framebuffer
+            decoration_damaged    &= ~(1 << cur_fb);
+            visible_regions_valid  = true;
         }
 
         xSemaphoreGive(window_stack_lock);
@@ -787,24 +744,24 @@ framebuffer_t *window_framebuffer_create(window_t *window, window_size_t size, p
         return NULL;
     }
 
-
     window->framebuffers[0] = window_framebuffer_allocate(window, size, pixel_format);
     if (!window->framebuffers[0]) {
         ESP_LOGW(TAG, "Unable to allocate framebuffer 0 for window %p", window);
         return NULL;
     }
 
-    if (window->flags & WINDOW_FLAG_DOUBLE_BUFFERED) {
-        window->framebuffers[1] = window_framebuffer_allocate(window, size, pixel_format);
-        if (!window->framebuffers[1]) {
-            ESP_LOGW(TAG, "Unable to allocate framebuffer 1 for window %p", window);
-            framebuffer_free(window->framebuffers[0]);
-            return NULL;
-        }
+    window->framebuffers[1] = window_framebuffer_allocate(window, size, pixel_format);
+    if (!window->framebuffers[1]) {
+        ESP_LOGW(TAG, "Unable to allocate framebuffer 1 for window %p", window);
+        framebuffer_free(window->framebuffers[0]);
+        window->framebuffers[0] = NULL;
+        return NULL;
     }
 
-    window->cur_fb = 0;
-    return (framebuffer_t *)window->framebuffers[window->cur_fb];
+    window->front_fb = 0;
+    window->back_fb  = 1;
+
+    return (framebuffer_t *)window->framebuffers[window->back_fb];
 }
 
 window_t *window_create(char const *title, window_size_t size, window_flag_t flags) {
@@ -960,7 +917,7 @@ framebuffer_t *window_framebuffer_get(window_handle_t window) {
         return NULL;
     }
 
-    return (framebuffer_t *)window->framebuffers[window->cur_fb];
+    return (framebuffer_t *)window->framebuffers[window->back_fb];
 }
 
 window_size_t window_framebuffer_size_get(window_handle_t window) {
@@ -984,20 +941,35 @@ pixel_format_t window_framebuffer_format_get(window_handle_t window) {
 }
 
 framebuffer_t *window_present(window_t *window, bool block, window_rect_t *rects, int num_rects) {
-    managed_framebuffer_t *fb = window->framebuffers[window->cur_fb];
+    if (!window || !window->framebuffers[0]) {
+        return NULL;
+    }
 
-    atomic_flag_clear(&fb->clean);
+    managed_framebuffer_t *front_buffer = NULL;
+    managed_framebuffer_t *back_buffer  = NULL;
+
+    if (window->flags & WINDOW_FLAG_DOUBLE_BUFFERED && window->framebuffers[1]) {
+        int old_front    = window->front_fb;
+        window->front_fb = window->back_fb;
+        window->back_fb  = old_front;
+        front_buffer     = window->framebuffers[window->front_fb];
+    } else {
+        front_buffer = window->framebuffers[window->front_fb];
+        back_buffer  = window->framebuffers[window->back_fb];
+        memcpy(
+            front_buffer->framebuffer.pixels,
+            back_buffer->framebuffer.pixels,
+            window->framebuffers[0]->num_pages * SOC_MMU_PAGE_SIZE
+        );
+    }
+
+    atomic_flag_clear(&front_buffer->clean);
 
     if (block) {
-        ESP_LOGV(TAG, "Suspending myself");
         ulTaskNotifyTakeIndexed(1, pdTRUE, portMAX_DELAY);
     }
 
-    if (window->flags & WINDOW_FLAG_DOUBLE_BUFFERED) {
-        window->cur_fb = !window->cur_fb;
-    }
-
-    return (framebuffer_t *)window->framebuffers[window->cur_fb];
+    return (framebuffer_t *)window->framebuffers[window->back_fb];
 }
 
 event_t window_event_poll(window_t *window, bool block, uint32_t timeout_msec) {
