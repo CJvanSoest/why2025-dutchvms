@@ -47,12 +47,11 @@ typedef struct managed_framebuffer {
     allocation_range_t *pages;
     size_t              num_pages;
     atomic_flag         clean;
-    atomic_bool         active;
+    int                 fb_clean;
 } managed_framebuffer_t;
 
 typedef struct window {
-    managed_framebuffer_t *framebuffers[WINDOW_MAX_FRAMEBUFFER];
-    int                    num_fb;
+    managed_framebuffer_t *framebuffers[2];
     int                    cur_fb;
     window_flag_t          flags;
     char                  *title;

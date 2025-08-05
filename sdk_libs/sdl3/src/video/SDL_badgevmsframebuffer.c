@@ -42,7 +42,7 @@ bool SDL_BADGEVMS_CreateWindowFramebuffer(SDL_VideoDevice *_this, SDL_Window *wi
     window_size_t size;
     SDL_GetWindowSizeInPixels(window, &size.w, &size.h);
     int fb_num = 0;
-    framebuffer_t *newfb = window_framebuffer_allocate(data->badgevms_window, BADGEVMS_PIXELFORMAT_RGB565, size, &fb_num);
+    framebuffer_t *newfb = window_framebuffer_create(data->badgevms_window, size, BADGEVMS_PIXELFORMAT_RGB565);
 
     // BadgeVMS pixel formats are the same as this version of SDL
     surface = SDL_CreateSurfaceFrom(newfb->w, newfb->h, newfb->format, newfb->pixels, newfb->w * 2);
@@ -73,7 +73,7 @@ bool SDL_BADGEVMS_UpdateWindowFramebuffer(SDL_VideoDevice *_this, SDL_Window *wi
         return SDL_SetError("Couldn't find BadgeVMS surface for window");
     }
 
-    window_framebuffer_update(data->badgevms_window, 0, true, NULL, 0);
+    window_present(data->badgevms_window, true, NULL, 0);
 
     return true;
 }
@@ -85,7 +85,7 @@ void SDL_BADGEVMS_DestroyWindowFramebuffer(SDL_VideoDevice *_this, SDL_Window *w
 
     surface = (SDL_Surface *)SDL_GetPointerProperty(SDL_GetWindowProperties(window), BADGEVMS_SURFACE, NULL);
     if (surface) {
-        window_framebuffer_free(data->badgevms_window, 0);
+        // Destroying the framebuffer will happen when the window gets destroyed
         SDL_DestroySurface(surface);
     }
 

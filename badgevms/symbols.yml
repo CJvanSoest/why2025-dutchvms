@@ -921,12 +921,14 @@ simple_function:
   - window_event_poll
   - window_flags_get
   - window_flags_set
-  - window_framebuffer_allocate
-  - window_framebuffer_free
+  - window_framebuffer_create
+  - window_framebuffer_format_get
   - window_framebuffer_get
-  - window_framebuffer_update
+  - window_framebuffer_size_get
+  - window_framebuffer_size_set
   - window_position_get
   - window_position_set
+  - window_present
   - window_size_get
   - window_size_set
   - window_title_get

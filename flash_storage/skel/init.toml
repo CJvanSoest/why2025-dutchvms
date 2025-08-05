@@ -1,14 +1,7 @@
 [[apps]]
-name = "framebuffer_test"
-path = "FLASH0:framebuffer_test.elf"
-restart_on_failure = false
-stack_size = 8192
-args = []
-
-[[apps]]
-name = "snake"
+name = "style"
 path = "FLASH0:sdl_test.elf"
-restart_on_failure = true
+restart_on_failure = false
 stack_size = 8192
 args = []
 

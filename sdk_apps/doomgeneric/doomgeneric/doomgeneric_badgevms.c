@@ -18,8 +18,7 @@
 #include <badgevms/event.h>
 
 window_handle_t window = NULL;
-framebuffer_t *framebuffer[2];
-int cur_fb;
+framebuffer_t *framebuffer;
 struct timespec start_time;
 
 #define KEYQUEUE_SIZE 16
@@ -150,28 +149,18 @@ static void handleKeyInput()
 
 void DG_Init()
 {
-  cur_fb = 0;
-  window = window_create("DOOM", (window_size_t){DOOMGENERIC_RESX, DOOMGENERIC_RESY}, 0);
+  window = window_create("DOOM", (window_size_t){DOOMGENERIC_RESX, DOOMGENERIC_RESY}, WINDOW_FLAG_DOUBLE_BUFFERED);
   // Let BadgeVMS do hardware scaling for us
-  framebuffer[0] = window_framebuffer_allocate(window, BADGEVMS_PIXELFORMAT_BGR565, (window_size_t){SCREENWIDTH, SCREENHEIGHT}, NULL);
-  framebuffer[1] = window_framebuffer_allocate(window, BADGEVMS_PIXELFORMAT_BGR565, (window_size_t){SCREENWIDTH, SCREENHEIGHT}, NULL);
+  framebuffer = window_framebuffer_create(window, (window_size_t){SCREENWIDTH, SCREENHEIGHT}, BADGEVMS_PIXELFORMAT_BGR565);
 
-  // Blank our first frame
-  memset(framebuffer[0]->pixels, 0, SCREENWIDTH * SCREENHEIGHT * 2);
-  memset(framebuffer[1]->pixels, 0, SCREENWIDTH * SCREENHEIGHT * 2);
-  window_framebuffer_update(window, cur_fb, false, NULL, 0);
-
-  DG_ScreenBuffer = (void*)framebuffer[cur_fb]->pixels;
+  DG_ScreenBuffer = (void*)framebuffer->pixels;
   clock_gettime(CLOCK_MONOTONIC, &start_time);
 }
 
 void DG_DrawFrame()
 {
-    uint32_t* src = (uint32_t*)DG_ScreenBuffer;
-
-    window_framebuffer_update(window, cur_fb, false, NULL, 0);
-    cur_fb = !cur_fb;
-    DG_ScreenBuffer = (void*)framebuffer[cur_fb]->pixels;
+    framebuffer = window_present(window, false, NULL, 0);
+    DG_ScreenBuffer = (void*)framebuffer->pixels;
     handleKeyInput();
 }
 

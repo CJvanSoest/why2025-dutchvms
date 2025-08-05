@@ -142,9 +142,13 @@ void render_ui(app_state_t *app) {
 int main() {
     app_state_t app = {0};
 
-    app.window = window_create("WHY2025 Badge Test", (window_size_t){720, 720}, WINDOW_FLAG_FULLSCREEN);
+    app.window = window_create(
+        "WHY2025 Badge Test",
+        (window_size_t){720, 720},
+        WINDOW_FLAG_FULLSCREEN | WINDOW_FLAG_DOUBLE_BUFFERED
+    );
     int fb_num;
-    app.fb = window_framebuffer_allocate(app.window, BADGEVMS_PIXELFORMAT_RGB565, (window_size_t){720, 720}, &fb_num);
+    app.fb = window_framebuffer_create(app.window, (window_size_t){720, 720}, BADGEVMS_PIXELFORMAT_RGB565);
 
     app.ctx = malloc(sizeof(mu_Context));
     mu_init(app.ctx);
@@ -161,7 +165,7 @@ int main() {
     memset(app.fb->pixels, 0x55, 720 * 720 * 2);
 
     render_ui(&app);
-    window_framebuffer_update(app.window, fb_num, true, NULL, 0);
+    app.fb = window_present(app.window, true, NULL, 0);
 
     run_tests(&app, fb_num);
 
@@ -197,7 +201,7 @@ int main() {
         frame_counter++;
         check_stuck_keys(&app, frame_counter * 16000000ULL);
 
-        window_framebuffer_update(app.window, fb_num, true, NULL, 0);
+        app.fb = window_present(app.window, true, NULL, 0);
     }
 
     window_destroy(app.window);

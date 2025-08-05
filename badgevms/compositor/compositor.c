@@ -44,8 +44,6 @@ static device_t     *keyboard_device;
 
 static window_t         *window_stack      = NULL;
 static SemaphoreHandle_t window_stack_lock = NULL;
-static SemaphoreHandle_t vsync             = NULL;
-static SemaphoreHandle_t ppa               = NULL;
 static QueueHandle_t     compositor_queue;
 
 static int        cur_fb = 1;
@@ -55,7 +53,7 @@ static uint16_t  *framebuffers[3];
 static int  background_damaged    = 7;
 static bool visible_regions_valid = false;
 
-typedef enum { WINDOW_CREATE, WINDOW_DESTROY, WINDOW_FLAGS, FRAMEBUFFER_FREE } compositor_command_t;
+typedef enum { WINDOW_CREATE, WINDOW_DESTROY, WINDOW_FLAGS } compositor_command_t;
 
 typedef struct {
     compositor_command_t command;
@@ -329,9 +327,9 @@ framebuffer_t *framebuffer_allocate(uint32_t w, uint32_t h, pixel_format_t forma
     framebuffer->h                  = h;
     framebuffer->format             = format;
     atomic_flag_test_and_set(&framebuffer->clean);
-    atomic_store_explicit(&framebuffer->active, true, memory_order_release);
 
-    // vTaskPrioritySet(framebuffer->task_info->handle, TASK_PRIORITY_FOREGROUND);
+    memset(framebuffer->framebuffer.pixels, 0, (w * h * framebuffer_bpp));
+
     ESP_LOGW(
         TAG,
         "Allocated framebuffer at %p, pixels at %p, size %zi, dimensions %u x %u",
@@ -347,8 +345,6 @@ framebuffer_t *framebuffer_allocate(uint32_t w, uint32_t h, pixel_format_t forma
 
 void framebuffer_free(managed_framebuffer_t *framebuffer) {
     if (framebuffer) {
-        atomic_store_explicit(&framebuffer->active, false, memory_order_release);
-
         framebuffer_unmap_pages(framebuffer->pages);
         pages_deallocate(framebuffer->pages);
         framebuffer_vaddr_deallocate((uintptr_t)framebuffer->framebuffer.pixels);
@@ -358,10 +354,7 @@ void framebuffer_free(managed_framebuffer_t *framebuffer) {
 }
 
 IRAM_ATTR static void on_refresh(void *ignored) {
-    xSemaphoreGive(vsync);
-
-    // if (compositor_initialized) {
-    // }
+    xTaskNotifyGiveIndexed(compositor_handle, 0);
 }
 
 // static bool IRAM_ATTR ppa_srm_callback(ppa_client_handle_t ppa_client, ppa_event_data_t *event_data, void *user_data)
@@ -390,7 +383,7 @@ static void IRAM_ATTR NOINLINE_ATTR compositor(void *ignored) {
     while (1) {
         bool changes   = false;
         int  processed = 0;
-        xSemaphoreTake(vsync, portMAX_DELAY);
+        ulTaskNotifyTakeIndexed(0, pdTRUE, portMAX_DELAY);
 
         if (xSemaphoreTake(window_stack_lock, portMAX_DELAY) != pdTRUE) {
             ESP_LOGE(TAG, "Failed to get window list mutex");
@@ -407,7 +400,7 @@ static void IRAM_ATTR NOINLINE_ATTR compositor(void *ignored) {
                     remove_window(message.window);
                     vQueueDelete(message.window->event_queue);
 
-                    for (int i = 0; i < WINDOW_MAX_FRAMEBUFFER; ++i) {
+                    for (int i = 0; i < 2; ++i) {
                         ESP_LOGW(TAG, "Destroying framebuffer %u for window %p", i, message.window);
                         framebuffer_free(message.window->framebuffers[i]);
                     }
@@ -416,6 +409,13 @@ static void IRAM_ATTR NOINLINE_ATTR compositor(void *ignored) {
                     free(message.window);
                     break;
                 case WINDOW_FLAGS:
+                    // Preserve the double buffered flag
+                    bool double_buffered  = message.window->flags & WINDOW_FLAG_DOUBLE_BUFFERED;
+                    message.flags        &= ~WINDOW_FLAG_DOUBLE_BUFFERED;
+                    if (double_buffered) {
+                        message.flags |= WINDOW_FLAG_DOUBLE_BUFFERED;
+                    }
+
                     if (message.window->flags & WINDOW_FLAG_FULLSCREEN) {
                         if (!(message.flags & WINDOW_FLAG_FULLSCREEN)) {
                             message.window->rect = message.window->rect_orig;
@@ -431,31 +431,18 @@ static void IRAM_ATTR NOINLINE_ATTR compositor(void *ignored) {
                     }
                     message.window->flags = message.flags;
                     break;
-                case FRAMEBUFFER_FREE:
-                    managed_framebuffer_t *fb =
-                        (managed_framebuffer_t *)window_framebuffer_get(message.window, message.fb_num);
-                    if (fb) {
-                        message.window->cur_fb = message.fb_num - 1 > 0 ? message.fb_num - 1 : 0;
-                        message.window->num_fb--;
-                        message.window->framebuffers[message.fb_num] = NULL;
-                        bool is_clean                                = atomic_flag_test_and_set(&fb->clean);
-                        if (!is_clean) {
-                            if (eTaskGetState(message.window->task_info->handle) != eDeleted) {
-                                xTaskNotifyGiveIndexed(message.window->task_info->handle, 1);
-                            }
-                        }
-                        framebuffer_free(fb);
-                    }
-                    break;
                 default: ESP_LOGE(TAG, "Unknown command %u", message.command);
             }
+
             visible_regions_valid = false;
             background_damaged    = 7;
+
             if (message.caller) {
                 if (eTaskGetState(message.caller) != eDeleted) {
                     xTaskNotifyGiveIndexed(message.caller, 0);
                 }
             }
+
             if (processed > 5)
                 break;
         }
@@ -572,7 +559,7 @@ static void IRAM_ATTR NOINLINE_ATTR compositor(void *ignored) {
 
                 managed_framebuffer_t *framebuffer = window->framebuffers[window->cur_fb];
 
-                if (!framebuffer || (atomic_load_explicit(&framebuffer->active, memory_order_acquire) == false)) {
+                if (!framebuffer) {
                     // Not yet allocated, or in the process of being destroyed
                     if (!visible_regions_valid) {
                         // We expect every window to be up-to-date after this loop
@@ -668,8 +655,9 @@ static void IRAM_ATTR NOINLINE_ATTR compositor(void *ignored) {
                             scale
                         );
                     } else {
-                        drew_pixels = true;
-                        changes     = true;
+                        drew_pixels            = true;
+                        changes                = true;
+                        framebuffer->fb_clean &= ~(1 << cur_fb);
                     }
 
                     // Currently commented out, we don't need the overhead
@@ -773,6 +761,50 @@ void get_screen_info(int *width, int *height, pixel_format_t *format, float *ref
     *height       = FRAMEBUFFER_MAX_H;
     *format       = BADGEVMS_PIXELFORMAT_RGB565;
     *refresh_rate = FRAMEBUFFER_MAX_REFRESH;
+}
+
+static managed_framebuffer_t *
+    window_framebuffer_allocate(window_t *window, window_size_t size, pixel_format_t pixel_format) {
+    size.w = size.w > FRAMEBUFFER_MAX_W ? FRAMEBUFFER_MAX_W : size.w;
+    size.h = size.h > FRAMEBUFFER_MAX_H ? FRAMEBUFFER_MAX_H : size.h;
+
+    size              = window_clamp_size(window, size);
+    framebuffer_t *fb = framebuffer_allocate(size.w, size.h, pixel_format);
+    if (!fb) {
+        ESP_LOGW(TAG, "Unable to allocate framebuffer");
+        return NULL;
+    }
+
+    return (managed_framebuffer_t *)fb;
+}
+
+framebuffer_t *window_framebuffer_create(window_t *window, window_size_t size, pixel_format_t pixel_format) {
+    if (!window) {
+        return NULL;
+    }
+
+    if (window->framebuffers[0] || window->framebuffers[1]) {
+        return NULL;
+    }
+
+
+    window->framebuffers[0] = window_framebuffer_allocate(window, size, pixel_format);
+    if (!window->framebuffers[0]) {
+        ESP_LOGW(TAG, "Unable to allocate framebuffer 0 for window %p", window);
+        return NULL;
+    }
+
+    if (window->flags & WINDOW_FLAG_DOUBLE_BUFFERED) {
+        window->framebuffers[1] = window_framebuffer_allocate(window, size, pixel_format);
+        if (!window->framebuffers[1]) {
+            ESP_LOGW(TAG, "Unable to allocate framebuffer 1 for window %p", window);
+            framebuffer_free(window->framebuffers[0]);
+            return NULL;
+        }
+    }
+
+    window->cur_fb = 0;
+    return (framebuffer_t *)window->framebuffers[window->cur_fb];
 }
 
 window_t *window_create(char const *title, window_size_t size, window_flag_t flags) {
@@ -923,88 +955,49 @@ window_flag_t window_flags_set(window_t *window, window_flag_t flags) {
     return flags;
 }
 
-framebuffer_t *
-    window_framebuffer_allocate(window_handle_t window, pixel_format_t format, window_size_t size, int *num) {
-    if (window->num_fb == WINDOW_MAX_FRAMEBUFFER) {
-        ESP_LOGW(TAG, "Window already has the max number of framebuffers");
+framebuffer_t *window_framebuffer_get(window_handle_t window) {
+    if (!window) {
         return NULL;
     }
 
-    size.w = size.w > FRAMEBUFFER_MAX_W ? FRAMEBUFFER_MAX_W : size.w;
-    size.h = size.h > FRAMEBUFFER_MAX_H ? FRAMEBUFFER_MAX_H : size.h;
-
-    size              = window_clamp_size(window, size);
-    framebuffer_t *fb = framebuffer_allocate(size.w, size.h, format);
-    if (!fb) {
-        ESP_LOGW(TAG, "Unable to allocate framebuffer");
-        return NULL;
-    }
-
-    window->framebuffers[window->num_fb] = (managed_framebuffer_t *)fb;
-
-    if (num) {
-        *num = window->num_fb;
-    }
-
-    window->num_fb++;
-
-    // To catch the edge-case of the window's framebuffer somehow creating PPA "illegal" rect sizes now.
-    visible_regions_valid = false;
-    return fb;
+    return (framebuffer_t *)window->framebuffers[window->cur_fb];
 }
 
-void window_framebuffer_free(window_handle_t window, int num) {
-    framebuffer_t *fb = window_framebuffer_get(window, num);
-
-    if (fb) {
-        compositor_message_t message = {
-            .command = FRAMEBUFFER_FREE,
-            .window  = window,
-            .fb_num  = num,
-            .caller  = xTaskGetCurrentTaskHandle(),
-        };
-
-        xQueueSend(compositor_queue, &message, portMAX_DELAY);
-        ulTaskNotifyTakeIndexed(0, pdTRUE, portMAX_DELAY);
+window_size_t window_framebuffer_size_get(window_handle_t window) {
+    if (!(window && window->framebuffers[0])) {
+        return (window_size_t){0, 0};
     }
+
+    return (window_size_t){window->framebuffers[0]->w, window->framebuffers[0]->h};
 }
 
-__attribute__((always_inline)) inline framebuffer_t *window_framebuffer_get(window_handle_t window, int num) {
-    if (!window->num_fb) {
-        ESP_LOGW(TAG, "No framebuffers to get");
-        return NULL;
-    }
-
-    if (num > window->num_fb - 1) {
-        ESP_LOGW(TAG, "Framebuffer num out of range");
-        return NULL;
-    }
-
-    return (framebuffer_t *)window->framebuffers[num];
+window_size_t window_framebuffer_size_set(window_handle_t window, window_size_t size) {
+    return window_framebuffer_size_get(window);
 }
 
-void window_framebuffer_update(window_t *window, int num, bool block, window_rect_t *rects, int num_rects) {
-    framebuffer_t *fb = window_framebuffer_get(window, num);
-    if (!fb) {
-        ESP_LOGW(TAG, "Posting non-existant framebuffer");
-        return;
+pixel_format_t window_framebuffer_format_get(window_handle_t window) {
+    if (!(window && window->framebuffers[0])) {
+        return 0;
     }
 
-    managed_framebuffer_t *managed_framebuffer = (managed_framebuffer_t *)fb;
+    return window->framebuffers[0]->format;
+}
 
-    if (atomic_load_explicit(&managed_framebuffer->active, memory_order_acquire) == false) {
-        ESP_LOGW(TAG, "Cannot update framebuffer that is being destroyed");
-        return;
-    }
+framebuffer_t *window_present(window_t *window, bool block, window_rect_t *rects, int num_rects) {
+    managed_framebuffer_t *fb = window->framebuffers[window->cur_fb];
 
-    window->cur_fb = num;
-
-    atomic_flag_clear(&managed_framebuffer->clean);
+    atomic_flag_clear(&fb->clean);
 
     if (block) {
         ESP_LOGV(TAG, "Suspending myself");
         ulTaskNotifyTakeIndexed(1, pdTRUE, portMAX_DELAY);
     }
+
+    if (window->flags & WINDOW_FLAG_DOUBLE_BUFFERED) {
+        window->cur_fb = !window->cur_fb;
+    }
+
+    return (framebuffer_t *)window->framebuffers[window->cur_fb];
 }
 
 event_t window_event_poll(window_t *window, bool block, uint32_t timeout_msec) {
@@ -1052,7 +1045,5 @@ void compositor_init(char const *lcd_device_name, char const *keyboard_device_na
 
     compositor_queue  = xQueueCreate(10, sizeof(compositor_message_t));
     window_stack_lock = xSemaphoreCreateMutex();
-    vsync             = xSemaphoreCreateBinary();
-    ppa               = xSemaphoreCreateBinary();
     create_kernel_task(compositor, "Compositor", 8192, NULL, 20, &compositor_handle, 0);
 }

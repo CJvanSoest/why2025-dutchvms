@@ -21,11 +21,11 @@ int main(int argc, char *argv[]) {
     size.w = W_WIDTH;
     size.h = W_HEIGHT;
 
-    window_handle_t window = window_create("FB test", size, WINDOW_FLAG_NONE);
+    window_handle_t window = window_create("FB test", size, WINDOW_FLAG_DOUBLE_BUFFERED);
 
     size.w                              = FB_WIDTH;
     size.h                              = FB_HEIGHT;
-    framebuffer_t *framebuffer          = window_framebuffer_allocate(window, BADGEVMS_PIXELFORMAT_RGB565, size, NULL);
+    framebuffer_t *framebuffer          = window_framebuffer_create(window, size, BADGEVMS_PIXELFORMAT_RGB565);
     int            frame                = 0;
     long const     target_frame_time_us = 16667; // 60 FPS in microseconds
 
@@ -116,7 +116,7 @@ int main(int argc, char *argv[]) {
         struct timespec post_start_time;
         clock_gettime(CLOCK_MONOTONIC, &post_start_time);
 
-        window_framebuffer_update(window, 0, true, NULL, 0);
+        framebuffer = window_present(window, true, NULL, 0);
 
         // Calculate how long the frame took
         clock_gettime(CLOCK_MONOTONIC, &end_time);
