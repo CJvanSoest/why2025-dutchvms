@@ -31,8 +31,11 @@
 #define free    dlfree
 
 #define asprintf  why_asprintf
+#define clearerr  why_clearerr
 #define dprintf   why_dprintf
 #define fclose    why_fclose
+#define feof      why_feof
+#define ferror    why_ferror
 #define fgetc     why_fgetc
 #define fgets     why_fgets
 #define fopen     why_fopen

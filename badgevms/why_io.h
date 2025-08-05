@@ -66,3 +66,7 @@ long   why_ftell(FILE *stream);
 void   why_rewind(FILE *stream);
 int    why_fgetpos(FILE *restrict stream, fpos_t *restrict pos);
 int    why_fsetpos(FILE *stream, fpos_t const *pos);
+
+void why_clearerr(FILE *stream);
+int  why_feof(FILE *stream);
+int  why_ferror(FILE *stream);
