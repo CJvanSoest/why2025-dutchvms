@@ -139,7 +139,7 @@ int parse_app(toml_datum_t app_table, startup_app_t *app) {
 int load_config(char const *filename, startup_config_t *config) {
     FILE *fp = why_fopen(filename, "r");
     if (!fp) {
-        ESP_LOGW(TAG, "Cannot open %s\n", filename);
+        ESP_LOGW(TAG, "Cannot open %s", filename);
         return -1;
     }
 
@@ -147,7 +147,7 @@ int load_config(char const *filename, startup_config_t *config) {
     why_fclose(fp);
 
     if (!result.ok) {
-        ESP_LOGW(TAG, "Error parsing %s: %s\n", filename, result.errmsg);
+        ESP_LOGW(TAG, "Error parsing %s: %s", filename, result.errmsg);
         return -1;
     }
 
@@ -269,7 +269,7 @@ void run_init(void) {
     while (1) {
         size_t free_ram = heap_caps_get_free_size(MALLOC_CAP_DEFAULT);
         printf(
-            "Init: Free main memory: %zi, free PSRAM pages: %zi/%zi, running processes %lu",
+            "Init: Free main memory: %zi, free PSRAM pages: %zi/%zi, running processes %lu\n",
             free_ram,
             get_free_psram_pages(),
             get_total_psram_pages(),
