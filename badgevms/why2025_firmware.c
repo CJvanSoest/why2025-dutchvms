@@ -21,6 +21,7 @@
 #endif
 
 #include "badgevms/device.h"
+#include "badgevms/process.h"
 #include "compositor/compositor_private.h"
 #include "device_private.h"
 #include "drivers/badgevms_i2c_bus.h"
@@ -36,6 +37,7 @@
 #include "esp_private/panic_internal.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
+#include "init.h"
 #include "logical_names.h"
 #include "memory.h"
 #include "nvs_flash.h"
@@ -113,68 +115,9 @@ int app_main(void) {
         get_num_tasks()
     );
 
-    char **argv = malloc(sizeof(char *) * 5);
-    argv[0]     = strdup("doom.eld");
-    argv[1]     = strdup("-iwad");
-    argv[2]     = strdup("SD0:doom1.wad");
-    // argv[2]     = strdup("FLASH0:doom1.wad");
-    argv[3]     = strdup("-TIMEDEMO");
-    argv[4]     = strdup("DEMO3");
+    run_init();
 
-    pid_t pida, pidb;
-
-    printf("After argv stuff\n");
-    free_ram = heap_caps_get_free_size(MALLOC_CAP_DEFAULT);
-    ESP_LOGW(
-        TAG,
-        "Free main memory: %zi, free PSRAM pages: %zi/%zi, running processes %u",
-        free_ram,
-        get_free_psram_pages(),
-        get_total_psram_pages(),
-        get_num_tasks()
-    );
-
-    // run_task_path("FLASH0:curl_test.elf", 4096, TASK_TYPE_ELF, 2, argv);
-    // pidb = run_task_path("FLASH0:hello.elf", 4096, TASK_TYPE_ELF_PATH, 2, argv);
-    // ESP_LOGI(TAG, "Started task with pid %i", pidb);
-    // pidb       = run_task(framebuffer_test_a_start, 4096, TASK_TYPE_ELF_ROM, 2, argv);
-    // ESP_LOGI(TAG, "Started task with pid %i", pidb);
-
-    // pidb = run_task_path("FLASH0:doom.elf", 4096, TASK_TYPE_ELF, 3, argv);
-    // pidb = run_task_path("FLASH0:framebuffer_test.elf", 4096, TASK_TYPE_ELF, 2, argv);
-    while (1) {
-        while (get_num_tasks() < 1) {
-            free_ram = heap_caps_get_free_size(MALLOC_CAP_DEFAULT);
-            ESP_LOGW(
-                TAG,
-                "Free main memory: %zi, free PSRAM pages: %zi/%zi, running processes %u",
-                free_ram,
-                get_free_psram_pages(),
-                get_total_psram_pages(),
-                get_num_tasks()
-            );
-            pidb = run_task_path("FLASH0:process_test.elf", 4096, TASK_TYPE_ELF, 5, argv);
-            // pidb = run_task_path("FLASH0:hello.elf", 4096, TASK_TYPE_ELF, 5, argv);
-            // pidb = run_task_path("FLASH0:bench_basic_b.elf", 4096, TASK_TYPE_ELF, 2, argv);
-            // pidb = run_task_path("FLASH0:wifi_test.elf", 4096, TASK_TYPE_ELF, 2, argv);
-            // pidb = run_task_path("FLASH0:doom.elf", 4096, TASK_TYPE_ELF, 5, argv);
-            // pidb = run_task_path("FLASH0:doom.elf", 4096, TASK_TYPE_ELF, 5, argv);
-            // pidb = run_task_path("FLASH0:doom.elf", 4096, TASK_TYPE_ELF, 3, argv);
-            // pidb = run_task_path("FLASH0:framebuffer_test.elf", 4096, TASK_TYPE_ELF, 2, argv);
-            // pidb = run_task_path("FLASH0:framebuffer_test.elf", 4096, TASK_TYPE_ELF, 2, argv);
-            // pidb = run_task_path("FLASH0:hardware_test.elf", 4096, TASK_TYPE_ELF, 2, argv);
-            // pidb = run_task_path("FLASH0:bmi270_test.elf", 4096, TASK_TYPE_ELF, 2, argv);
-            // pidb = run_task_path("FLASH0:sdl_test.elf", 4096, TASK_TYPE_ELF, 2, argv);
-            // pidb = run_task_path("FLASH0:sdl_test.elf", 4096, TASK_TYPE_ELF, 2, argv);
-            // pidb = run_task_path("FLASH0:thread_test.elf", 4096, TASK_TYPE_ELF, 2, argv);
-            // pidb = run_task_path("FLASH0:curl_test.elf", 4096, TASK_TYPE_ELF, 5, argv);
-            // pidb = run_task_path("FLASH0:thread_test.elf", 4096, TASK_TYPE_ELF, 2, argv);
-            // pidb = run_task_path("FLASH0:curl_test.elf", 4096, TASK_TYPE_ELF, 5, argv);
-            vTaskDelay(100 / portTICK_PERIOD_MS);
-        }
-        vTaskDelay(10000 / portTICK_PERIOD_MS);
-    }
-
-    ESP_LOGE(TAG, "How did we get here?");
+    ESP_LOGE(TAG, "Killed init, rebooting");
+    esp_restart();
     return 0;
 }

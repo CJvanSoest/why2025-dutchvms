@@ -608,7 +608,7 @@ static void IRAM_ATTR hades(void *ignored) {
     while (1) {
         // Block until a task dies
         if (xQueueReceive(hades_queue, &dead_pid, portMAX_DELAY) == pdTRUE) {
-            ESP_LOGI("HADES", "Stripping PID %d of its worldy possessions", dead_pid);
+            ESP_LOGW("HADES", "Stripping PID %d of its worldy possessions", dead_pid);
 
             task_info_t *task_info = process_table[dead_pid];
             if (task_info) {
@@ -616,7 +616,7 @@ static void IRAM_ATTR hades(void *ignored) {
                     case TASK_TYPE_ELF_PATH: // Fallthrough
                     case TASK_TYPE_ELF:      // Fallthrough
                     case TASK_TYPE_THREAD: break;
-                    default: ESP_LOGE(TAG, "Unknown task type %i", task_info->type);
+                    default: ESP_LOGE("HADES", "Unknown task type %i", task_info->type);
                 }
 
                 pid_t parent_pid = task_info->parent;
@@ -631,7 +631,7 @@ static void IRAM_ATTR hades(void *ignored) {
                 }
 
                 // If this process had a parent, and it is still alive, signal it.
-                if (parent_pid && process_table[parent_pid]) {
+                if (process_table[parent_pid]) {
                     if (xQueueSend(process_table[parent_pid]->children, &dead_pid, 0) != pdTRUE) {
                         ESP_LOGW("HADES", "Unable to inform parent of their child's journey");
                     }
@@ -649,8 +649,10 @@ static void IRAM_ATTR hades(void *ignored) {
 
                 // Don't free our PID until the last moment
                 pid_free(dead_pid);
-                ESP_LOGI("HADES", "Task %d escorted to my realm", dead_pid);
+                ESP_LOGW("HADES", "Task %d escorted to my realm", dead_pid);
                 --num_tasks;
+                // Give FreeRTOS a chance to catch up
+                vTaskDelay(10 / portTICK_PERIOD_MS);
             } else {
                 ESP_LOGE("HADES", "Task %d has no task info?", dead_pid);
             }
@@ -714,6 +716,8 @@ static void IRAM_ATTR zeus(void *ignored) {
             task_info->argv_back = task_info->argv;
 
             TaskFunction_t task_entry = generic_task;
+            void          *param      = (void *)task_info;
+
             switch (command->type) {
                 case TASK_TYPE_ELF: task_info->task_entry = elf_task; break;
                 case TASK_TYPE_ELF_PATH:
@@ -725,22 +729,15 @@ static void IRAM_ATTR zeus(void *ignored) {
                     task_entry              = generic_thread;
                     task_info->thread_entry = command->thread_entry;
                     break;
-                default: ESP_LOGE(TAG, "Unknown task type %i", command->type); goto error;
+                default: ESP_LOGE("ZEUS", "Unknown task type %i", command->type); goto error;
             }
 
             ESP_LOGI("ZEUS", "Breathing life into PID %d", task_info->pid);
             snprintf(task_name, 9, "Task %u", task_info->pid);
 
             TaskHandle_t new_task;
-            BaseType_t   res = xTaskCreatePinnedToCore(
-                task_entry,
-                task_name,
-                task_info->stack_size,
-                (void *)task_info,
-                5,
-                &new_task,
-                1
-            );
+            BaseType_t   res =
+                xTaskCreatePinnedToCore(task_entry, task_name, task_info->stack_size, param, 5, &new_task, 1);
             if (res == pdPASS) {
                 // Since Zeus is the highest priority task on the core the task should never be able to run
                 task_info->handle = new_task;
@@ -758,7 +755,8 @@ static void IRAM_ATTR zeus(void *ignored) {
             task_info_delete(task_info);
         out:
             xSemaphoreGive(command->ready);
-            vTaskDelay(100 / portTICK_PERIOD_MS);
+            // Give FreeRTOS a chance to catch up
+            vTaskDelay(50 / portTICK_PERIOD_MS);
         }
     }
 }
@@ -818,6 +816,9 @@ void task_init() {
         &kernel_task,
         ((uintptr_t)&kernel_task) + sizeof(task_info_t)
     );
+
+    // For init
+    kernel_task.children = xQueueCreate(100, sizeof(pid_t));
 
     vTaskSetThreadLocalStoragePointer(NULL, 1, &kernel_task);
     vTaskSetApplicationTaskTag(NULL, (void *)0x12345678);
