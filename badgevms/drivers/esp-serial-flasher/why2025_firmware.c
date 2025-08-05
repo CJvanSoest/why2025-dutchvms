@@ -13,39 +13,39 @@
  * limitations under the License.
  */
 
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <inttypes.h>
-#include <sys/param.h>
-#include <assert.h>
-#include <stdbool.h>
-
-#include "esp_loader_io.h"
-#include "esp_loader.h"
-#include "esp_log.h"
 #include "why2025_firmware.h"
 
-#include "why_io.h"
 #include "esp_heap_caps.h"
+#include "esp_loader.h"
+#include "esp_loader_io.h"
+#include "esp_log.h"
+#include "why_io.h"
+
+#include <inttypes.h>
+#include <stdbool.h>
+#include <stdio.h>
+#include <stdlib.h>
+
+#include <assert.h>
+#include <string.h>
+#include <sys/param.h>
 
 #define TAG "why2025_c6_firmare"
 
 #ifndef SINGLE_TARGET_SUPPORT
 
 // For esp32, esp32s2
-#define BOOTLOADER_ADDRESS_V0       0x1000
+#define BOOTLOADER_ADDRESS_V0 0x1000
 // For esp8266, esp32s3 and later chips
-#define BOOTLOADER_ADDRESS_V1       0x0
+#define BOOTLOADER_ADDRESS_V1 0x0
 // For esp32c5 and esp32p4
-#define BOOTLOADER_ADDRESS_V2       0x2000
-#define PARTITION_ADDRESS           0x8000
-#define APPLICATION_ADDRESS         0x10000
+#define BOOTLOADER_ADDRESS_V2 0x2000
+#define PARTITION_ADDRESS     0x8000
+#define APPLICATION_ADDRESS   0x10000
 
-bool read_file_size(const char *filename, void** buffer, uint32_t *size, bool null_terminate) {
+bool read_file_size(char const *filename, void **buffer, uint32_t *size, bool null_terminate) {
     FILE *f = why_fopen(filename, "r");
     void *b = NULL;
-    *buffer = NULL;
     if (size) {
         *size = 0;
     }
@@ -67,26 +67,30 @@ bool read_file_size(const char *filename, void** buffer, uint32_t *size, bool nu
     }
     why_rewind(f);
 
-    if (null_terminate) {
-        b = heap_caps_calloc(1, s + 1, MALLOC_CAP_SPIRAM);
-    } else {
-        b = heap_caps_malloc(s, MALLOC_CAP_SPIRAM);
+    if (buffer != NULL) {
+        *buffer = NULL;
+        if (null_terminate) {
+            b = heap_caps_calloc(1, s + 1, MALLOC_CAP_SPIRAM);
+        } else {
+            b = heap_caps_malloc(s, MALLOC_CAP_SPIRAM);
+        }
+
+        if (!b) {
+            ESP_LOGE(TAG, "Failed to get allocate memory %s", filename);
+            goto error;
+        }
+
+        size_t r = why_fread(b, 1, s, f);
+        if (r != s) {
+            ESP_LOGE(TAG, "Failed to read file %s, expected %u got %u", filename, s, r);
+            goto error;
+        }
+
+        why_fclose(f);
+
+        *buffer = b;
     }
 
-    if (!b) {
-        ESP_LOGE(TAG, "Failed to get allocate memory %s", filename);
-        goto error;
-    }
-
-    size_t r = why_fread(b, 1, s, f);
-    if (r != s) {
-        ESP_LOGE(TAG, "Failed to read file %s, expected %u got %u", filename, s, r);
-        goto error;
-    }
-
-    why_fclose(f);
-
-    *buffer = b;
     if (size) {
         *size = s;
     }
@@ -99,44 +103,47 @@ error:
     return false;
 }
 
-bool get_why2025_binaries(why2025_binaries_t *bins)
-{
+bool get_why2025_binaries(why2025_binaries_t *bins) {
     bins->boot.addr = BOOTLOADER_ADDRESS_V1;
     bins->part.addr = PARTITION_ADDRESS;
     bins->app.addr  = APPLICATION_ADDRESS;
     bins->boot.data = NULL;
     bins->part.data = NULL;
-    bins->app.data = NULL;
-    bins->boot.md5 = NULL;
-    bins->part.md5 = NULL;
-    bins->app.md5 = NULL;
+    bins->app.data  = NULL;
+    bins->boot.md5  = NULL;
+    bins->part.md5  = NULL;
+    bins->app.md5   = NULL;
 
-    if (!read_file_size("FLASH0:[firmware]bootloader.bin", (void**)(&bins->boot.data), &bins->boot.size, false)) {
+    if (!read_file_size("FLASH0:[firmware]bootloader.bin", (void **)(&bins->boot.data), &bins->boot.size, false)) {
         ESP_LOGE(TAG, "Failed to read bootloader.bin");
         return false;
     }
 
-    if (!read_file_size("FLASH0:[firmware]bootloader.bin.md5", (void**)(&bins->boot.md5), NULL, true)) {
+    if (!read_file_size("FLASH0:[firmware]bootloader.bin.md5", (void **)(&bins->boot.md5), NULL, true)) {
         ESP_LOGE(TAG, "Failed to read bootloader.bin.md5");
         return false;
     }
 
-    if (!read_file_size("FLASH0:[firmware]partition-table.bin", (void**)(&bins->part.data), &bins->part.size, false)) {
+    if (!read_file_size("FLASH0:[firmware]partition-table.bin", (void **)(&bins->part.data), &bins->part.size, false)) {
         ESP_LOGE(TAG, "Failed to read partition-table.bin");
         return false;
     }
 
-    if (!read_file_size("FLASH0:[firmware]partition-table.bin.md5", (void**)(&bins->part.md5), NULL, true)) {
+    if (!read_file_size("FLASH0:[firmware]partition-table.bin.md5", (void **)(&bins->part.md5), NULL, true)) {
         ESP_LOGE(TAG, "Failed to read partition-table.bin.md5");
         return false;
     }
 
-    if (!read_file_size("FLASH0:[firmware]network_adapter.bin", (void**)(&bins->app.data), &bins->app.size, false)) {
+    // here we invoke read_file_size with NULL as destbuf, so bins->app.size gets populated
+    // but the actual file data is not actually read. we need the size to check the C6 firmware
+    // md5 hash. we lazyload the actual C6 firmware blob on demand when there is a hash mismatch.
+    if (!read_file_size("FLASH0:[firmware]network_adapter.bin", (void **)NULL, &bins->app.size, false)) {
         ESP_LOGE(TAG, "Failed to read network_adapter.bin");
         return false;
     }
 
-    if (!read_file_size("FLASH0:[firmware]network_adapter.bin.md5", (void**)(&bins->app.md5), NULL, true)) {
+
+    if (!read_file_size("FLASH0:[firmware]network_adapter.bin.md5", (void **)(&bins->app.md5), NULL, true)) {
         ESP_LOGE(TAG, "Failed to read network_adapter.bin.md5");
         return false;
     }
@@ -144,23 +151,40 @@ bool get_why2025_binaries(why2025_binaries_t *bins)
     return true;
 }
 
+bool get_why2025_network_adapter_binary(why2025_binaries_t *bins) {
+    if (!read_file_size("FLASH0:[firmware]network_adapter.bin", (void **)(&bins->app.data), &bins->app.size, false)) {
+        ESP_LOGE(TAG, "Failed to read network_adapter.bin");
+        return false;
+    }
+
+    return true;
+}
+
 void free_why2025_binaries(why2025_binaries_t *bins) {
-    heap_caps_free((void*)bins->boot.data);
-    heap_caps_free((void*)bins->part.data);
-    heap_caps_free((void*)bins->app.data);
-    heap_caps_free((void*)bins->boot.md5);
-    heap_caps_free((void*)bins->part.md5);
-    heap_caps_free((void*)bins->app.md5);
+    heap_caps_free((void *)bins->boot.data);
+    heap_caps_free((void *)bins->part.data);
+    if (bins->app.data) {
+        heap_caps_free((void *)bins->app.data);
+    }
+    heap_caps_free((void *)bins->boot.md5);
+    heap_caps_free((void *)bins->part.md5);
+    heap_caps_free((void *)bins->app.md5);
 }
 
 #endif
 
-static const char *get_error_string(const esp_loader_error_t error)
-{
-    const char *mapping[ESP_LOADER_ERROR_INVALID_RESPONSE + 1] = {
-        "NONE", "UNKNOWN", "TIMEOUT", "IMAGE SIZE",
-        "INVALID MD5", "INVALID PARAMETER", "INVALID TARGET",
-        "UNSUPPORTED CHIP", "UNSUPPORTED FUNCTION", "INVALID RESPONSE"
+static const char *get_error_string(const esp_loader_error_t error) {
+    char const *mapping[ESP_LOADER_ERROR_INVALID_RESPONSE + 1] = {
+        "NONE",
+        "UNKNOWN",
+        "TIMEOUT",
+        "IMAGE SIZE",
+        "INVALID MD5",
+        "INVALID PARAMETER",
+        "INVALID TARGET",
+        "UNSUPPORTED CHIP",
+        "UNSUPPORTED FUNCTION",
+        "INVALID RESPONSE"
     };
 
     assert(error <= ESP_LOADER_ERROR_INVALID_RESPONSE);
@@ -168,8 +192,7 @@ static const char *get_error_string(const esp_loader_error_t error)
     return mapping[error];
 }
 
-esp_loader_error_t connect_to_target(uint32_t higher_transmission_rate)
-{
+esp_loader_error_t connect_to_target(uint32_t higher_transmission_rate) {
     esp_loader_connect_args_t connect_config = ESP_LOADER_CONNECT_DEFAULT();
 
     esp_loader_error_t err = esp_loader_connect(&connect_config);
@@ -212,9 +235,8 @@ esp_loader_error_t connect_to_target(uint32_t higher_transmission_rate)
 }
 
 #if (defined SERIAL_FLASHER_INTERFACE_UART) || (defined SERIAL_FLASHER_INTERFACE_USB)
-esp_loader_error_t connect_to_target_with_stub(const uint32_t current_transmission_rate,
-        const uint32_t higher_transmission_rate)
-{
+esp_loader_error_t
+    connect_to_target_with_stub(const uint32_t current_transmission_rate, const uint32_t higher_transmission_rate) {
     esp_loader_connect_args_t connect_config = ESP_LOADER_CONNECT_DEFAULT();
 
     esp_loader_error_t err = esp_loader_connect_with_stub(&connect_config);
@@ -234,8 +256,7 @@ esp_loader_error_t connect_to_target_with_stub(const uint32_t current_transmissi
     printf("Connected to target\n");
 
     if (higher_transmission_rate != current_transmission_rate) {
-        err = esp_loader_change_transmission_rate_stub(current_transmission_rate,
-                higher_transmission_rate);
+        err = esp_loader_change_transmission_rate_stub(current_transmission_rate, higher_transmission_rate);
 
         if (err == ESP_LOADER_ERROR_UNSUPPORTED_FUNC) {
             printf("ESP8266 does not support change transmission rate command.");
@@ -258,11 +279,10 @@ esp_loader_error_t connect_to_target_with_stub(const uint32_t current_transmissi
 #endif /* SERIAL_FLASHER_INTERFACE_UART || SERIAL_FLASHER_INTERFACE_USB */
 
 #ifndef SERIAL_FLASHER_INTERFACE_SPI
-esp_loader_error_t flash_binary(const uint8_t *bin, size_t size, size_t address)
-{
+esp_loader_error_t flash_binary(const uint8_t *bin, size_t size, size_t address) {
     esp_loader_error_t err;
-    static uint8_t payload[1024];
-    const uint8_t *bin_addr = bin;
+    static uint8_t     payload[1024];
+    uint8_t const     *bin_addr = bin;
 
     printf("Erasing flash (this may take a while)...\n");
     err = esp_loader_flash_start(address, size, sizeof(payload));
@@ -270,15 +290,17 @@ esp_loader_error_t flash_binary(const uint8_t *bin, size_t size, size_t address)
         printf("Erasing flash failed with error: %s.\n", get_error_string(err));
 
         if (err == ESP_LOADER_ERROR_INVALID_PARAM) {
-            printf("If using Secure Download Mode, double check that the specified "
-                   "target flash size is correct.\n");
+            printf(
+                "If using Secure Download Mode, double check that the specified "
+                "target flash size is correct.\n"
+            );
         }
         return err;
     }
     printf("Start programming\n");
 
     size_t binary_size = size;
-    size_t written = 0;
+    size_t written     = 0;
 
     while (size > 0) {
         size_t to_read = MIN(size, sizeof(payload));
@@ -290,9 +312,9 @@ esp_loader_error_t flash_binary(const uint8_t *bin, size_t size, size_t address)
             return err;
         }
 
-        size -= to_read;
+        size     -= to_read;
         bin_addr += to_read;
-        written += to_read;
+        written  += to_read;
 
         int progress = (int)(((float)written / binary_size) * 100);
         printf("\rProgress: %d %%", progress);
@@ -316,30 +338,27 @@ esp_loader_error_t flash_binary(const uint8_t *bin, size_t size, size_t address)
 }
 #endif /* SERIAL_FLASHER_INTERFACE_SPI */
 
-esp_loader_error_t load_ram_binary(const uint8_t *bin)
-{
+esp_loader_error_t load_ram_binary(const uint8_t *bin) {
     printf("Start loading\n");
-    esp_loader_error_t err;
-    const esp_loader_bin_header_t *header = (const esp_loader_bin_header_t *)bin;
-    esp_loader_bin_segment_t segments[header->segments];
+    esp_loader_error_t             err;
+    esp_loader_bin_header_t const *header = (esp_loader_bin_header_t const *)bin;
+    esp_loader_bin_segment_t       segments[header->segments];
 
     // Parse segments
-    uint32_t seg;
+    uint32_t  seg;
     uint32_t *cur_seg_pos;
     // ESP8266 does not have extended header
-    uint32_t offset = esp_loader_get_target() == ESP8266_CHIP ? BIN_HEADER_SIZE : BIN_HEADER_EXT_SIZE;
-    for (seg = 0, cur_seg_pos = (uint32_t *)(&bin[offset]);
-            seg < header->segments;
-            seg++) {
-        segments[seg].addr = *cur_seg_pos++;
-        segments[seg].size = *cur_seg_pos++;
-        segments[seg].data = (uint8_t *)cur_seg_pos;
-        cur_seg_pos += (segments[seg].size) / 4;
+    uint32_t  offset = esp_loader_get_target() == ESP8266_CHIP ? BIN_HEADER_SIZE : BIN_HEADER_EXT_SIZE;
+    for (seg = 0, cur_seg_pos = (uint32_t *)(&bin[offset]); seg < header->segments; seg++) {
+        segments[seg].addr  = *cur_seg_pos++;
+        segments[seg].size  = *cur_seg_pos++;
+        segments[seg].data  = (uint8_t *)cur_seg_pos;
+        cur_seg_pos        += (segments[seg].size) / 4;
     }
 
     // Download segments
     for (seg = 0; seg < header->segments; seg++) {
-        printf("Downloading %"PRIu32" bytes at 0x%08"PRIx32"...\n", segments[seg].size, segments[seg].addr);
+        printf("Downloading %" PRIu32 " bytes at 0x%08" PRIx32 "...\n", segments[seg].size, segments[seg].addr);
 
         err = esp_loader_mem_start(segments[seg].addr, segments[seg].size, ESP_RAM_BLOCK);
         if (err != ESP_LOADER_SUCCESS) {
@@ -351,16 +370,16 @@ esp_loader_error_t load_ram_binary(const uint8_t *bin)
             return err;
         }
 
-        size_t remain_size = segments[seg].size;
-        const uint8_t *data_pos = segments[seg].data;
+        size_t         remain_size = segments[seg].size;
+        uint8_t const *data_pos    = segments[seg].data;
         while (remain_size > 0) {
             size_t data_size = MIN(ESP_RAM_BLOCK, remain_size);
-            err = esp_loader_mem_write(data_pos, data_size);
+            err              = esp_loader_mem_write(data_pos, data_size);
             if (err != ESP_LOADER_SUCCESS) {
                 printf("\nPacket could not be written! Error: %s.\n", get_error_string(err));
                 return err;
             }
-            data_pos += data_size;
+            data_pos    += data_size;
             remain_size -= data_size;
         }
     }

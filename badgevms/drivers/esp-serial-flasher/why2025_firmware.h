@@ -15,20 +15,27 @@
 
 #pragma once
 
+
+#include "esp_loader.h"
+
+#include <stdbool.h>
+#include <stddef.h>
+#include <stdint.h>
+
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-#define BIN_HEADER_SIZE    0x8
+#define BIN_HEADER_SIZE     0x8
 #define BIN_HEADER_EXT_SIZE 0x18
 // Maximum block sized for RAM and Flash writes, respectively.
-#define ESP_RAM_BLOCK               0x1800
+#define ESP_RAM_BLOCK       0x1800
 
 typedef struct {
-    const uint8_t *data;
-    uint32_t size;
-    uint32_t addr;
-    const uint8_t *md5;
+    uint8_t const *data;
+    uint32_t       size;
+    uint32_t       addr;
+    uint8_t const *md5;
 } partition_attr_t;
 
 typedef struct {
@@ -45,10 +52,10 @@ typedef struct {
  * @brief esptool portable bin header format
  */
 typedef struct why2025_bin_header {
-    uint8_t magic;
-    uint8_t segments;
-    uint8_t flash_mode;
-    uint8_t flash_size_freq;
+    uint8_t  magic;
+    uint8_t  segments;
+    uint8_t  flash_mode;
+    uint8_t  flash_size_freq;
     uint32_t entrypoint;
 } why2025_bin_header_t;
 
@@ -63,13 +70,13 @@ typedef struct why2025_bin_segment {
 
 
 bool get_why2025_binaries(why2025_binaries_t *binaries);
+bool get_why2025_network_adapter_binary(why2025_binaries_t *bins);
 void free_why2025_binaries(why2025_binaries_t *bins);
 
 esp_loader_error_t connect_to_target(uint32_t higher_transmission_rate);
-esp_loader_error_t connect_to_target_with_stub(uint32_t current_transmission_rate,
-        uint32_t higher_transmission_rate);
-esp_loader_error_t flash_binary(const uint8_t *bin, size_t size, size_t address);
-esp_loader_error_t load_ram_binary(const uint8_t *bin);
+esp_loader_error_t connect_to_target_with_stub(uint32_t current_transmission_rate, uint32_t higher_transmission_rate);
+esp_loader_error_t flash_binary(uint8_t const *bin, size_t size, size_t address);
+esp_loader_error_t load_ram_binary(uint8_t const *bin);
 
 
 #ifdef __cplusplus
