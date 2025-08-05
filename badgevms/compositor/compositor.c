@@ -137,6 +137,11 @@ __attribute__((always_inline)) static inline void push_window(window_t *window) 
 }
 
 __attribute__((always_inline)) static inline void remove_window(window_t *window) {
+    // If we were forcibly removed we won't be in the list
+    if (!window->prev || !window->next) {
+        return;
+    }
+
     // We are the only window
     if (window->prev == window) {
         window_stack = NULL;
@@ -516,7 +521,13 @@ static void IRAM_ATTR NOINLINE_ATTR compositor(void *ignored) {
                                 visible_regions_valid  = false;
                                 break;
                             case KEY_SCANCODE_CROSS:
-                                task_info_t *task_info = window_stack->task_info;
+                                window_t    *window    = window_stack;
+                                task_info_t *task_info = window->task_info;
+                                remove_window(window);
+                                // So we don't end up deleting this window twice
+                                window->next = NULL;
+                                window->prev = NULL;
+
                                 vTaskDelete(task_info->handle);
                                 xSemaphoreGive(window_stack_lock);
                                 continue;
