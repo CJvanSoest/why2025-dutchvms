@@ -27,6 +27,7 @@
 #include "drivers/badgevms_i2c_bus.h"
 #include "drivers/bosch_bmi270.h"
 #include "drivers/fatfs.h"
+#include "drivers/socket.h"
 #include "drivers/st7703.h"
 #include "drivers/tca8418.h"
 #include "drivers/tty.h"
@@ -99,6 +100,8 @@ int app_main(void) {
 
     compositor_init("PANEL0", "KEYBOARD0");
     device_register("SD0", fatfs_create_sd("SD0", true));
+
+    device_register("SOCKET0", socket_create());
 
     logical_name_set("SEARCH", "FLASH0:[SUBDIR], FLASH0:[SUBDIR.ANOTHER]", false);
 

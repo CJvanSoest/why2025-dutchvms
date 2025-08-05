@@ -31,14 +31,10 @@ typedef enum {
     DEVICE_TYPE_BUS,
     DEVICE_TYPE_WIFI,
     DEVICE_TYPE_ORIENTATION,
+    DEVICE_TYPE_SOCKET,
 } device_type_t;
 
-typedef enum {
-    ORIENTATION_0,
-    ORIENTATION_90,
-    ORIENTATION_180,
-    ORIENTATION_270
-} orientation_t;
+typedef enum { ORIENTATION_0, ORIENTATION_90, ORIENTATION_180, ORIENTATION_270 } orientation_t;
 
 typedef struct device {
     device_type_t type;
@@ -79,6 +75,10 @@ typedef struct {
 typedef struct {
     device_t device;
 } wifi_device_t;
+
+typedef struct {
+    device_t device;
+} socket_device_t;
 
 typedef struct {
     device_t device;

@@ -235,6 +235,11 @@ char *why_strndup(char const *s, size_t n) {
 
 IRAM_ATTR
 ssize_t why_write(int fd, void const *buf, size_t count) {
+    if (fd < 0 || fd >= MAXFD || !get_task_info()->thread->file_handles[fd].is_open) {
+        get_task_info()->_errno = EBADF;
+        return -1;
+    }
+
     task_info_t *task_info = get_task_info();
     ESP_LOGD("why_write", "Calling write from task %p fd = %i count = %zi", task_info->handle, fd, count);
     if (task_info->thread->file_handles[fd].device->_write) {
@@ -252,6 +257,11 @@ ssize_t why_write(int fd, void const *buf, size_t count) {
 
 IRAM_ATTR
 ssize_t why_read(int fd, void *buf, size_t count) {
+    if (fd < 0 || fd >= MAXFD || !get_task_info()->thread->file_handles[fd].is_open) {
+        get_task_info()->_errno = EBADF;
+        return -1;
+    }
+
     task_info_t *task_info = get_task_info();
     ESP_LOGI("why_read", "Calling read from task %p fd = %i count = %zi", task_info->handle, fd, count);
     if (task_info->thread->file_handles[fd].device->_read) {
@@ -315,6 +325,149 @@ out:
     path_free(&parsed_path);
     return dev_fd;
 }
+
+int why_socket(int domain, int type, int protocol) {
+    task_info_t *task_info = get_task_info();
+    ESP_LOGW("why_socket", "Calling socket from task %p", task_info->handle);
+
+    if (domain != AF_INET || type != SOCK_STREAM || protocol != 0) {
+        task_info->_errno = EAFNOSUPPORT;
+        return -1;
+    }
+
+    device_t *dev = device_get("SOCKET0");
+    if (!dev) {
+        task_info->_errno = ENODEV;
+        return -1;
+    }
+
+    int fd = -1;
+
+    for (int i = 0; i < MAXFD; ++i) {
+        if (task_info->thread->file_handles[i].is_open == false) {
+            fd = i;
+            break;
+        }
+    }
+
+    if (fd == -1) {
+        task_info->_errno = ENOMEM;
+        return -1;
+    }
+
+
+    int dev_fd = socket(domain, type, protocol);
+    if (dev_fd < 0) {
+        task_info->_errno = ENOMEM;
+        return -1;
+    }
+
+    ESP_LOGW("why_socket", "Got device specific fd %i for task fd %i", dev_fd, fd);
+    task_info->thread->file_handles[fd].is_open = true;
+    task_info->thread->file_handles[fd].dev_fd  = dev_fd;
+    task_info->thread->file_handles[fd].device  = dev;
+
+    return fd;
+}
+
+static inline int _why_task_get_socket(int fd) {
+    task_info_t *task_info = get_task_info();
+    ESP_LOGW("why_open_socket", "Calling open socket from task %p fd %i", task_info->handle, fd);
+
+    if (fd < 0 || fd >= MAXFD || !task_info->thread->file_handles[fd].is_open) {
+        task_info->_errno = EBADF;
+        return -1;
+    }
+
+    if (!task_info->thread->file_handles[fd].device ||
+        task_info->thread->file_handles[fd].device->type != DEVICE_TYPE_SOCKET) {
+        task_info->_errno = ENOTSOCK;
+        return -1;
+    }
+
+    return task_info->thread->file_handles[fd].dev_fd;
+}
+
+int why_listen(int sockfd, int backlog) {
+    int sock = _why_task_get_socket(sockfd);
+
+    if (sock < 0) {
+        get_task_info()->_errno = EBADF;
+        return -1;
+    }
+
+    return listen(sock, backlog);
+}
+
+
+int why_connect(int sockfd, const struct sockaddr *addr, socklen_t addrlen) {
+    int sock = _why_task_get_socket(sockfd);
+
+    if (sock < 0) {
+        get_task_info()->_errno = EBADF;
+        return -1;
+    }
+
+    if (addr->sa_family != AF_INET) {
+        get_task_info()->_errno = EAFNOSUPPORT;
+        return -1;
+    }
+
+    struct sockaddr_in *addr_in = (struct sockaddr_in *)addr;
+    ESP_LOGI("why_connect", "Connecting to %s:%d", inet_ntoa(addr_in->sin_addr), ntohs(addr_in->sin_port));
+    return connect(sock, (struct sockaddr *)addr_in, addrlen);
+}
+
+int why_accept(int sockfd, struct sockaddr *addr, socklen_t *addrlen) {
+    int sock = _why_task_get_socket(sockfd);
+    if (sock < 0) {
+        get_task_info()->_errno = EBADF;
+        return -1;
+    }
+    ESP_LOGW("why_accept", "Accepting connection on socket %i", sockfd);
+    int newfd = accept(sock, addr, addrlen);
+
+    if (newfd < 0) {
+        get_task_info()->_errno = errno;
+        return -1;
+    }
+
+    task_info_t *task_info = get_task_info();
+    ESP_LOGW("why_accept", "Accepted connection on socket %i, new fd %i", sockfd, newfd);
+    for (int i = 0; i < MAXFD; ++i) {
+        if (task_info->thread->file_handles[i].is_open == false) {
+            task_info->thread->file_handles[i].is_open = true;
+            task_info->thread->file_handles[i].dev_fd  = newfd;
+            task_info->thread->file_handles[i].device  = task_info->thread->file_handles[sockfd].device;
+            ESP_LOGW("why_accept", "Assigned new fd %i to accepted socket %i", i, newfd);
+            return i;
+        }
+    }
+
+    ESP_LOGE("why_accept", "No free file handles available for new socket %i", newfd);
+    get_task_info()->_errno = EMFILE;
+    close(newfd);
+    return -1;
+}
+
+int why_bind(int sockfd, const struct sockaddr *addr, socklen_t addrlen) {
+    int sock = _why_task_get_socket(sockfd);
+    if (sock < 0) {
+        get_task_info()->_errno = EBADF;
+        return -1;
+    }
+
+    if (addr->sa_family != AF_INET) {
+        get_task_info()->_errno = EAFNOSUPPORT;
+        return -1;
+    }
+
+    struct sockaddr_in *addr_in = (struct sockaddr_in *)addr;
+    ESP_LOGI("why_bind", "Binding to %s:%d", inet_ntoa(addr_in->sin_addr), ntohs(addr_in->sin_port));
+    return bind(sock, (struct sockaddr *)addr_in, addrlen);
+}
+
+
 
 int why_open(char const *pathname, int flags, mode_t mode) {
     task_info_t *task_info = get_task_info();

@@ -1005,14 +1005,17 @@ simple_object:
 
 wrapped_function:
   - _Exit
+  - accept
   - asctime
   - asnprintf
   - asprintf
   - atexit
+  - bind
   - calloc
   - clearerr
   - clearerr_unlocked
   - close
+  - connect
   - ctime
   - die
   - exit
@@ -1055,6 +1058,7 @@ wrapped_function:
   - iconv_close
   - iconv_open
   - isatty
+  - listen
   - localtime
   - lseek
   - malloc
@@ -1088,6 +1092,7 @@ wrapped_function:
   - strndup
   - strtok
   - system
+  - socket
   - tcgetattr
   - tcsetattr
   - ungetc

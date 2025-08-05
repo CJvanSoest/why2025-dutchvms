@@ -16,6 +16,7 @@ idf_component_register(
      "drivers/tca8418.c"
      "drivers/tty.c"
      "drivers/wifi.c"
+     "drivers/socket.c"
      "init.c"
      "logical_names.c"
      "memory.c"
