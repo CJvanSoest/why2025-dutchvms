@@ -29,6 +29,10 @@ static khash_t(devtable) * device_table;
 static SemaphoreHandle_t device_table_lock = NULL;
 
 int device_register(char const *name, device_t *device) {
+    if (!device) {
+        return 1;
+    }
+
     if (xSemaphoreTake(device_table_lock, portMAX_DELAY) != pdTRUE) {
         ESP_LOGE(TAG, "Failed to get device table mutex");
         abort();
