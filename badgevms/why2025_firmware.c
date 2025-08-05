@@ -91,6 +91,7 @@ int app_main(void) {
     device_register("FLASH0", fatfs_create_spi("FLASH0", "storage", true));
     // Must come after FLASH0 as that is where the firmware is
     device_register("WIFI0", wifi_create());
+    device_register("SOCKET", socket_create());
 
     device_register("PANEL0", st7703_create());
     device_register("KEYBOARD0", tca8418_keyboard_create());
@@ -100,8 +101,6 @@ int app_main(void) {
 
     compositor_init("PANEL0", "KEYBOARD0");
     device_register("SD0", fatfs_create_sd("SD0", true));
-
-    device_register("SOCKET0", socket_create());
 
     logical_name_set("SEARCH", "FLASH0:[SUBDIR], FLASH0:[SUBDIR.ANOTHER]", false);
 
