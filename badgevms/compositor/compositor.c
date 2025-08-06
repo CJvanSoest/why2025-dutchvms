@@ -54,9 +54,9 @@ static window_t         *window_stack      = NULL;
 static SemaphoreHandle_t window_stack_lock = NULL;
 static QueueHandle_t     compositor_queue;
 
-static int        cur_fb = 1;
+static int        cur_fb = 0;
 static atomic_int cur_num_windows;
-static uint16_t  *framebuffers[3];
+static uint16_t  *framebuffers[DISPLAY_FRAMEBUFFERS];
 
 static int  background_damaged    = 7;
 static int  decoration_damaged    = 7;
@@ -341,18 +341,6 @@ static void framebuffer_swap(managed_framebuffer_t *fb_a, managed_framebuffer_t 
     framebuffer_map_pages(fb_b->head_pages, fb_b->tail_pages);
 }
 
-// We need to ensure that we don't interfere with task switching
-static void framebuffer_swap_on_other_core(void *arg) {
-    compositor_message_t *message = (compositor_message_t *)arg;
-    framebuffer_swap(message->fb_a, message->fb_b);
-    if (message->caller) {
-        if (eTaskGetState(message->caller) != eDeleted) {
-            xTaskNotifyGiveIndexed(message->caller, 0);
-        }
-    }
-    free(message);
-}
-
 framebuffer_t *framebuffer_allocate(uint32_t w, uint32_t h, pixel_format_t format) {
     // Don't use BADGEVMS_BYTESPERPIXEL here because we also want to
     // clamp the pixel formats we want to support here anyway
@@ -463,12 +451,19 @@ static void IRAM_ATTR NOINLINE_ATTR compositor(void *ignored) {
     ppa_register_client(&ppa_srm_config, &ppa_srm_handle);
     // ppa_client_register_event_callbacks(ppa_srm_handle, &srm_callbacks);
 
-    bool fn_down = false;
+    bool fn_down     = false;
+    bool frame_ready = false;
 
     while (1) {
         bool changes   = false;
         int  processed = 0;
         ulTaskNotifyTakeIndexed(0, pdTRUE, portMAX_DELAY);
+
+        if (frame_ready) {
+            lcd_device->_draw(lcd_device, 0, 0, FRAMEBUFFER_MAX_W, FRAMEBUFFER_MAX_H, framebuffers[cur_fb]);
+            cur_fb      = (cur_fb + 1) % DISPLAY_FRAMEBUFFERS;
+            frame_ready = false;
+        }
 
         if (xSemaphoreTake(window_stack_lock, portMAX_DELAY) != pdTRUE) {
             ESP_LOGE(TAG, "Failed to get window list mutex");
@@ -478,7 +473,6 @@ static void IRAM_ATTR NOINLINE_ATTR compositor(void *ignored) {
         compositor_message_t message;
 
         while (xQueueReceive(compositor_queue, &message, 0) == pdTRUE) {
-            bool skip_call = false;
             ++processed;
             switch (message.command) {
                 case WINDOW_CREATE:
@@ -522,20 +516,12 @@ static void IRAM_ATTR NOINLINE_ATTR compositor(void *ignored) {
                     message.window->flags = message.flags;
                     mark_scene_damaged();
                     break;
-                case FRAMEBUFFER_SWAP:
-                    // compositor_message_t *m = malloc(sizeof(compositor_message_t));
-                    // Freed by IPC thread
-                    // memcpy(m, &message, sizeof(compositor_message_t));
-                    framebuffer_swap(message.fb_a, message.fb_b);
-                    // esp_ipc_call(1, &framebuffer_swap_on_other_core, m);
-                    //  The other core will answer
-                    //  skip_call = true;
-                    break;
+                case FRAMEBUFFER_SWAP: framebuffer_swap(message.fb_a, message.fb_b); break;
                 default: ESP_LOGE(TAG, "Unknown command %u", message.command);
             }
 
 
-            if (message.caller && !skip_call) {
+            if (message.caller) {
                 if (eTaskGetState(message.caller) != eDeleted) {
                     xTaskNotifyGiveIndexed(message.caller, 0);
                 }
@@ -789,8 +775,7 @@ static void IRAM_ATTR NOINLINE_ATTR compositor(void *ignored) {
         xSemaphoreGive(window_stack_lock);
 
         if (changes) {
-            lcd_device->_draw(lcd_device, 0, 0, FRAMEBUFFER_MAX_W, FRAMEBUFFER_MAX_H, framebuffers[cur_fb]);
-            cur_fb = (cur_fb + 1) % 3;
+            frame_ready = true;
         }
     }
 }
@@ -1128,21 +1113,15 @@ void compositor_init(char const *lcd_device_name, char const *keyboard_device_na
         // return;
     }
 
-    lcd_device->_getfb(lcd_device, 0, (void *)&framebuffers[0]);
-    lcd_device->_getfb(lcd_device, 1, (void *)&framebuffers[1]);
-    lcd_device->_getfb(lcd_device, 2, (void *)&framebuffers[2]);
+    for (int i = 0; i < DISPLAY_FRAMEBUFFERS; ++i) {
+        lcd_device->_getfb(lcd_device, i, (void *)&framebuffers[i]);
+        memset(framebuffers[i], 0xaa, FRAMEBUFFER_BYTES);
+        esp_cache_msync(framebuffers[i], FRAMEBUFFER_BYTES, ESP_CACHE_MSYNC_FLAG_DIR_C2M);
+        ESP_LOGW(TAG, "Got framebuffer[%i]: %p", i, framebuffers[i]);
+    }
 
-    memset(framebuffers[0], 0xaa, FRAMEBUFFER_BYTES);
-    memset(framebuffers[1], 0xaa, FRAMEBUFFER_BYTES);
-    memset(framebuffers[2], 0xaa, FRAMEBUFFER_BYTES);
+    cur_fb = (cur_fb + 1) % DISPLAY_FRAMEBUFFERS;
 
-    esp_cache_msync(framebuffers[0], FRAMEBUFFER_BYTES, ESP_CACHE_MSYNC_FLAG_DIR_C2M);
-    esp_cache_msync(framebuffers[1], FRAMEBUFFER_BYTES, ESP_CACHE_MSYNC_FLAG_DIR_C2M);
-    esp_cache_msync(framebuffers[2], FRAMEBUFFER_BYTES, ESP_CACHE_MSYNC_FLAG_DIR_C2M);
-
-    cur_fb = 1;
-
-    ESP_LOGW(TAG, "Got framebuffers 0: %p, 1: %p, 2: %p", framebuffers[0], framebuffers[1], framebuffers[2]);
     lcd_device->_set_refresh_cb(lcd_device, NULL, on_refresh);
 
     compositor_queue  = xQueueCreate(10, sizeof(compositor_message_t));

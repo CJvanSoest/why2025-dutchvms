@@ -152,18 +152,32 @@ void draw(void *dev, int x, int y, int w, int h, void *pixels) {
 }
 
 void get_framebuffer(void *dev, int num, void **pixels) {
-    void            *fb0;
-    void            *fb1;
-    void            *fb2;
+    void *fb0;
+#if DISPLAY_FRAMEBUFFERS > 1
+    void *fb1;
+#endif
+#if DISPLAY_FRAMEBUFFERS > 2
+    void *fb2;
+#endif
     st7703_device_t *device = dev;
-    esp_lcd_dpi_panel_get_frame_buffer(device->disp_panel, 3, &fb0, &fb1, &fb2);
+#if DISPLAY_FRAMEBUFFERS == 1
+    esp_lcd_dpi_panel_get_frame_buffer(device->disp_panel, DISPLAY_FRAMEBUFFERS, &fb0);
+#elif DISPLAY_FRAMEBUFFERS == 2
+    esp_lcd_dpi_panel_get_frame_buffer(device->disp_panel, DISPLAY_FRAMEBUFFERS, &fb0, &fb1);
+#elif DISPLAY_FRAMEBUFFERS == 3
+    esp_lcd_dpi_panel_get_frame_buffer(device->disp_panel, DISPLAY_FRAMEBUFFERS, &fb0, &fb1, &fb2);
+#endif
 
     if (num == 0)
         *pixels = fb0;
+#if DISPLAY_FRAMEBUFFERS > 1
     if (num == 1)
         *pixels = fb1;
+#endif
+#if DISPLAY_FRAMEBUFFERS > 2
     if (num == 2)
         *pixels = fb2;
+#endif
 }
 
 void set_refresh_cb(void *dev, void *user_data, void (*callback)(void *user_data)) {

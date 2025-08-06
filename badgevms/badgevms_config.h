@@ -28,3 +28,5 @@
 
 // Maximum windows allowed on the screen
 #define MAX_WINDOWS 10
+
+#define DISPLAY_FRAMEBUFFERS 3
