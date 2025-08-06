@@ -16,6 +16,6 @@
 
 #pragma once
 
-#include "pathfuncs.h"
+#include "badgevms/pathfuncs.h"
 
-char *path_to_unix(path_t &path);
+char *path_to_unix(path_t *path);

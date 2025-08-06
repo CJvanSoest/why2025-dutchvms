@@ -20,6 +20,7 @@
 #include "esp_vfs.h"
 #include "esp_vfs_fat.h"
 #include "freertos/FreeRTOS.h"
+#include "pathfuncs_private.h"
 #include "sd_test_io.h"
 #include "sdkconfig.h"
 #include "sdmmc_cmd.h"
