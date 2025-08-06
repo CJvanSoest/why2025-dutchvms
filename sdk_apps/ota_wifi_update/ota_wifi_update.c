@@ -2,7 +2,7 @@
 #include "badgevms/compositor.h"
 #include "badgevms/framebuffer.h"
 #include "badgevms/ota.h"
-#include "badgevms/thread.h"
+#include "badgevms/process.h"
 #include "badgevms/wifi.h"
 #include "curl/curl.h"
 #include "thirdparty/microui.h"
@@ -593,9 +593,9 @@ void render_ui(app_state_t *app) {
 int main() {
     app_state_t app = {0};
 
-    app.window = window_create("OTA update", (window_size_t){720, 720}, WINDOW_FLAG_FULLSCREEN);
-    int fb_num;
-    app.fb = window_framebuffer_allocate(app.window, BADGEVMS_PIXELFORMAT_RGB565, (window_size_t){720, 720}, &fb_num);
+    app.window = window_create("OTA update", (window_size_t){720, 720}, WINDOW_FLAG_DOUBLE_BUFFERED);
+    //int fb_num;
+    app.fb = window_framebuffer_create(app.window, (window_size_t){720, 720}, BADGEVMS_PIXELFORMAT_RGB565);
 
     app.ctx = malloc(sizeof(mu_Context));
     mu_init(app.ctx);
@@ -611,7 +611,7 @@ int main() {
     memset(app.fb->pixels, 0x55, 720 * 720 * 2);
 
     render_ui(&app);
-    window_framebuffer_update(app.window, fb_num, true, NULL, 0);
+    window_present(app.window, true, NULL, 0);
 
     pid_t check_thread = thread_create(setup_wifi, &app, 4096);
     atomic_store(&app.thread_running, true);
@@ -643,7 +643,7 @@ int main() {
         static uint64_t frame_counter = 0;
         frame_counter++;
 
-        window_framebuffer_update(app.window, fb_num, true, NULL, 0);
+        window_present(app.window, true, NULL, 0);
     }
 
     window_destroy(app.window);
