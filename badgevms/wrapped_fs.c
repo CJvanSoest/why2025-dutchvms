@@ -25,15 +25,15 @@
 #include <sys/stat.h>
 #include <sys/types.h>
 
-#define kcalloc(N,Z) why_calloc(N,Z)
-#define kmalloc(Z) why_malloc(Z)
-#define krealloc(P,Z) why_realloc(P,Z)
-#define kfree(P) why_free(P)
+#define kcalloc(N, Z)  why_calloc(N, Z)
+#define kmalloc(Z)     why_malloc(Z)
+#define krealloc(P, Z) why_realloc(P, Z)
+#define kfree(P)       why_free(P)
 
 #include "thirdparty/khash.h"
 
 KHASH_SET_INIT_STR(seen);
-typedef khash_t(seen) *seen_names_t;
+typedef khash_t(seen) * seen_names_t;
 
 typedef int (*fs_operation_func)(filesystem_device_t *fs_dev, path_t *path, void *extra_data);
 typedef int (*why_helper_func)(char const *resolved_path, void *extra_data);
@@ -343,23 +343,24 @@ static void seen_names_init(seen_names_t *seen) {
     *seen = kh_init(seen);
 }
 
-static bool seen_names_contains(seen_names_t seen, const char *name) {
+static bool seen_names_contains(seen_names_t seen, char const *name) {
     khiter_t k = kh_get(seen, seen, name);
     return (k != kh_end(seen));
 }
 
-static bool seen_names_add(seen_names_t seen, const char *name) {
+static bool seen_names_add(seen_names_t seen, char const *name) {
     if (seen_names_contains(seen, name)) {
         return false; // Already seen (shadowed)
     }
 
-    int ret;
+    int   ret;
     char *name_copy = why_strdup(name);
-    if (!name_copy) return false;
+    if (!name_copy)
+        return false;
 
     kh_put(seen, seen, name_copy, &ret);
     if (ret < 0) {
-        why_free(name_copy);  // Put failed
+        why_free(name_copy); // Put failed
         return false;
     }
     return true;
@@ -370,7 +371,7 @@ static void seen_names_cleanup(seen_names_t seen) {
     // Free all the strdup'd keys
     for (k = kh_begin(seen); k != kh_end(seen); ++k) {
         if (kh_exist(seen, k)) {
-            why_free((void*)kh_key(seen, k));
+            why_free((void *)kh_key(seen, k));
         }
     }
     kh_destroy(seen, seen);
@@ -436,7 +437,6 @@ static bool read_directory_location(char const *resolved_path, why_dir_t *merged
     }
 
     struct dirent *entry;
-    bool           found_any = false;
     while ((entry = fs_device->_readdir(fs_device, device_dir)) != NULL) {
         if (strcmp(entry->d_name, ".") == 0 || strcmp(entry->d_name, "..") == 0) {
             continue;
@@ -446,7 +446,6 @@ static bool read_directory_location(char const *resolved_path, why_dir_t *merged
             why_dirent_entry_t *new_entry = create_dirent_entry(entry, entry->d_name);
             if (new_entry) {
                 add_entry_to_list(merged_dir, new_entry);
-                found_any = true;
             }
         }
     }
@@ -454,7 +453,7 @@ static bool read_directory_location(char const *resolved_path, why_dir_t *merged
     fs_device->_closedir(fs_device, device_dir);
     path_free(&parsed_path);
 
-    return found_any;
+    return true;
 }
 
 DIR *why_opendir(char const *name) {

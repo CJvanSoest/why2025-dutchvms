@@ -30,6 +30,7 @@ include:
   - wctype.h
 
   # BadgeVMS
+  - badgevms/application.h
   - badgevms/compositor.h
   - badgevms/device.h
   - badgevms/event.h
@@ -888,16 +889,40 @@ simple_function:
   - ynf
 
 # BadgeVMS
+  - application_create
+  - application_create_file
+  - application_destroy
+  - application_free
+  - application_get
+  - application_launch
+  - application_list
+  - application_list_close
+  - application_list_get_next
+  - application_set_author
+  - application_set_binary_path
+  - application_set_interpreter
+  - application_set_metadata
+  - application_set_version
   - device_get
   - get_screen_info
   - get_unique_id
+  - mkdir_p
   - ota_get_invalid_version
   - ota_get_running_version
   - ota_session_abort
   - ota_session_commit
   - ota_session_open
   - ota_write
+  - parse_path
+  - path_basename
+  - path_concat
+  - path_devname
+  - path_dirconcat
+  - path_dirname
+  - path_fileconcat
+  - path_free
   - process_create
+  - rm_rf
   - thread_create
   - vaddr_to_paddr
   - wait

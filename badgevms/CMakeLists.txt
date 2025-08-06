@@ -25,6 +25,7 @@ idf_component_register(
      "ota.c"
      "pathfuncs.c"
      "task.c"
+     "thirdparty/cJSON.c"
      "thirdparty/dlmalloc.c"
      "thirdparty/tomlc17.c"
      "user_event.c"

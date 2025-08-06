@@ -20,6 +20,7 @@
 #error "BadgeVMS requires esp-idf 5.50 (or maybe later, who knows)"
 #endif
 
+#include "application_private.h"
 #include "badgevms/device.h"
 #include "badgevms/process.h"
 #include "compositor/compositor_private.h"
@@ -105,9 +106,13 @@ int app_main(void) {
     logical_name_set("SEARCH", "FLASH0:[SUBDIR], FLASH0:[SUBDIR.ANOTHER]", false);
 
     if (device_get("SD0")) {
-        logical_name_set("STORAGE", "SD0:, FLASH0", false);
+        logical_name_set("STORAGE:", "SD0:, FLASH0:", false);
+        logical_name_set("APPS:", "SD0:[BADGEVMS.APPS], FLASH0:[BADGEVMS.APPS]", false);
+        application_init("APPS:", "SD0:[BADGEVMS.APPS]", "FLASH0:[BADGEVMS.APPS]");
     } else {
-        logical_name_set("STORAGE", "FLASH0", false);
+        logical_name_set("STORAGE:", "FLASH0:", false);
+        logical_name_set("APPS:", "FLASH0:[BADGEVMS.APPS]", false);
+        application_init("APPS:", NULL, "FLASH0:[BADGEVMS.APPS]");
     }
 
     validate_ota_partition();

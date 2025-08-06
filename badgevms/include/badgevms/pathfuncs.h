@@ -42,3 +42,11 @@ typedef enum {
 
 path_parse_result_t parse_path(char const *path, path_t *result);
 void                path_free(path_t *path);
+bool                mkdir_p(char const *path);
+bool                rm_rf(char const *path);
+char               *path_dirname(char const *path);
+char               *path_basename(char const *path);
+char               *path_devname(char const *path);
+char               *path_dirconcat(char const *path, char const *subdir);
+char               *path_fileconcat(char const *path, char const *filename);
+char               *path_concat(char const *base_path, char const *append_path);

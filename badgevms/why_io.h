@@ -18,6 +18,7 @@
 
 #include <stdio.h>
 
+#include <dirent.h>
 #include <fcntl.h>
 #include <unistd.h>
 
@@ -72,3 +73,15 @@ int    why_fsetpos(FILE *stream, fpos_t const *pos);
 void why_clearerr(FILE *stream);
 int  why_feof(FILE *stream);
 int  why_ferror(FILE *stream);
+
+int            why_stat(char const *restrict pathname, struct stat *restrict statbuf);
+int            why_unlink(char const *pathname);
+int            why_mkdir(char const *pathname, mode_t mode);
+int            why_rmdir(char const *pathname);
+int            why_fstat(int fd, struct stat *restrict statbuf);
+int            why_rename(char const *oldpath, char const *newpath);
+int            why_remove(char const *pathname);
+DIR           *why_opendir(char const *name);
+struct dirent *why_readdir(DIR *dirp);
+int            why_closedir(DIR *dirp);
+void           why_rewinddir(DIR *dirp);
