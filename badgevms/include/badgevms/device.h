@@ -22,6 +22,8 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#include <dirent.h>
+#include <sys/stat.h>
 #include <sys/types.h>
 
 typedef enum {
@@ -32,6 +34,7 @@ typedef enum {
     DEVICE_TYPE_WIFI,
     DEVICE_TYPE_ORIENTATION,
     DEVICE_TYPE_SOCKET,
+    DEVICE_TYPE_FILESYSTEM,
 } device_type_t;
 
 typedef enum { ORIENTATION_0, ORIENTATION_90, ORIENTATION_180, ORIENTATION_270 } orientation_t;
@@ -45,6 +48,19 @@ typedef struct device {
     ssize_t (*_lseek)(void *dev, int fd, off_t offset, int whence);
     void (*_destroy)(void *dev);
 } device_t;
+
+typedef struct filesystem {
+    device_t device;
+    int (*_stat)(void *dev, path_t *path, struct stat *restrict statbuf);
+    int (*_fstat)(void *dev, int fd, struct stat *restrict statbuf);
+    int (*_unlink)(void *dev, path_t *path);
+    int (*_rename)(void *dev, path_t *oldpath, path_t *newpath);
+    int (*_mkdir)(void *dev, path_t *path, mode_t mode);
+    int (*_rmdir)(void *dev, path_t *path);
+    DIR *(*_opendir)(void *dev, path_t *path);
+    struct dirent *(*_readdir)(void *dev, DIR *dirp);
+    int (*_closedir)(void *dev, DIR *dirp);
+} filesystem_device_t;
 
 typedef struct lcd_device {
     device_t device;

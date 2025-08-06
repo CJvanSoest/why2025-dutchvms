@@ -35,6 +35,9 @@
 #include <regex.h>
 #include <string.h>
 
+KHASH_MAP_INIT_INT(ptable, void *);
+KHASH_MAP_INIT_INT(restable, int);
+
 static void const *__keep_symbol_elf __attribute__((used)) = &elf_find_sym;
 
 extern void writeback_and_invalidate_task(task_info_t *task_info);

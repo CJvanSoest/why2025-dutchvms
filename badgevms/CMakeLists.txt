@@ -1,6 +1,7 @@
 idf_component_register(
     SRCS
      ${CMAKE_CURRENT_BINARY_DIR}/generated_symbols.c
+     "application.c"
      "buddy_alloc.c"
      "compositor/compositor.c"
      "compositor/pixel_functions.c"
@@ -12,11 +13,11 @@ idf_component_register(
      "drivers/esp-serial-flasher/slave_c6_flasher.c"
      "drivers/esp-serial-flasher/why2025_firmware.c"
      "drivers/fatfs.c"
+     "drivers/socket.c"
      "drivers/st7703.c"
      "drivers/tca8418.c"
      "drivers/tty.c"
      "drivers/wifi.c"
-     "drivers/socket.c"
      "init.c"
      "logical_names.c"
      "memory.c"
@@ -29,6 +30,7 @@ idf_component_register(
      "user_event.c"
      "why2025_firmware.c"
      "wrapped_funcs.c"
+     "wrapped_fs.c"
     INCLUDE_DIRS
      ${CMAKE_CURRENT_SOURCE_DIR}/
      ${CMAKE_CURRENT_SOURCE_DIR}/include

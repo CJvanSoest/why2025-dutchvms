@@ -21,15 +21,11 @@
 #include "freertos/task.h"
 #include "memory.h"
 #include "thirdparty/dlmalloc.h"
-#include "thirdparty/khash.h"
 
 #include <stdatomic.h>
 #include <stdbool.h>
 
 #include <time.h> // For task_info_t
-
-KHASH_MAP_INIT_INT(ptable, void *);
-KHASH_MAP_INIT_INT(restable, int);
 
 #define MAXFD           128
 #define STRERROR_BUFLEN 128
@@ -39,6 +35,8 @@ KHASH_MAP_INIT_INT(restable, int);
 
 #define TASK_PRIORITY            5
 #define TASK_PRIORITY_FOREGROUND 6
+
+typedef struct kh_restable_s kh_restable_t;
 
 typedef enum {
     RES_ICONV_OPEN,
@@ -75,7 +73,7 @@ typedef struct {
     file_handle_t        file_handles[MAXFD];
     struct malloc_state  malloc_state;
     struct malloc_params malloc_params;
-    khash_t(restable) * resources[RES_RESOURCE_TYPE_MAX];
+    kh_restable_t       *resources[RES_RESOURCE_TYPE_MAX];
 } task_thread_t;
 
 typedef struct task_info {

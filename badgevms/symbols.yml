@@ -1006,6 +1006,7 @@ simple_object:
 
 wrapped_function:
   - _Exit
+  - abort
   - accept
   - asctime
   - asnprintf
@@ -1016,6 +1017,7 @@ wrapped_function:
   - clearerr
   - clearerr_unlocked
   - close
+  - closedir
   - connect
   - ctime
   - die
@@ -1040,6 +1042,7 @@ wrapped_function:
   - fscanf
   - fseek
   - fseeko
+  - fstat
   - ftell
   - ftello
   - funopen
@@ -1065,12 +1068,14 @@ wrapped_function:
   - malloc
   - mkdir
   - open
+  - opendir
   - printf
   - putchar
   - puts
   - rand
   - random
   - read
+  - readdir
   - realloc
   - reallocarray
   - regcomp
@@ -1078,25 +1083,29 @@ wrapped_function:
   - remove
   - rename
   - rewind
+  - rewinddir
+  - rmdir
   - scanf
   - setbuf
   - setbuffer
   - setlinebuf
   - setvbuf
   - snprintf
+  - socket
   - sprintf
   - srand
   - srandom
   - sscanf
+  - stat
   - strdup
   - strerror
   - strndup
   - strtok
   - system
-  - socket
   - tcgetattr
   - tcsetattr
   - ungetc
+  - unlink
   - vasprintf
   - vfprintf
   - vfscanf
@@ -1107,12 +1116,6 @@ wrapped_function:
   - vsscanf
   - wcsdup
   - write
-
-  - opendir
-  - closedir
-  - readdir
-
-  - abort
 
 wrapped_object:
   - stdin

@@ -23,12 +23,14 @@
 #undef malloc
 #undef calloc
 #undef realloc
+#undef reallocarray
 #undef free
 
-#define malloc  dlmalloc
-#define calloc  dlcalloc
-#define realloc dlrealloc
-#define free    dlfree
+#define malloc       why_malloc
+#define calloc       why_calloc
+#define realloc      why_realloc
+#define reallocarray why_reallocarray
+#define free         why_free
 
 #define asprintf  why_asprintf
 #define clearerr  why_clearerr

@@ -104,6 +104,12 @@ int app_main(void) {
 
     logical_name_set("SEARCH", "FLASH0:[SUBDIR], FLASH0:[SUBDIR.ANOTHER]", false);
 
+    if (device_get("SD0")) {
+        logical_name_set("STORAGE", "SD0:, FLASH0", false);
+    } else {
+        logical_name_set("STORAGE", "FLASH0", false);
+    }
+
     validate_ota_partition();
 
     printf("BadgeVMS is ready\n");

@@ -38,10 +38,11 @@
 #include <time.h>
 #include <wchar.h>
 
-extern void spi_flash_enable_interrupts_caches_and_other_cpu(void);
-extern void spi_flash_disable_interrupts_caches_and_other_cpu(void);
-
 static char const *TAG = "wrapped_functions";
+
+// Our implementation of dlmalloc is not thread safe.
+// Protect the kernel from itself only.
+static SemaphoreHandle_t kernel_malloc_lock = NULL;
 
 char *why_environ = NULL;
 
@@ -136,37 +137,81 @@ int why_atexit(void (*function)(void)) {
 }
 
 void IRAM_ATTR *why_malloc(size_t size) {
-    // task_info_t *task_info = get_task_info();
+    task_info_t *task_info = get_task_info();
+
+    if (!task_info->pid) {
+        xSemaphoreTake(kernel_malloc_lock, portMAX_DELAY);
+    }
     // ESP_LOGW("malloc", "Calling malloc(%zi) from task %d", size, task_info->pid);
     void *ptr = dlmalloc(size);
 
     // ESP_LOGI("malloc", "Calling malloc(%zi) from task %d, returning %p", size, task_info->pid, ptr);
+    if (!task_info->pid) {
+        xSemaphoreGive(kernel_malloc_lock);
+    }
     return ptr;
 }
 
 void IRAM_ATTR *why_calloc(size_t nmemb, size_t size) {
+    task_info_t *task_info = get_task_info();
+
+    if (!task_info->pid) {
+        xSemaphoreTake(kernel_malloc_lock, portMAX_DELAY);
+    }
+
     // task_info_t *task_info = get_task_info();
     // ESP_LOGI("calloc", "Calling calloc(%zi, %zi) from task %d", nmemb, size, task_info->pid);
     void *ptr = dlcalloc(nmemb, size);
+
+    if (!task_info->pid) {
+        xSemaphoreGive(kernel_malloc_lock);
+    }
     return ptr;
 }
 
 void IRAM_ATTR *why_realloc(void *_Nullable ptr, size_t size) {
+    task_info_t *task_info = get_task_info();
+
+    if (!task_info->pid) {
+        xSemaphoreTake(kernel_malloc_lock, portMAX_DELAY);
+    }
+
     // task_info_t *task_info = get_task_info();
     // ESP_LOGI("realloc", "Calling realloc(%p, %zi) from task %d", ptr, size, task_info->pid);
     void *new_ptr = dlrealloc(ptr, size);
+
+    if (!task_info->pid) {
+        xSemaphoreGive(kernel_malloc_lock);
+    }
     return new_ptr;
 }
 
 void *why_reallocarray(void *_Nullable ptr, size_t nmemb, size_t size) {
+    task_info_t *task_info = get_task_info();
+
+    if (!task_info->pid) {
+        xSemaphoreTake(kernel_malloc_lock, portMAX_DELAY);
+    }
     // task_info_t *task_info = get_task_info();
     // ESP_LOGI("reallocarray", "Calling reallocarray(%p, %zi, %zi) from task %d", ptr, nmemb, size, task_info->pid);
     void *new_ptr = dlrealloc(ptr, nmemb * size);
+
+    if (!task_info->pid) {
+        xSemaphoreGive(kernel_malloc_lock);
+    }
     return new_ptr;
 }
 
 void IRAM_ATTR why_free(void *_Nullable ptr) {
+    task_info_t *task_info = get_task_info();
+
+    if (!task_info->pid) {
+        xSemaphoreTake(kernel_malloc_lock, portMAX_DELAY);
+    }
     dlfree(ptr);
+    if (!task_info->pid) {
+        xSemaphoreGive(kernel_malloc_lock);
+    }
 }
 
 iconv_t why_iconv_open(char const *tocode, char const *fromcode) {
@@ -204,6 +249,10 @@ int why_tcsetattr(int fd, int optional_actions, const struct termios *termios_p)
 }
 
 wchar_t *why_wcsdup(wchar_t const *s) {
+    if (!s) {
+        return NULL;
+    }
+
     size_t   len = wcslen(s);
     wchar_t *ptr = why_malloc((len + 1) * sizeof(wchar_t));
     if (ptr) {
@@ -214,6 +263,10 @@ wchar_t *why_wcsdup(wchar_t const *s) {
 }
 
 char *why_strdup(char const *s) {
+    if (!s) {
+        return NULL;
+    }
+
     size_t len = strlen(s);
     char  *ptr = why_malloc((len + 1) * sizeof(char));
     if (ptr) {
@@ -467,8 +520,6 @@ int why_bind(int sockfd, const struct sockaddr *addr, socklen_t addrlen) {
     return bind(sock, (struct sockaddr *)addr_in, addrlen);
 }
 
-
-
 int why_open(char const *pathname, int flags, mode_t mode) {
     task_info_t *task_info = get_task_info();
     ESP_LOGI("why_open", "Calling open from task %p for path %s", task_info->handle, pathname);
@@ -557,36 +608,12 @@ void why_exit(int status) {
     vTaskDelete(NULL);
 }
 
-int why_mkdir(char const *pathname, mode_t mode) {
-    return -1;
-}
-
 int why_system(char const *command) {
     return 0;
 }
 
-int why_rename(char const *oldpath, char const *newpath) {
-    return -1;
-}
-
-int why_remove(char const *pathname) {
-    return -1;
-}
-
 void why__Exit(int status) {
     why_exit(status);
-}
-
-DIR *why_opendir(char const *name) {
-    return NULL;
-}
-
-int why_closedir(DIR *dirp) {
-    return 0;
-}
-
-struct dirent *why_readdir(DIR *dirp) {
-    return NULL;
 }
 
 void why_abort(void) {
@@ -613,4 +640,10 @@ uint64_t get_unique_id(void) {
         return 0;
     }
     return chip_id;
+}
+
+void wrapped_functions_init(void) {
+    ESP_LOGI(TAG, "Initializing");
+
+    kernel_malloc_lock = xSemaphoreCreateMutex();
 }

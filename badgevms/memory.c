@@ -31,6 +31,7 @@
 #include "soc/soc.h"
 #include "task.h"
 #include "thirdparty/dlmalloc.h"
+#include "wrapped_funcs.h"
 
 #include <stdatomic.h>
 #include <stdio.h>
@@ -789,5 +790,6 @@ void IRAM_ATTR memory_init() {
     );
 
     init_memory_heap_caps();
+    wrapped_functions_init();
     print_allocator(&page_allocator);
 }

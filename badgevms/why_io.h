@@ -21,11 +21,11 @@
 #include <fcntl.h>
 #include <unistd.h>
 
-void *dlmalloc(size_t size);
-void  dlfree(void *_Nullable ptr);
-void *dlcalloc(size_t nmemb, size_t size);
-void *dlrealloc(void *_Nullable ptr, size_t size);
-void *dlreallocarray(void *_Nullable ptr, size_t nmemb, size_t size);
+void *why_malloc(size_t size);
+void  why_free(void *_Nullable ptr);
+void *why_calloc(size_t nmemb, size_t size);
+void *why_realloc(void *_Nullable ptr, size_t size);
+void *why_reallocarray(void *_Nullable ptr, size_t nmemb, size_t size);
 
 ssize_t why_write(int fd, void const *buf, size_t count);
 ssize_t why_read(int fd, void *buf, size_t count);
@@ -37,6 +37,8 @@ FILE *why_fopen(char const *restrict pathname, char const *restrict mode);
 int   why_fclose(FILE *stream);
 
 int   why_fgetc(FILE *stream);
+int   why_fputc(int c, FILE *stream);
+int   why_fputs(char const *restrict s, FILE *restrict stream);
 int   why_getc(FILE *stream);
 int   why_getchar(void);
 char *why_fgets(char *s, int size, FILE *restrict stream);

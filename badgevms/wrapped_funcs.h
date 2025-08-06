@@ -18,3 +18,4 @@
 
 char *inet_ntoa(struct in_addr __in);
 int   inet_aton(char const *__cp, struct in_addr *__inp);
+void  wrapped_functions_init(void);

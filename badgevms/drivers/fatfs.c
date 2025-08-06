@@ -28,7 +28,10 @@
 #include <stdbool.h>
 #include <stdio.h>
 
+#include <dirent.h>
 #include <fcntl.h>
+#include <sys/stat.h>
+#include <unistd.h>
 
 #if CONFIG_SOC_SDMMC_IO_POWER_EXTERNAL
 #include "sd_pwr_ctrl_by_on_chip_ldo.h"
@@ -58,7 +61,7 @@
 #define IS_UHS1 (SDCARD_SDMMC_SPEED_UHS_I_SDR50 || SDCARD_SDMMC_SPEED_UHS_I_DDR50)
 
 typedef struct {
-    device_t             device;
+    filesystem_device_t  filesystem;
     wl_handle_t          wl_handle;
     sdmmc_card_t        *sdmmc_handle;
     sd_pwr_ctrl_handle_t pwr_ctrl_handle;
@@ -89,6 +92,57 @@ static ssize_t fatfs_lseek(void *dev, int fd, off_t offset, int whence) {
     return lseek(fd, offset, whence);
 }
 
+static int fatfs_stat(void *dev, path_t *path, struct stat *restrict statbuf) {
+    fatfs_device_t *device   = dev;
+    char           *unixpath = path_to_unix(path);
+    return stat(unixpath, statbuf);
+}
+
+static int fatfs_fstat(void *dev, int fd, struct stat *restrict statbuf) {
+    return fstat(fd, statbuf);
+}
+
+static int fatfs_unlink(void *dev, path_t *path) {
+    fatfs_device_t *device   = dev;
+    char           *unixpath = path_to_unix(path);
+    return unlink(unixpath);
+}
+
+static int fatfs_rename(void *dev, path_t *oldpath, path_t *newpath) {
+    fatfs_device_t *device       = dev;
+    char           *old_unixpath = path_to_unix(oldpath);
+    char           *new_unixpath = path_to_unix(newpath);
+    return rename(old_unixpath, new_unixpath);
+}
+
+static int fatfs_mkdir(void *dev, path_t *path, mode_t mode) {
+    fatfs_device_t *device   = dev;
+    char           *unixpath = path_to_unix(path);
+    return mkdir(unixpath, mode);
+}
+
+static int fatfs_rmdir(void *dev, path_t *path) {
+    fatfs_device_t *device   = dev;
+    char           *unixpath = path_to_unix(path);
+    return rmdir(unixpath);
+}
+
+static DIR *fatfs_opendir(void *dev, path_t *path) {
+    fatfs_device_t *device   = dev;
+    char           *unixpath = path_to_unix(path);
+    return opendir(unixpath);
+}
+
+static struct dirent *fatfs_readdir(void *dev, DIR *dirp) {
+    fatfs_device_t *device = dev;
+    return readdir(dirp);
+}
+
+static int fatfs_closedir(void *dev, DIR *dirp) {
+    fatfs_device_t *device = dev;
+    return closedir(dirp);
+}
+
 device_t *fatfs_create_spi(char const *devname, char const *partname, bool rw) {
     esp_vfs_fat_mount_config_t const mount_config = {
         .max_files              = 256,
@@ -107,14 +161,27 @@ device_t *fatfs_create_spi(char const *devname, char const *partname, bool rw) {
         ESP_LOGE("fatfs-spi", "Failed to mount partition");
         goto error;
     }
-    device_t *base_dev = (device_t *)dev;
 
-    base_dev->type   = DEVICE_TYPE_BLOCK;
-    base_dev->_open  = fatfs_open;
-    base_dev->_close = fatfs_close;
-    base_dev->_write = fatfs_write;
-    base_dev->_read  = fatfs_read;
-    base_dev->_lseek = fatfs_lseek;
+    // Initialize base device
+    device_t *base_dev = &dev->filesystem.device;
+    base_dev->type     = DEVICE_TYPE_FILESYSTEM;
+    base_dev->_open    = fatfs_open;
+    base_dev->_close   = fatfs_close;
+    base_dev->_write   = fatfs_write;
+    base_dev->_read    = fatfs_read;
+    base_dev->_lseek   = fatfs_lseek;
+
+    // Initialize filesystem-specific functions
+    filesystem_device_t *fs_dev = &dev->filesystem;
+    fs_dev->_stat               = fatfs_stat;
+    fs_dev->_fstat              = fatfs_fstat;
+    fs_dev->_unlink             = fatfs_unlink;
+    fs_dev->_rename             = fatfs_rename;
+    fs_dev->_mkdir              = fatfs_mkdir;
+    fs_dev->_rmdir              = fatfs_rmdir;
+    fs_dev->_opendir            = fatfs_opendir;
+    fs_dev->_readdir            = fatfs_readdir;
+    fs_dev->_closedir           = fatfs_closedir;
 
     return (device_t *)dev;
 
@@ -137,8 +204,9 @@ device_t *fatfs_create_sd(char const *devname, bool rw) {
     dev->base_path[0]   = '/';
     strcpy(dev->base_path + 1, devname);
 
-    device_t *base_dev = (device_t *)dev;
-    base_dev->type     = DEVICE_TYPE_BLOCK;
+    // Initialize base device
+    device_t *base_dev = &dev->filesystem.device;
+    base_dev->type     = DEVICE_TYPE_FILESYSTEM;
     base_dev->_open    = fatfs_open;
     base_dev->_close   = fatfs_close;
     base_dev->_write   = fatfs_write;
@@ -202,6 +270,18 @@ device_t *fatfs_create_sd(char const *devname, bool rw) {
         ESP_LOGW("fatfs-sd", "SD card not mounted");
         goto error;
     }
+
+    // Initialize filesystem-specific functions
+    filesystem_device_t *fs_dev = &dev->filesystem;
+    fs_dev->_stat               = fatfs_stat;
+    fs_dev->_fstat              = fatfs_fstat;
+    fs_dev->_unlink             = fatfs_unlink;
+    fs_dev->_rename             = fatfs_rename;
+    fs_dev->_mkdir              = fatfs_mkdir;
+    fs_dev->_rmdir              = fatfs_rmdir;
+    fs_dev->_opendir            = fatfs_opendir;
+    fs_dev->_readdir            = fatfs_readdir;
+    fs_dev->_closedir           = fatfs_closedir;
 
     sdmmc_card_print_info(stdout, dev->sdmmc_handle);
 

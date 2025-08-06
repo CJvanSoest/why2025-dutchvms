@@ -182,6 +182,16 @@ build_app(process_test
      process_test/main.c
 )
 
+#build_app(appdb_test
+#    SOURCES
+#    appdb_test/main.c
+#)
+
+build_app(readdir_test
+    SOURCES
+    readdir_test/main.c
+)
+
 #build_app(style_test
 #    SOURCES
 #     style_test/main.c
