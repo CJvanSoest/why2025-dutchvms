@@ -51,7 +51,6 @@ static lcd_device_t *lcd_device;
 static device_t     *keyboard_device;
 
 static window_t         *window_stack      = NULL;
-static SemaphoreHandle_t window_stack_lock = NULL;
 static QueueHandle_t     compositor_queue;
 
 static int        cur_fb = 0;
@@ -465,11 +464,6 @@ static void IRAM_ATTR NOINLINE_ATTR compositor(void *ignored) {
             frame_ready = false;
         }
 
-        if (xSemaphoreTake(window_stack_lock, portMAX_DELAY) != pdTRUE) {
-            ESP_LOGE(TAG, "Failed to get window list mutex");
-            abort();
-        }
-
         compositor_message_t message;
 
         while (xQueueReceive(compositor_queue, &message, 0) == pdTRUE) {
@@ -598,8 +592,9 @@ static void IRAM_ATTR NOINLINE_ATTR compositor(void *ignored) {
                                 window->next = NULL;
                                 window->prev = NULL;
 
-                                vTaskDelete(task_info->handle);
-                                xSemaphoreGive(window_stack_lock);
+                                if (eTaskGetState(task_info->handle) != eDeleted) {
+                                    vTaskDelete(task_info->handle);
+                                }
                                 mark_scene_damaged();
                                 continue;
                             default:
@@ -771,8 +766,6 @@ static void IRAM_ATTR NOINLINE_ATTR compositor(void *ignored) {
             decoration_damaged    &= ~(1 << cur_fb);
             visible_regions_valid  = true;
         }
-
-        xSemaphoreGive(window_stack_lock);
 
         if (changes) {
             frame_ready = true;
@@ -1125,6 +1118,5 @@ void compositor_init(char const *lcd_device_name, char const *keyboard_device_na
     lcd_device->_set_refresh_cb(lcd_device, NULL, on_refresh);
 
     compositor_queue  = xQueueCreate(10, sizeof(compositor_message_t));
-    window_stack_lock = xSemaphoreCreateMutex();
     create_kernel_task(compositor, "Compositor", 8192, NULL, 20, &compositor_handle, 0);
 }

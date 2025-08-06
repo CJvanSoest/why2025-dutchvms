@@ -283,7 +283,6 @@ void run_init(void) {
 
                 if (app && app->pid == c) {
                     if (app->restart_on_failure && app->fail_count < 10) {
-                        vTaskDelay(100 / portTICK_PERIOD_MS);
                         printf("Process %s (%s) ended, respawning\n", app->name, app->path);
                         pid_t pid = process_create(app->path, app->stack_size, app->argc, app->argv);
                         if (pid == -1) {
@@ -293,6 +292,7 @@ void run_init(void) {
                             printf("Process %s (%s) respawned\n", app->name, app->path);
                             app->pid        = pid;
                             app->fail_count = 0;
+                            vTaskDelay(100 / portTICK_PERIOD_MS);
                         }
 
                     } else {

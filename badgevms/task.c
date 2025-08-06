@@ -75,10 +75,7 @@ static uint32_t          head = 0;
 static uint32_t          tail = MAX_PID;
 
 typedef struct {
-    SemaphoreHandle_t ready;
-    pid_t             pid;
-    TaskHandle_t      handle;
-
+    TaskHandle_t caller;
     task_info_t *parent_task_info;
     task_type_t  type;
     int          argc;
@@ -289,8 +286,6 @@ static task_thread_t *task_thread_ref(task_thread_t *heap) {
 }
 
 static task_info_t *task_info_init() {
-    task_info_t *ti = get_task_info();
-
     task_info_t *task_info = heap_caps_calloc(1, sizeof(task_info_t), MALLOC_CAP_SPIRAM);
     if (!task_info) {
         ESP_LOGE(TAG, "Out of memory trying to allocate task info");
@@ -315,25 +310,19 @@ static void task_info_delete(task_info_t *task_info) {
 
 // Try and handle misbehaving tasks
 void IRAM_ATTR cerberos() {
-    if (xPortInIsrContext()) {
-        ESP_DRAM_LOGE("CERBEROS", "In ISR context, no idea what to do");
-
-    } else {
-        task_info_t *task_info = get_task_info();
-        if (!task_info || !task_info->pid) {
-            ESP_LOGE("CERBEROS", "Trying to kill kernel. This is probably bad");
-            return;
-        }
-
-        ESP_LOGW("CERBEROS", "Taking task %u to Hades, Woof", task_info->pid);
-        vTaskDelete(NULL);
-    }
+    esp_rom_printf("CERBEROS: Chewing...\n");
+    while(1) {}
 }
 
 void IRAM_ATTR __wrap_xt_unhandled_exception(void *frame) {
     task_info_t *task_info = get_task_info();
     if (task_info && task_info->pid) {
+        // We can do this because we are running in ISR context, not the task context.
+        vTaskSuspend(NULL);
+        vTaskDelete(NULL);
         esp_rom_printf("Task %u caused an unhandled exception, Cerberos will deal with it\n", task_info->pid);
+
+        // Send task off to think about what it did until its timeslice runs out
         __asm__ volatile("csrw mepc, %0\n\t" // Set return address
                          "mret\n\t"
                          :
@@ -380,7 +369,7 @@ static void elf_task(task_info_t *task_info) {
     return;
 
 out:
-    // All allocations will be cleaned up Hades
+    // All allocations will be cleaned up by Hades
 }
 
 // This runs inside the user task
@@ -512,27 +501,19 @@ pid_t run_task(void const *buffer, uint16_t stack_size, task_type_t type, int ar
         offset += strlen(argv[i]) + 1;
     }
 
-    zeus_command_message_t *c = calloc(1, sizeof(zeus_command_message_t));
-    if (!c) {
-        ESP_LOGW(TAG, "Couldn't allocate zeus command message");
-        return -1;
-    }
-
-    c->ready            = xSemaphoreCreateBinary();
-    c->parent_task_info = parent_task_info;
-    c->type             = type;
-    c->argc             = argc;
-    c->stack_size       = stack_size;
-    c->buffer           = buffer;
-    c->argv             = new_argv;
-    c->argv_size        = argv_size;
+    zeus_command_message_t c = {
+        .caller           = xTaskGetCurrentTaskHandle(),
+        .parent_task_info = parent_task_info,
+        .type             = type,
+        .argc             = argc,
+        .stack_size       = stack_size,
+        .buffer           = buffer,
+        .argv             = new_argv,
+        .argv_size        = argv_size,
+    };
 
     xQueueSend(zeus_queue, &c, portMAX_DELAY);
-    xSemaphoreTake(c->ready, portMAX_DELAY);
-    pid_t pid = c->pid;
-    vSemaphoreDelete(c->ready);
-    free(c);
-
+    pid_t pid = ulTaskNotifyTakeIndexed(0, pdTRUE, portMAX_DELAY);
     return pid;
 }
 
@@ -543,24 +524,17 @@ pid_t process_create(char const *path, size_t stack_size, int argc, char **argv)
 pid_t thread_create(void (*thread_entry)(void *user_data), void *user_data, uint16_t stack_size) {
     task_info_t *parent_task_info = get_task_info();
 
-    zeus_command_message_t *c = calloc(1, sizeof(zeus_command_message_t));
-    if (!c) {
-        ESP_LOGW(TAG, "Couldn't allocate zeus command message");
-        return -1;
-    }
-
-    c->ready            = xSemaphoreCreateBinary();
-    c->parent_task_info = parent_task_info;
-    c->type             = TASK_TYPE_THREAD;
-    c->stack_size       = stack_size;
-    c->buffer           = user_data;
-    c->thread_entry     = thread_entry;
+    zeus_command_message_t c = {
+        .caller           = xTaskGetCurrentTaskHandle(),
+        .parent_task_info = parent_task_info,
+        .type             = TASK_TYPE_THREAD,
+        .stack_size       = stack_size,
+        .buffer           = user_data,
+        .thread_entry     = thread_entry,
+    };
 
     xQueueSend(zeus_queue, &c, portMAX_DELAY);
-    xSemaphoreTake(c->ready, portMAX_DELAY);
-    vSemaphoreDelete(c->ready);
-    pid_t pid = c->pid;
-    free(c);
+    pid_t pid = ulTaskNotifyTakeIndexed(0, pdTRUE, portMAX_DELAY);
 
     return pid;
 }
@@ -659,7 +633,7 @@ static void IRAM_ATTR hades(void *ignored) {
 }
 
 static void IRAM_ATTR zeus(void *ignored) {
-    zeus_command_message_t *command;
+    zeus_command_message_t command;
 #if (NUM_PIDS > 999)
 #error "If you hit this assertion change the allocation for the task name to match the new size"
 #endif
@@ -670,13 +644,13 @@ static void IRAM_ATTR zeus(void *ignored) {
         // Block until a new tasks wants to be born
         if (xQueueReceive(zeus_queue, &command, portMAX_DELAY) == pdTRUE) {
             task_info_t *task_info = NULL;
-            command->pid           = pid_allocate();
-            if (command->pid <= 0) {
+            pid_t        pid       = pid_allocate();
+            if (pid <= 0) {
                 ESP_LOGW(TAG, "Cannot allocate PID for new task");
                 goto error;
             }
 
-            command->stack_size = command->stack_size < MIN_STACK_SIZE ? MIN_STACK_SIZE : command->stack_size;
+            command.stack_size = command.stack_size < MIN_STACK_SIZE ? MIN_STACK_SIZE : command.stack_size;
 
             task_info = task_info_init();
             if (!task_info) {
@@ -684,8 +658,8 @@ static void IRAM_ATTR zeus(void *ignored) {
                 goto error;
             }
 
-            if (command->type == TASK_TYPE_THREAD) {
-                task_info->thread = task_thread_ref(command->parent_task_info->thread);
+            if (command.type == TASK_TYPE_THREAD) {
+                task_info->thread = task_thread_ref(command.parent_task_info->thread);
                 if (!task_info->thread) {
                     ESP_LOGW(TAG, "Tried to create a thread from a dying parent, even I can't do this");
                     goto error;
@@ -700,15 +674,15 @@ static void IRAM_ATTR zeus(void *ignored) {
             // ESP_LOGI(TAG, "Setting watchpoint on %p core %i", &task_info->pad, esp_cpu_get_core_id());
             // esp_cpu_set_watchpoint(0, &task_info->pad, 4, ESP_CPU_WATCHPOINT_STORE);
 
-            task_info->pid        = command->pid;
-            task_info->type       = command->type;
-            task_info->parent     = command->parent_task_info->pid;
-            task_info->buffer     = command->buffer;
+            task_info->pid        = pid;
+            task_info->type       = command.type;
+            task_info->parent     = command.parent_task_info->pid;
+            task_info->buffer     = command.buffer;
             task_info->file_path  = NULL;
-            task_info->argc       = command->argc;
-            task_info->argv       = command->argv;
-            task_info->argv_size  = command->argv_size;
-            task_info->stack_size = command->stack_size;
+            task_info->argc       = command.argc;
+            task_info->argv       = command.argv;
+            task_info->argv_size  = command.argv_size;
+            task_info->stack_size = command.stack_size;
 
             // In case someone tries something clever
             task_info->argv_back = task_info->argv;
@@ -716,18 +690,18 @@ static void IRAM_ATTR zeus(void *ignored) {
             TaskFunction_t task_entry = generic_task;
             void          *param      = (void *)task_info;
 
-            switch (command->type) {
+            switch (command.type) {
                 case TASK_TYPE_ELF: task_info->task_entry = elf_task; break;
                 case TASK_TYPE_ELF_PATH:
-                    task_info->file_path  = (char const *)command->buffer;
+                    task_info->file_path  = (char const *)command.buffer;
                     task_info->buffer     = NULL;
                     task_info->task_entry = elf_task_path;
                     break;
                 case TASK_TYPE_THREAD:
                     task_entry              = generic_thread;
-                    task_info->thread_entry = command->thread_entry;
+                    task_info->thread_entry = command.thread_entry;
                     break;
-                default: ESP_LOGE("ZEUS", "Unknown task type %i", command->type); goto error;
+                default: ESP_LOGE("ZEUS", "Unknown task type %i", command.type); goto error;
             }
 
             ESP_LOGI("ZEUS", "Breathing life into PID %d", task_info->pid);
@@ -742,17 +716,20 @@ static void IRAM_ATTR zeus(void *ignored) {
                 process_table_add_task(task_info);
                 vTaskSetThreadLocalStoragePointer(new_task, 1, task_info);
                 vTaskSetApplicationTaskTag(new_task, (void *)0x12345678);
-                command->handle = new_task;
                 ESP_LOGV("ZEUS", "PID %d sprung forth fully formed from my forehead", task_info->pid);
                 ++num_tasks;
                 goto out;
             }
         error:
             ESP_LOGE("ZEUS", "Process could not be started, too good for this world");
-            pid_free(command->pid);
+            pid_free(pid);
             task_info_delete(task_info);
         out:
-            xSemaphoreGive(command->ready);
+            if (command.caller) {
+                if (eTaskGetState(command.caller) != eDeleted) {
+                    xTaskNotifyIndexed(command.caller, 0, pid, eSetValueWithOverwrite);
+                }
+            }
             // Give FreeRTOS a chance to catch up
             vTaskDelay(50 / portTICK_PERIOD_MS);
         }
@@ -830,6 +807,6 @@ void task_init() {
     create_kernel_task(hades, "Hades", 3072, NULL, 11, &hades_handle, 1);
 
     ESP_DRAM_LOGI(DRAM_STR("task_init"), "Starting Zeus process");
-    zeus_queue = xQueueCreate(16, sizeof(zeus_command_message_t *));
+    zeus_queue = xQueueCreate(1, sizeof(zeus_command_message_t));
     create_kernel_task(zeus, "Zeus", 3072, NULL, 10, &zeus_handle, 1);
 }
