@@ -51,9 +51,9 @@ typedef struct {
 typedef struct window *window_handle_t;
 
 window_handle_t window_create(char const *title, window_size_t size, window_flag_t flags);
-framebuffer_t *window_framebuffer_create(window_handle_t window, window_size_t size, pixel_format_t pixel_format);
+framebuffer_t  *window_framebuffer_create(window_handle_t window, window_size_t size, pixel_format_t pixel_format);
 
-void            window_destroy(window_handle_t window);
+void window_destroy(window_handle_t window);
 
 char const *window_title_get(window_handle_t window);
 void        window_title_set(window_handle_t window, char const *title);
@@ -67,12 +67,12 @@ window_size_t window_size_set(window_handle_t window, window_size_t size);
 window_flag_t window_flags_get(window_handle_t window);
 window_flag_t window_flags_set(window_handle_t window, window_flag_t flags);
 
-window_size_t window_framebuffer_size_get(window_handle_t window);
-window_size_t window_framebuffer_size_set(window_handle_t window, window_size_t size);
+window_size_t  window_framebuffer_size_get(window_handle_t window);
+window_size_t  window_framebuffer_size_set(window_handle_t window, window_size_t size);
 pixel_format_t window_framebuffer_format_get(window_handle_t window);
 
 framebuffer_t *window_framebuffer_get(window_handle_t window);
-void window_present(window_handle_t window, bool block, window_rect_t *rects, int num_rects);
+void           window_present(window_handle_t window, bool block, window_rect_t *rects, int num_rects);
 
 event_t window_event_poll(window_handle_t window, bool block, uint32_t timeout_msec);
 

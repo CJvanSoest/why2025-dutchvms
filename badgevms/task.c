@@ -311,7 +311,8 @@ static void task_info_delete(task_info_t *task_info) {
 // Try and handle misbehaving tasks
 void IRAM_ATTR cerberos() {
     esp_rom_printf("CERBEROS: Chewing...\n");
-    while(1) {}
+    while (1) {
+    }
 }
 
 void IRAM_ATTR __wrap_xt_unhandled_exception(void *frame) {

@@ -50,8 +50,8 @@ static TaskHandle_t  compositor_handle;
 static lcd_device_t *lcd_device;
 static device_t     *keyboard_device;
 
-static window_t         *window_stack      = NULL;
-static QueueHandle_t     compositor_queue;
+static window_t     *window_stack = NULL;
+static QueueHandle_t compositor_queue;
 
 static int        cur_fb = 0;
 static atomic_int cur_num_windows;
@@ -1117,6 +1117,6 @@ void compositor_init(char const *lcd_device_name, char const *keyboard_device_na
 
     lcd_device->_set_refresh_cb(lcd_device, NULL, on_refresh);
 
-    compositor_queue  = xQueueCreate(10, sizeof(compositor_message_t));
+    compositor_queue = xQueueCreate(10, sizeof(compositor_message_t));
     create_kernel_task(compositor, "Compositor", 8192, NULL, 20, &compositor_handle, 0);
 }

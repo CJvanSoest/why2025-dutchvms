@@ -41,5 +41,4 @@ typedef enum {
 } path_parse_result_t;
 
 path_parse_result_t parse_path(char const *path, path_t *result);
-char               *path_to_unix(path_t *path);
 void                path_free(path_t *path);
