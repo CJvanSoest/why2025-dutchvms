@@ -44,9 +44,6 @@ int render_png_to_framebuffer(
 int render_jpg_to_framebuffer(
     uint16_t *framebuffer, int fb_width, int fb_height, char const *filename, int dest_x, int dest_y
 );
-int render_png_with_alpha(
-    uint16_t *framebuffer, int fb_width, int fb_height, char const *filename, int dest_x, int dest_y
-);
 int stbi_info(char const *filename, int *x, int *y, int *comp);
 int render_png_with_alpha_scaled(
     uint16_t *framebuffer, int fb_width, int fb_height, char const *filename, int dest_x, int dest_y, int scale_factor
@@ -63,6 +60,7 @@ typedef struct {
     uint16_t   *clean_background;
     int         fb_width;
     int         fb_height;
+    bool        all_seen;
 } sponsor_state_t;
 
 static sponsor_state_t g_sponsor_state = {0};
@@ -178,6 +176,10 @@ void sponsor_loader_thread(void *user_data) {
                         printf("Done loading %s\n", current_file);
 
                         state->current_sponsor_index = (state->current_sponsor_index + 1) % state->sponsor_count;
+                        if (state->current_sponsor_index == 0) {
+                            printf("Seen all sponsors!\n");
+                            state->all_seen = true;
+                        }
                         last_change_time             = current_time;
                     } else {
                         free(temp_fb);
@@ -208,6 +210,27 @@ int render_sponsor_centered(uint16_t *framebuffer, int fb_width, int fb_height, 
 }
 
 int main(int argc, char *argv[]) {
+    printf("Sponsor app\n");
+
+    bool at_boot = false;
+
+    for (int i = 1; i < argc; ++i) {
+        printf("Argv[%i] %s\n", i, argv[i]);
+        if (strcmp(argv[i], "--boot") == 0) {
+            at_boot = true;
+        } 
+    }
+
+    // If our flag exists, and we are at boot, exit
+    FILE *f = fopen("APPS:[WHY2025_SPONSORS]bootflag", "r");
+    if (f) {
+        fclose(f);
+        if (at_boot) {
+            printf("At boot and all logos already seen, exiting\n");
+            return 0;
+        }
+    }
+
     window_size_t size;
 
     size.w = 720;
@@ -240,7 +263,23 @@ int main(int argc, char *argv[]) {
     static int gradient_offset    = 0;
     uint32_t   last_sponsor_check = 0;
 
+    bool can_exit = !at_boot;
+    int rendered_exit = 0;
     while (true) {
+        if (can_exit && rendered_exit < 2) {
+            render_png_with_alpha_scaled(framebuffer->pixels, framebuffer->w, framebuffer->h, "APPS:[WHY2025_SPONSORS]esc.png", 620, 30, 1);
+            ++rendered_exit;
+        }
+
+        event_t e = window_event_poll(window, false, 0);
+        if (e.type == EVENT_KEY_DOWN) {
+            if (e.keyboard.scancode == KEY_SCANCODE_ESCAPE) {
+                if (can_exit) {
+                    break;
+                }
+            }
+        }
+
         if (atomic_load(&g_sponsor_state.new_image_ready)) {
             printf("New sponsor image ready\n");
 
@@ -255,11 +294,21 @@ int main(int argc, char *argv[]) {
             );
 
             atomic_store(&g_sponsor_state.new_image_ready, false);
+            if (g_sponsor_state.all_seen) {
+                can_exit = true;
+            }
         }
 
         render_win95_scroller_smooth(framebuffer->pixels, framebuffer->w, framebuffer->h, gradient_offset);
         window_present(window, true, NULL, 0);
         gradient_offset = (gradient_offset - 8 + framebuffer->w) % framebuffer->w;
+    }
+
+    if (g_sponsor_state.all_seen) {
+        f = fopen("APPS:[WHY2025_SPONSORS]bootflag", "w");
+        if (f) {
+            fclose(f);
+        }
     }
     return 0;
 }

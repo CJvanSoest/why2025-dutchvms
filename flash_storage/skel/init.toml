@@ -26,6 +26,6 @@ args = []
 name = "sponsors"
 path = "FLASH0:sponsor_app.elf"
 restart_on_failure = false
-stack_size = 8192
-args = []
+stack_size = 16384
+args = ["--boot"]
 
