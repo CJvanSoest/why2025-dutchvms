@@ -631,12 +631,14 @@ static void IRAM_ATTR NOINLINE_ATTR compositor(void *ignored) {
             window_t *window = window_stack->prev; // Start with back window
 
             do {
-                if ((window == window_stack) && (window_stack->flags & WINDOW_FLAG_FULLSCREEN)) {
-                    // A foreground full-screen app gets as much CPU time as it can handle
-                    vTaskPrioritySet(window->task_info->handle, TASK_PRIORITY_FOREGROUND);
-                } else {
-                    vTaskPrioritySet(window->task_info->handle, TASK_PRIORITY);
-                }
+                if (eTaskGetState(window->task_info->handle) != eDeleted) {
+                    if ((window == window_stack) && (window_stack->flags & WINDOW_FLAG_FULLSCREEN)) {
+                        // A foreground full-screen app gets as much CPU time as it can handle
+                        vTaskPrioritySet(window->task_info->handle, TASK_PRIORITY_FOREGROUND);
+                    } else {
+                        vTaskPrioritySet(window->task_info->handle, TASK_PRIORITY);
+                    }
+                } 
 
                 managed_framebuffer_t *framebuffer = window->framebuffers[window->front_fb];
 
