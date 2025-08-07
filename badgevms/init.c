@@ -14,6 +14,7 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
+
 #include "badgevms/process.h"
 #include "esp_heap_caps.h"
 #include "esp_log.h"
@@ -21,6 +22,7 @@
 #include "memory.h"
 #include "nvs.h"
 #include "nvs_flash.h"
+#include "ota_private.h"
 #include "task.h"
 #include "thirdparty/tomlc17.h"
 #include "why_io.h"
@@ -28,27 +30,35 @@
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
-
 #include <string.h>
+#include <time.h>
 
 #define TAG "init"
 
 typedef struct {
-    char  *name;
-    char  *path;
-    bool   restart_on_failure;
-    bool   run_once;
-    size_t stack_size;
-    char **argv;
-    int    argc;
-    int    fail_count;
-    pid_t  pid;
+    char    *name;
+    char    *path;
+    bool     restart_on_failure;
+    bool     run_once;
+    size_t   stack_size;
+    char   **argv;
+    int      argc;
+    int      fail_count;
+    pid_t    pid;
+    uint32_t start_every;      // Seconds between periodic starts (0 = disabled)
+    uint32_t start_delay;      // Seconds to wait after boot before first start (0 = immediate)
+    time_t   last_started;     // Timestamp when process was last started
+    bool     should_start;     // Track whether we should start this at all
+    bool     nvs_write;        // Track whether we have updated this app NVS entry
 } startup_app_t;
 
 typedef struct {
     startup_app_t *apps;
     size_t         count;
 } startup_config_t;
+
+// Function declarations
+bool maybe_start_app(startup_app_t *app, nvs_handle_t nvs_handle, time_t boot_time, time_t current_time);
 
 void free_app(startup_app_t *app) {
     if (!app)
@@ -103,6 +113,13 @@ int parse_app(toml_datum_t app_table, startup_app_t *app) {
 
     toml_datum_t stack = toml_get(app_table, "stack_size");
     app->stack_size    = (stack.type == TOML_INT64) ? (size_t)stack.u.int64 : 8192;
+
+    // Parse start_every and start_delay (new fields)
+    toml_datum_t start_every = toml_get(app_table, "start_every");
+    app->start_every = (start_every.type == TOML_INT64) ? (uint32_t)start_every.u.int64 : 0;
+    
+    toml_datum_t start_delay = toml_get(app_table, "start_delay");
+    app->start_delay = (start_delay.type == TOML_INT64) ? (uint32_t)start_delay.u.int64 : 0;
 
     toml_datum_t args = toml_get(app_table, "args");
     if (args.type == TOML_ARRAY) {
@@ -199,6 +216,12 @@ void print_config(startup_config_t const *config) {
         printf("  restart: %s\n", app->restart_on_failure ? "yes" : "no");
         printf("  run once: %s\n", app->run_once ? "yes" : "no");
         printf("  stack: %zu bytes\n", app->stack_size);
+        if (app->start_every > 0) {
+            printf("  start every: %lu seconds\n", app->start_every);
+        }
+        if (app->start_delay > 0) {
+            printf("  start delay: %lu seconds\n", app->start_delay);
+        }
         printf("  command: %s", app->path);
         for (int j = 1; j < app->argc; j++) {
             printf(" %s", app->argv[j]);
@@ -206,6 +229,79 @@ void print_config(startup_config_t const *config) {
         printf("\n");
     }
     printf("\n");
+}
+
+pid_t start_app(startup_app_t *app) {
+    pid_t pid = process_create(app->path, app->stack_size, app->argc, app->argv);
+    if (pid == -1) {
+        printf("Failed to start %s (%s)\n", app->name, app->path);
+        return -1;
+    }
+    printf("Started %s (%s) pid %u\n", app->name, app->path, pid);
+    
+    app->pid = pid;
+    app->last_started = time(NULL);
+    return pid;
+}
+
+bool maybe_start_app(startup_app_t *app, nvs_handle_t nvs_handle, time_t boot_time, time_t current_time) {
+    if (app->pid != 0 || !app->should_start) {
+        return false;
+    }
+    
+    if (app->run_once) {
+        uint8_t run_once = 0;
+        esp_err_t err = nvs_get_u8(nvs_handle, app->name, &run_once);
+        if (err != ESP_OK && err != ESP_ERR_NVS_NOT_FOUND) {
+            ESP_LOGE(TAG, "Error (%s) reading NVS for %s!", esp_err_to_name(err), app->name);
+        }
+        
+        if (run_once == 1) {
+            return false;
+        }
+    }
+    
+    bool in_startup_delay = (current_time - boot_time < app->start_delay);
+    bool should_start = false;
+    const char *reason = "";
+
+    if (!in_startup_delay && app->start_every > 0) {
+        if (current_time - app->last_started >= app->start_every) {
+            should_start = true;
+            reason = "periodic restart";
+        }
+    }
+    
+    // Handle start delay
+    if (!app->last_started && current_time - boot_time >= app->start_delay) {
+        should_start = true;
+        if (app->start_delay > 0) {
+            reason = "delayed initial start";
+        } else {
+            reason = "initial start";
+        }
+    }
+
+    if (current_time - app->last_started < 2) {
+        printf("Throttling start for %s (%s) less than 2 seconds since exit\n", app->name, app->path);
+        should_start = false;
+    }
+
+    if (!should_start) {
+        return false;
+    }
+
+    if (app->start_delay > 0) {
+        printf("%s for %s (%s) - %lld seconds since boot\n", reason, app->name, app->path, current_time - boot_time);
+    } else if (app->start_every > 0) {
+        printf("%s for %s (%s) - %lld seconds since last start\n", reason, app->name, app->path, current_time - app->last_started);
+    }
+    
+    if (start_app(app) == -1) {
+        return false;
+    }
+    
+    return true;
 }
 
 void run_init(void) {
@@ -217,6 +313,7 @@ void run_init(void) {
     }
 
     startup_config_t config = {0};
+    time_t boot_time = time(NULL);
 
     printf("Loading %s\n", "FLASH0:init.toml");
     if (load_config("FLASH0:init.toml", &config) != 0) {
@@ -228,45 +325,35 @@ void run_init(void) {
     }
 
     print_config(&config);
-
+    printf("Initial startup phase...\n");
     for (size_t i = 0; i < config.count; ++i) {
-        startup_app_t *app      = &config.apps[i];
-        uint8_t        run_once = 0;
+        startup_app_t *app = &config.apps[i];
+        // Initially just mark all applications as should start
+        app->should_start = true;
+        
         if (app->run_once) {
+            uint8_t run_once = 0;
             esp_err_t err = nvs_get_u8(nvs_handle, app->name, &run_once);
-            if (err != ESP_OK && err != ESP_ERR_NVS_NOT_FOUND) {
-                ESP_LOGE(TAG, "Error (%s) reading!", esp_err_to_name(err));
-            }
-
-            if (run_once == 1) {
+            if (err == ESP_OK && run_once == 1) {
                 printf("%s (%s) has already run once\n", app->name, app->path);
+                app->should_start = false;
                 continue;
             }
         }
-
-        printf("Starting %s (%s)\n", app->name, app->path);
-        pid_t pid = process_create(app->path, app->stack_size, app->argc, app->argv);
-        if (pid == -1) {
-            printf("Failed to start %s (%s)\n", app->name, app->path);
-            continue;
-        }
-
-        app->pid = pid;
-
-        if (app->run_once) {
-            run_once      = 1;
-            esp_err_t err = nvs_set_u8(nvs_handle, app->name, run_once);
-            if (err != ESP_OK) {
-                ESP_LOGE(TAG, "Error (%s) writing!", esp_err_to_name(err));
-            }
-            err = nvs_commit(nvs_handle);
-            if (err != ESP_OK) {
-                ESP_LOGE(TAG, "Failed to commit NVS changes!");
-            }
+        
+        if (app->start_delay > 0) {
+            printf("%s (%s) will start in %lu seconds\n", app->name, app->path, app->start_delay);
         }
     }
 
+    printf("Bootup successful, marking OTA partition valid\n");
+    validate_ota_partition();
+
+    printf("Entering main supervision loop...\n");
+    
     while (1) {
+        time_t current_time = time(NULL);
+        
         size_t free_ram = heap_caps_get_free_size(MALLOC_CAP_DEFAULT);
         printf(
             "Init: Free main memory: %zi, free PSRAM pages: %zi/%zi, running processes %lu\n",
@@ -276,31 +363,45 @@ void run_init(void) {
             get_num_tasks()
         );
 
+        for (size_t i = 0; i < config.count; ++i) {
+            startup_app_t *app = &config.apps[i];
+            maybe_start_app(app, nvs_handle, boot_time, current_time);
+        }
+
+        // Wait for processes to end
         pid_t c = wait(false, 10000);
         if (c != -1) {
             for (size_t i = 0; i < config.count; ++i) {
                 startup_app_t *app = &config.apps[i];
 
                 if (app && app->pid == c) {
-                    if (app->restart_on_failure && app->fail_count < 10) {
-                        printf("Process %s (%s) ended, respawning\n", app->name, app->path);
-                        pid_t pid = process_create(app->path, app->stack_size, app->argc, app->argv);
-                        if (pid == -1) {
-                            printf("Failed to restart %s (%s)\n", app->name, app->path);
-                            app->fail_count++;
-                        } else {
-                            printf("Process %s (%s) respawned\n", app->name, app->path);
-                            app->pid        = pid;
-                            app->fail_count = 0;
-                            vTaskDelay(100 / portTICK_PERIOD_MS);
+                    printf("Process %s (%s) ended\n", app->name, app->path);
+                    // Currently dead
+                    app->pid = 0;
+
+                    // App has run once
+                    if (app->run_once && !app->nvs_write) {
+                        uint8_t run_once = 1;
+                        esp_err_t err = nvs_set_u8(nvs_handle, app->name, run_once);
+
+                        if (err != ESP_OK) {
+                            ESP_LOGE(TAG, "Error (%s) writing NVS for %s!", esp_err_to_name(err), app->name);
+                            continue;
                         }
 
-                    } else {
-                        printf("Process %s (%s) ended\n", app->name, app->path);
-                        app->pid = 0;
+                        err = nvs_commit(nvs_handle);
+
+                        if (err != ESP_OK) {
+                            ESP_LOGE(TAG, "Failed to commit NVS changes for %s!", app->name);
+                            continue;
+                        }
+
+                        app->nvs_write = true;
                     }
 
-                    break;
+                    if (!app->restart_on_failure && !app->start_every) {
+                        app->should_start = false;
+                    }
                 }
             }
         }
