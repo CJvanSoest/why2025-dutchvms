@@ -90,20 +90,7 @@ int app_main(void) {
     }
 
     device_register("FLASH0", fatfs_create_spi("FLASH0", "storage", true));
-    // Must come after FLASH0 as that is where the firmware is
-    device_register("WIFI0", wifi_create());
-    device_register("SOCKET", socket_create());
-
-    device_register("PANEL0", st7703_create());
-    device_register("KEYBOARD0", tca8418_keyboard_create());
-    device_register("TT01", tty_create(true, true));
-    device_register("I2CBUS0", badgevms_i2c_bus_create("I2CBUS0", 0, 400 * 1000));
-    device_register("ORIENTATION0", bosch_bmi270_sensor_create());
-
-    compositor_init("PANEL0", "KEYBOARD0");
     device_register("SD0", fatfs_create_sd("SD0", true));
-
-    logical_name_set("SEARCH", "FLASH0:[SUBDIR], FLASH0:[SUBDIR.ANOTHER]", false);
 
     if (device_get("SD0")) {
         logical_name_set("STORAGE:", "SD0:, FLASH0:", false);
@@ -114,6 +101,19 @@ int app_main(void) {
         logical_name_set("APPS:", "FLASH0:[BADGEVMS.APPS]", false);
         application_init("APPS:", NULL, "FLASH0:[BADGEVMS.APPS]");
     }
+
+    device_register("WIFI0", wifi_create());
+    device_register("SOCKET", socket_create());
+
+    device_register("PANEL0", st7703_create());
+    device_register("KEYBOARD0", tca8418_keyboard_create());
+    device_register("TT01", tty_create(true, true));
+    device_register("I2CBUS0", badgevms_i2c_bus_create("I2CBUS0", 0, 400 * 1000));
+    device_register("ORIENTATION0", bosch_bmi270_sensor_create());
+
+    compositor_init("PANEL0", "KEYBOARD0");
+
+    logical_name_set("SEARCH", "FLASH0:[SUBDIR], FLASH0:[SUBDIR.ANOTHER]", false);
 
     validate_ota_partition();
 

@@ -81,20 +81,20 @@ ExternalProject_Add_StepTargets(connectivity_esp_hosted install)
 get_property(STORAGE_STAGING_DIR GLOBAL PROPERTY STORAGE_STAGING_DIR)
 add_custom_command(
     OUTPUT
-        ${STORAGE_STAGING_DIR}/firmware/network_adapter.bin
-        ${STORAGE_STAGING_DIR}/firmware/partition-table.bin
-        ${STORAGE_STAGING_DIR}/firmware/bootloader.bin
-        ${STORAGE_STAGING_DIR}/firmware/network_adapter.bin.md5
-        ${STORAGE_STAGING_DIR}/firmware/partition-table.bin.md5
-        ${STORAGE_STAGING_DIR}/firmware/bootloader.bin.md5
-    COMMAND ${CMAKE_COMMAND} -E make_directory ${STORAGE_STAGING_DIR}/firmware
-    COMMAND ${CMAKE_COMMAND} -E copy ${CMAKE_BINARY_DIR}/c6firmware/network_adapter.bin ${STORAGE_STAGING_DIR}/firmware/
-    COMMAND ${CMAKE_COMMAND} -E copy ${CMAKE_BINARY_DIR}/c6firmware/partition-table.bin ${STORAGE_STAGING_DIR}/firmware/
-    COMMAND ${CMAKE_COMMAND} -E copy ${CMAKE_BINARY_DIR}/c6firmware/bootloader.bin ${STORAGE_STAGING_DIR}/firmware/
+        ${STORAGE_STAGING_DIR}/BADGEVMS/APPS/why2025_firmware_ota_c6/network_adapter.bin
+        ${STORAGE_STAGING_DIR}/BADGEVMS/APPS/why2025_firmware_ota_c6/partition-table.bin
+        ${STORAGE_STAGING_DIR}/BADGEVMS/APPS/why2025_firmware_ota_c6/bootloader.bin
+        ${STORAGE_STAGING_DIR}/BADGEVMS/APPS/why2025_firmware_ota_c6/network_adapter.bin.md5
+        ${STORAGE_STAGING_DIR}/BADGEVMS/APPS/why2025_firmware_ota_c6/partition-table.bin.md5
+        ${STORAGE_STAGING_DIR}/BADGEVMS/APPS/why2025_firmware_ota_c6/bootloader.bin.md5
+    COMMAND ${CMAKE_COMMAND} -E make_directory ${STORAGE_STAGING_DIR}/BADGEVMS/APPS/why2025_firmware_ota_c6
+    COMMAND ${CMAKE_COMMAND} -E copy ${CMAKE_BINARY_DIR}/c6firmware/network_adapter.bin ${STORAGE_STAGING_DIR}/BADGEVMS/APPS/why2025_firmware_ota_c6
+    COMMAND ${CMAKE_COMMAND} -E copy ${CMAKE_BINARY_DIR}/c6firmware/partition-table.bin ${STORAGE_STAGING_DIR}/BADGEVMS/APPS/why2025_firmware_ota_c6
+    COMMAND ${CMAKE_COMMAND} -E copy ${CMAKE_BINARY_DIR}/c6firmware/bootloader.bin ${STORAGE_STAGING_DIR}/BADGEVMS/APPS/why2025_firmware_ota_c6
     # Generate MD5 files using CMake script (cross-platform)
-    COMMAND ${CMAKE_COMMAND} -DINPUT_FILE=${STORAGE_STAGING_DIR}/firmware/network_adapter.bin -P ${CMAKE_BINARY_DIR}/generate_md5.cmake
-    COMMAND ${CMAKE_COMMAND} -DINPUT_FILE=${STORAGE_STAGING_DIR}/firmware/partition-table.bin -P ${CMAKE_BINARY_DIR}/generate_md5.cmake
-    COMMAND ${CMAKE_COMMAND} -DINPUT_FILE=${STORAGE_STAGING_DIR}/firmware/bootloader.bin -P ${CMAKE_BINARY_DIR}/generate_md5.cmake
+    COMMAND ${CMAKE_COMMAND} -DINPUT_FILE=${STORAGE_STAGING_DIR}/BADGEVMS/APPS/why2025_firmware_ota_c6/network_adapter.bin -P ${CMAKE_BINARY_DIR}/generate_md5.cmake
+    COMMAND ${CMAKE_COMMAND} -DINPUT_FILE=${STORAGE_STAGING_DIR}/BADGEVMS/APPS/why2025_firmware_ota_c6/partition-table.bin -P ${CMAKE_BINARY_DIR}/generate_md5.cmake
+    COMMAND ${CMAKE_COMMAND} -DINPUT_FILE=${STORAGE_STAGING_DIR}/BADGEVMS/APPS/why2025_firmware_ota_c6/bootloader.bin -P ${CMAKE_BINARY_DIR}/generate_md5.cmake
     DEPENDS
      connectivity_esp_hosted-install
      init_storage_staging
@@ -104,12 +104,12 @@ add_custom_command(
 
 add_custom_target(storage_staging_add_connectivity ALL
     DEPENDS
-        ${STORAGE_STAGING_DIR}/firmware/network_adapter.bin
-        ${STORAGE_STAGING_DIR}/firmware/partition-table.bin
-        ${STORAGE_STAGING_DIR}/firmware/bootloader.bin
-        ${STORAGE_STAGING_DIR}/firmware/network_adapter.bin.md5
-        ${STORAGE_STAGING_DIR}/firmware/partition-table.bin.md5
-        ${STORAGE_STAGING_DIR}/firmware/bootloader.bin.md5
+        ${STORAGE_STAGING_DIR}/BADGEVMS/APPS/why2025_firmware_ota_c6/network_adapter.bin
+        ${STORAGE_STAGING_DIR}/BADGEVMS/APPS/why2025_firmware_ota_c6/partition-table.bin
+        ${STORAGE_STAGING_DIR}/BADGEVMS/APPS/why2025_firmware_ota_c6/bootloader.bin
+        ${STORAGE_STAGING_DIR}/BADGEVMS/APPS/why2025_firmware_ota_c6/network_adapter.bin.md5
+        ${STORAGE_STAGING_DIR}/BADGEVMS/APPS/why2025_firmware_ota_c6/partition-table.bin.md5
+        ${STORAGE_STAGING_DIR}/BADGEVMS/APPS/why2025_firmware_ota_c6/bootloader.bin.md5
 )
 add_dependencies(final_storage_staging storage_staging_add_connectivity)
 
