@@ -7,6 +7,8 @@
 #include "esp_log.h"
 #include "why2025_firmware.h"
 
+#include "why_io.h"
+
 static char const *TAG = "slave_c6_flasher";
 
 esp_err_t flash_slave_c6_if_needed() {
@@ -28,7 +30,7 @@ esp_err_t flash_slave_c6_if_needed() {
 
     if (connect_to_target_with_stub(115200, 3686400) == ESP_LOADER_SUCCESS) {
         target_chip_t target = esp_loader_get_target();
-        ESP_LOGI(TAG, "Target = %d", target);
+        ESP_LOGW(TAG, "Target = %d", target);
         if (target != ESP32C6_CHIP) {
             ESP_LOGE(TAG, "wrong target, expecting ESP32C6_CHIP");
             return ESP_FAIL;
@@ -40,36 +42,33 @@ esp_err_t flash_slave_c6_if_needed() {
         }
 
         if (esp_loader_flash_verify_known_md5(bin.boot.addr, bin.boot.size, bin.boot.md5) != ESP_LOADER_SUCCESS) {
-            ESP_LOGI(TAG, "Bootloader MD5 mismatch, flashing...");
-            flash_binary(bin.boot.data, bin.boot.size, bin.boot.addr);
+            ESP_LOGW(TAG, "Bootloader MD5 mismatch, flashing...");
+            flash_binary(bin.boot.fp, bin.boot.size, bin.boot.addr);
         } else {
-            ESP_LOGI(TAG, "Bootloader MD5 match, skipping...");
+            ESP_LOGW(TAG, "Bootloader MD5 match, skipping...");
         }
 
         if (esp_loader_flash_verify_known_md5(bin.part.addr, bin.part.size, bin.part.md5) != ESP_LOADER_SUCCESS) {
-            ESP_LOGI(TAG, "Partition table MD5 mismatch, flashing...");
-            flash_binary(bin.part.data, bin.part.size, bin.part.addr);
+            ESP_LOGW(TAG, "Partition table MD5 mismatch, flashing...");
+            flash_binary(bin.part.fp, bin.part.size, bin.part.addr);
         } else {
-            ESP_LOGI(TAG, "Partition table MD5 match, skipping...");
+            ESP_LOGW(TAG, "Partition table MD5 match, skipping...");
         }
 
         if (esp_loader_flash_verify_known_md5(bin.app.addr, bin.app.size, bin.app.md5) != ESP_LOADER_SUCCESS) {
             ESP_LOGW(TAG, "Application MD5 mismatch, flashing...");
-            if (!get_why2025_network_adapter_binary(&bin)) {
-                ESP_LOGE(TAG, "Failed to read bootloader.bin.md5");
-                return ESP_FAIL;
-            }
-
-            flash_binary(bin.app.data, bin.app.size, bin.app.addr);
+            flash_binary(bin.app.fp, bin.app.size, bin.app.addr);
         } else {
-            ESP_LOGI(TAG, "Application MD5 match, skipping...");
+            ESP_LOGW(TAG, "Application MD5 match, skipping...");
         }
 
     out:
-        ESP_LOGI(TAG, "Resetting C6!");
+        ESP_LOGW(TAG, "Resetting C6!");
+        esp_loader_flash_verify_known_md5(bin.app.addr, bin.app.size, bin.app.md5);
+
         esp_loader_reset_target();
 
-        ESP_LOGI(TAG, "Done!");
+        ESP_LOGW(TAG, "Done!");
 
         free_why2025_binaries(&bin);
 

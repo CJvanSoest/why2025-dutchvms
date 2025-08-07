@@ -107,63 +107,43 @@ bool get_why2025_binaries(why2025_binaries_t *bins) {
     bins->boot.addr = BOOTLOADER_ADDRESS_V1;
     bins->part.addr = PARTITION_ADDRESS;
     bins->app.addr  = APPLICATION_ADDRESS;
-    bins->boot.data = NULL;
-    bins->part.data = NULL;
-    bins->app.data  = NULL;
+    bins->boot.fp = NULL;
+    bins->part.fp  = NULL;
+    bins->app.fp  = NULL;
     bins->boot.md5  = NULL;
     bins->part.md5  = NULL;
     bins->app.md5   = NULL;
 
-    if (!read_file_size(
-            "APPS:[why2025_firmware_ota_c6]bootloader.bin",
-            (void **)(&bins->boot.data),
-            &bins->boot.size,
-            false
-        )) {
+    if (!read_file_size( "APPS:[why2025_firmware_ota_c6]bootloader.bin", (void **)NULL, &bins->boot.size, false)) {
         ESP_LOGE(TAG, "Failed to read bootloader.bin");
         return false;
     }
+    bins->boot.fp = why_fopen("APPS:[why2025_firmware_ota_c6]bootloader.bin", "r");
 
     if (!read_file_size("APPS:[why2025_firmware_ota_c6]bootloader.bin.md5", (void **)(&bins->boot.md5), NULL, true)) {
         ESP_LOGE(TAG, "Failed to read bootloader.bin.md5");
         return false;
     }
 
-    if (!read_file_size(
-            "APPS:[why2025_firmware_ota_c6]partition-table.bin",
-            (void **)(&bins->part.data),
-            &bins->part.size,
-            false
-        )) {
+    if (!read_file_size( "APPS:[why2025_firmware_ota_c6]partition-table.bin", (void **)NULL, &bins->part.size, false)) {
         ESP_LOGE(TAG, "Failed to read partition-table.bin");
         return false;
     }
+    bins->part.fp = why_fopen("APPS:[why2025_firmware_ota_c6]bootloader.bin", "r");
 
-    if (!read_file_size(
-            "APPS:[why2025_firmware_ota_c6]partition-table.bin.md5",
-            (void **)(&bins->part.md5),
-            NULL,
-            true
-        )) {
+    if (!read_file_size( "APPS:[why2025_firmware_ota_c6]partition-table.bin.md5", (void **)(&bins->part.md5), NULL, true)) {
         ESP_LOGE(TAG, "Failed to read partition-table.bin.md5");
         return false;
     }
 
-    // here we invoke read_file_size with NULL as destbuf, so bins->app.size gets populated
-    // but the actual file data is not actually read. we need the size to check the C6 firmware
-    // md5 hash. we lazyload the actual C6 firmware blob on demand when there is a hash mismatch.
     if (!read_file_size("APPS:[why2025_firmware_ota_c6]network_adapter.bin", (void **)NULL, &bins->app.size, false)) {
         ESP_LOGE(TAG, "Failed to read network_adapter.bin");
         return false;
     }
 
+    bins->app.fp = why_fopen("APPS:[why2025_firmware_ota_c6]network_adapter.bin", "r");
 
-    if (!read_file_size(
-            "APPS:[why2025_firmware_ota_c6]network_adapter.bin.md5",
-            (void **)(&bins->app.md5),
-            NULL,
-            true
-        )) {
+    if (!read_file_size( "APPS:[why2025_firmware_ota_c6]network_adapter.bin.md5", (void **)(&bins->app.md5), NULL, true)) {
         ESP_LOGE(TAG, "Failed to read network_adapter.bin.md5");
         return false;
     }
@@ -171,26 +151,10 @@ bool get_why2025_binaries(why2025_binaries_t *bins) {
     return true;
 }
 
-bool get_why2025_network_adapter_binary(why2025_binaries_t *bins) {
-    if (!read_file_size(
-            "APPS:[why2025_firmware_ota_c6]network_adapter.bin",
-            (void **)(&bins->app.data),
-            &bins->app.size,
-            false
-        )) {
-        ESP_LOGE(TAG, "Failed to read network_adapter.bin");
-        return false;
-    }
-
-    return true;
-}
-
 void free_why2025_binaries(why2025_binaries_t *bins) {
-    heap_caps_free((void *)bins->boot.data);
-    heap_caps_free((void *)bins->part.data);
-    if (bins->app.data) {
-        heap_caps_free((void *)bins->app.data);
-    }
+    why_fclose(bins->boot.fp);
+    why_fclose(bins->part.fp);
+    why_fclose(bins->app.fp);
     heap_caps_free((void *)bins->boot.md5);
     heap_caps_free((void *)bins->part.md5);
     heap_caps_free((void *)bins->app.md5);
@@ -304,10 +268,9 @@ esp_loader_error_t
 #endif /* SERIAL_FLASHER_INTERFACE_UART || SERIAL_FLASHER_INTERFACE_USB */
 
 #ifndef SERIAL_FLASHER_INTERFACE_SPI
-esp_loader_error_t flash_binary(const uint8_t *bin, size_t size, size_t address) {
+esp_loader_error_t flash_binary(FILE *bin, size_t size, size_t address) {
     esp_loader_error_t err;
     static uint8_t     payload[1024];
-    uint8_t const     *bin_addr = bin;
 
     printf("Erasing flash (this may take a while)...\n");
     err = esp_loader_flash_start(address, size, sizeof(payload));
@@ -329,7 +292,7 @@ esp_loader_error_t flash_binary(const uint8_t *bin, size_t size, size_t address)
 
     while (size > 0) {
         size_t to_read = MIN(size, sizeof(payload));
-        memcpy(payload, bin_addr, to_read);
+	why_fread(payload, to_read, 1, bin);
 
         err = esp_loader_flash_write(payload, to_read);
         if (err != ESP_LOADER_SUCCESS) {
@@ -338,7 +301,6 @@ esp_loader_error_t flash_binary(const uint8_t *bin, size_t size, size_t address)
         }
 
         size     -= to_read;
-        bin_addr += to_read;
         written  += to_read;
 
         int progress = (int)(((float)written / binary_size) * 100);

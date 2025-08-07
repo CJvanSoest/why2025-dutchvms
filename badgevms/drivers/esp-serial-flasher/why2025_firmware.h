@@ -15,7 +15,7 @@
 
 #pragma once
 
-
+#include "why_io.h"
 #include "esp_loader.h"
 
 #include <stdbool.h>
@@ -32,7 +32,7 @@ extern "C" {
 #define ESP_RAM_BLOCK       0x1800
 
 typedef struct {
-    uint8_t const *data;
+    FILE *fp;
     uint32_t       size;
     uint32_t       addr;
     uint8_t const *md5;
@@ -75,7 +75,7 @@ void free_why2025_binaries(why2025_binaries_t *bins);
 
 esp_loader_error_t connect_to_target(uint32_t higher_transmission_rate);
 esp_loader_error_t connect_to_target_with_stub(uint32_t current_transmission_rate, uint32_t higher_transmission_rate);
-esp_loader_error_t flash_binary(uint8_t const *bin, size_t size, size_t address);
+esp_loader_error_t flash_binary(FILE *bin, size_t size, size_t address);
 esp_loader_error_t load_ram_binary(uint8_t const *bin);
 
 
