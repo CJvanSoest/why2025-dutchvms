@@ -69,5 +69,5 @@ typedef struct window {
     struct window *prev;
 } window_t;
 
-void compositor_init(char const *lcd_device_name, char const *keyboard_device_name);
+bool compositor_init(char const *lcd_device_name, char const *keyboard_device_name);
 void window_destroy_task(window_handle_t window);

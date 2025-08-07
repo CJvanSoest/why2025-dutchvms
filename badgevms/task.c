@@ -772,11 +772,16 @@ BaseType_t create_kernel_task(
     return ret;
 }
 
-void task_init() {
+bool task_init() {
     ESP_DRAM_LOGI(DRAM_STR("task_init"), "Initializing");
 
     ESP_DRAM_LOGI(DRAM_STR("task_init"), "Creating PID table");
     pid_table_lock = xSemaphoreCreateMutex();
+
+    if (!pid_table_lock) {
+        ESP_LOGE(TAG, "Failed to create pid_table_lock");
+        return false;
+    }
 
     for (int i = 0; i < NUM_PIDS; ++i) {
         pid_table[i] = i;
@@ -806,11 +811,29 @@ void task_init() {
 
     ESP_DRAM_LOGI(DRAM_STR("task_init"), "Starting Hades process");
     hades_queue = xQueueCreate(16, sizeof(pid_t));
+    if (!hades_queue) {
+        ESP_LOGE(TAG, "Failed to create HADES queue");
+        return false;
+    }
+
     // Hades has higher priority than Zeus. This prevents dead tasks from piling up
     // while Zeus tries to spawn new ones
-    create_kernel_task(hades, "Hades", 3072, NULL, 11, &hades_handle, 1);
+    if (create_kernel_task(hades, "Hades", 3072, NULL, 11, &hades_handle, 1) != pdTRUE) {
+        ESP_LOGE(TAG, "Failed to create HADES task");
+        return false;
+    }
 
     ESP_DRAM_LOGI(DRAM_STR("task_init"), "Starting Zeus process");
     zeus_queue = xQueueCreate(1, sizeof(zeus_command_message_t));
-    create_kernel_task(zeus, "Zeus", 3072, NULL, 10, &zeus_handle, 1);
+    if (!zeus_queue) {
+        ESP_LOGE(TAG, "Failed to create ZEUS queue");
+        return false;
+    }
+
+    if (create_kernel_task(zeus, "Zeus", 3072, NULL, 10, &zeus_handle, 1) != pdTRUE) {
+        ESP_LOGE(TAG, "Failed to create ZEUS task");
+        return false;
+    }
+
+    return true;
 }

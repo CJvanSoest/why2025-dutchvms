@@ -114,7 +114,12 @@ bool get_why2025_binaries(why2025_binaries_t *bins) {
     bins->part.md5  = NULL;
     bins->app.md5   = NULL;
 
-    if (!read_file_size("APPS:[why2025_firmware_ota_c6]bootloader.bin", (void **)(&bins->boot.data), &bins->boot.size, false)) {
+    if (!read_file_size(
+            "APPS:[why2025_firmware_ota_c6]bootloader.bin",
+            (void **)(&bins->boot.data),
+            &bins->boot.size,
+            false
+        )) {
         ESP_LOGE(TAG, "Failed to read bootloader.bin");
         return false;
     }
@@ -124,12 +129,22 @@ bool get_why2025_binaries(why2025_binaries_t *bins) {
         return false;
     }
 
-    if (!read_file_size("APPS:[why2025_firmware_ota_c6]partition-table.bin", (void **)(&bins->part.data), &bins->part.size, false)) {
+    if (!read_file_size(
+            "APPS:[why2025_firmware_ota_c6]partition-table.bin",
+            (void **)(&bins->part.data),
+            &bins->part.size,
+            false
+        )) {
         ESP_LOGE(TAG, "Failed to read partition-table.bin");
         return false;
     }
 
-    if (!read_file_size("APPS:[why2025_firmware_ota_c6]partition-table.bin.md5", (void **)(&bins->part.md5), NULL, true)) {
+    if (!read_file_size(
+            "APPS:[why2025_firmware_ota_c6]partition-table.bin.md5",
+            (void **)(&bins->part.md5),
+            NULL,
+            true
+        )) {
         ESP_LOGE(TAG, "Failed to read partition-table.bin.md5");
         return false;
     }
@@ -143,7 +158,12 @@ bool get_why2025_binaries(why2025_binaries_t *bins) {
     }
 
 
-    if (!read_file_size("APPS:[why2025_firmware_ota_c6]network_adapter.bin.md5", (void **)(&bins->app.md5), NULL, true)) {
+    if (!read_file_size(
+            "APPS:[why2025_firmware_ota_c6]network_adapter.bin.md5",
+            (void **)(&bins->app.md5),
+            NULL,
+            true
+        )) {
         ESP_LOGE(TAG, "Failed to read network_adapter.bin.md5");
         return false;
     }
@@ -152,7 +172,12 @@ bool get_why2025_binaries(why2025_binaries_t *bins) {
 }
 
 bool get_why2025_network_adapter_binary(why2025_binaries_t *bins) {
-    if (!read_file_size("APPS:[why2025_firmware_ota_c6]network_adapter.bin", (void **)(&bins->app.data), &bins->app.size, false)) {
+    if (!read_file_size(
+            "APPS:[why2025_firmware_ota_c6]network_adapter.bin",
+            (void **)(&bins->app.data),
+            &bins->app.size,
+            false
+        )) {
         ESP_LOGE(TAG, "Failed to read network_adapter.bin");
         return false;
     }

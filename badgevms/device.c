@@ -28,9 +28,9 @@ static char const *TAG = "device";
 static khash_t(devtable) * device_table;
 static SemaphoreHandle_t device_table_lock = NULL;
 
-int device_register(char const *name, device_t *device) {
+bool device_register(char const *name, device_t *device) {
     if (!device) {
-        return 1;
+        return false;
     }
 
     if (xSemaphoreTake(device_table_lock, portMAX_DELAY) != pdTRUE) {
@@ -42,7 +42,7 @@ int device_register(char const *name, device_t *device) {
 
     xSemaphoreGive(device_table_lock);
 
-    return 0;
+    return true;
 }
 
 device_t *device_get(char const *name) {
@@ -58,9 +58,15 @@ device_t *device_get(char const *name) {
     return device;
 }
 
-void device_init() {
-    ESP_DRAM_LOGI(DRAM_STR("device_init"), "Initializing");
+bool device_init() {
+    ESP_LOGI(TAG, "Initializing");
 
     device_table      = kh_init(devtable);
     device_table_lock = xSemaphoreCreateMutex();
+    if (!device_table_lock) {
+        ESP_LOGE(TAG, "Failed to create device_table_lock");
+        return false;
+    }
+
+    return true;
 }

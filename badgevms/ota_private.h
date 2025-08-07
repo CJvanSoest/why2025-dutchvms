@@ -16,7 +16,5 @@
 
 #pragma once
 
-#include "badgevms/device.h"
-
-bool device_register(char const *name, device_t *device);
-bool device_init();
+void invalidate_ota_partition();
+bool validate_ota_partition();

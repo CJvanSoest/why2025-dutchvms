@@ -31,7 +31,7 @@ typedef struct {
     bool   terminal;
 } logical_name_target_t;
 
-void                  logical_names_system_init();
+bool                  logical_names_system_init();
 int                   logical_name_set(char const *logical_name, char const *target, bool is_terminal);
 logical_name_target_t logical_name_get(char const *logical_name);
 void                  logical_name_del(char const *logical_name);

@@ -14,10 +14,21 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#define TAG logical_names
+#define TAG "logical_names"
+
+#ifndef RUN_TEST
+#include "esp_log.h"
+#endif
 
 #ifndef ESP_LOGE
 #define ESP_LOGE(tag, ...)                                                                                             \
+    do {                                                                                                               \
+        fprintf(stderr, __VA_ARGS__);                                                                                  \
+        fprintf(stderr, "\n");                                                                                         \
+    } while (0)
+#endif
+#ifndef ESP_LOGI
+#define ESP_LOGI(tag, ...)                                                                                             \
     do {                                                                                                               \
         fprintf(stderr, __VA_ARGS__);                                                                                  \
         fprintf(stderr, "\n");                                                                                         \
@@ -462,8 +473,10 @@ static parsed_components_t _logical_name_resolve(parsed_components_t path, size_
     return _logical_name_resolve(path, list_idx, depth + 1);
 }
 
-void logical_names_system_init() {
+bool logical_names_system_init() {
+    ESP_LOGI(TAG, "Initializing");
     logical_name_table = kh_init(lnametable);
+    return true;
 }
 
 int logical_name_set(char const *logical_name, char const *target, bool is_terminal) {

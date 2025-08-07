@@ -43,7 +43,7 @@
 #include "logical_names.h"
 #include "memory.h"
 #include "nvs_flash.h"
-#include "ota/ota_private.h"
+#include "ota_private.h"
 #include "task.h"
 
 #include <errno.h>
@@ -76,10 +76,23 @@ int app_main(void) {
     size_t free_ram = heap_caps_get_free_size(MALLOC_CAP_DEFAULT);
     ESP_LOGW(TAG, "Free main memory: %zi", free_ram);
 
+    // If this fails we won't make it past here
     memory_init();
-    task_init();
-    device_init();
-    logical_names_system_init();
+
+    if (!task_init()) {
+        ESP_LOGE(TAG, "Failed to initialize tasking subsystem");
+        invalidate_ota_partition();
+    }
+
+    if (!device_init()) {
+        ESP_LOGE(TAG, "Failed to initialize device subsystem");
+        invalidate_ota_partition();
+    }
+
+    if (!logical_names_system_init()) {
+        ESP_LOGE(TAG, "Failed to initialize logical names subsystem");
+        invalidate_ota_partition();
+    }
 
     ESP_ERROR_CHECK(esp_event_loop_create_default());
 
@@ -89,7 +102,12 @@ int app_main(void) {
         ret = nvs_flash_init();
     }
 
-    device_register("FLASH0", fatfs_create_spi("FLASH0", "storage", true));
+    if (!device_register("FLASH0", fatfs_create_spi("FLASH0", "storage", true))) {
+        ESP_LOGE(TAG, "Failed to initialize FLASH0 driver");
+        invalidate_ota_partition();
+    }
+
+    // Allowed to fail
     device_register("SD0", fatfs_create_sd("SD0", true));
 
     if (device_get("SD0")) {
@@ -102,16 +120,45 @@ int app_main(void) {
         application_init("APPS:", NULL, "FLASH0:[BADGEVMS.APPS]");
     }
 
-    device_register("WIFI0", wifi_create());
-    device_register("SOCKET", socket_create());
+    if (!device_register("WIFI0", wifi_create())) {
+        ESP_LOGE(TAG, "Failed to initialize WIFI0 driver");
+        invalidate_ota_partition();
+    }
 
-    device_register("PANEL0", st7703_create());
-    device_register("KEYBOARD0", tca8418_keyboard_create());
-    device_register("TT01", tty_create(true, true));
-    device_register("I2CBUS0", badgevms_i2c_bus_create("I2CBUS0", 0, 400 * 1000));
-    device_register("ORIENTATION0", bosch_bmi270_sensor_create());
+    if (!device_register("SOCKET0", socket_create())) {
+        ESP_LOGE(TAG, "Failed to initialize SOCKET0 driver");
+        invalidate_ota_partition();
+    }
 
-    compositor_init("PANEL0", "KEYBOARD0");
+    if (!device_register("PANEL0", st7703_create())) {
+        ESP_LOGE(TAG, "Failed to initialize PANEL0 driver");
+        invalidate_ota_partition();
+    }
+
+    if (!device_register("KEYBOARD0", tca8418_keyboard_create())) {
+        ESP_LOGE(TAG, "Failed to initialize KEYBOARD0 driver");
+        invalidate_ota_partition();
+    }
+
+    if (!device_register("TT01", tty_create(true, true))) {
+        ESP_LOGE(TAG, "Failed to initialize TT01 driver");
+        invalidate_ota_partition();
+    }
+
+    if (!device_register("I2CBUS0", badgevms_i2c_bus_create("I2CBUS0", 0, 400 * 1000))) {
+        ESP_LOGE(TAG, "Failed to initialize I2CBUS0 driver");
+        invalidate_ota_partition();
+    }
+
+    if (!device_register("ORIENTATION0", bosch_bmi270_sensor_create())) {
+        ESP_LOGE(TAG, "Failed to initialize ORIENTATION0 driver");
+        invalidate_ota_partition();
+    }
+
+    if (!compositor_init("PANEL0", "KEYBOARD0")) {
+        ESP_LOGE(TAG, "Failed to initialize compositor");
+        invalidate_ota_partition();
+    }
 
     logical_name_set("SEARCH", "FLASH0:[SUBDIR], FLASH0:[SUBDIR.ANOTHER]", false);
 

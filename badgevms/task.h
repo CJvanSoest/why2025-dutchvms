@@ -121,7 +121,7 @@ __attribute__((always_inline)) inline static task_info_t *get_task_info() {
     return &kernel_task;
 }
 
-void         task_init();
+bool         task_init();
 pid_t        run_task(void const *buffer, uint16_t stack_size, task_type_t type, int argc, char *argv[]);
 pid_t        run_task_path(char const *path, uint16_t stack_size, task_type_t type, int argc, char *argv[]);
 void         task_record_resource_alloc(task_resource_type_t type, void *ptr);

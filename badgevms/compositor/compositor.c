@@ -1091,19 +1091,19 @@ event_t window_event_poll(window_t *window, bool block, uint32_t timeout_msec) {
     return e;
 }
 
-void compositor_init(char const *lcd_device_name, char const *keyboard_device_name) {
+bool compositor_init(char const *lcd_device_name, char const *keyboard_device_name) {
     ESP_LOGI(TAG, "Initializing");
 
     lcd_device = (lcd_device_t *)device_get(lcd_device_name);
     if (!lcd_device) {
         ESP_LOGE(TAG, "Unable to access the LCD device '%s'", lcd_device_name);
-        return;
+        return false;
     }
 
     keyboard_device = (device_t *)device_get(keyboard_device_name);
     if (!keyboard_device) {
         ESP_LOGE(TAG, "Unable to access the keyboard device '%s'", keyboard_device_name);
-        // return;
+        return false;
     }
 
     for (int i = 0; i < DISPLAY_FRAMEBUFFERS; ++i) {
@@ -1119,4 +1119,6 @@ void compositor_init(char const *lcd_device_name, char const *keyboard_device_na
 
     compositor_queue = xQueueCreate(10, sizeof(compositor_message_t));
     create_kernel_task(compositor, "Compositor", 8192, NULL, 20, &compositor_handle, 0);
+
+    return true;
 }
