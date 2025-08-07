@@ -205,6 +205,12 @@ build_app(ota_wifi_update
      ota_wifi_update/thirdparty/microui.c
 )
 
+build_app(sponsor_app
+    SOURCES
+     sponsor_app/main.c
+     sponsor_app/image.c
+)
+
 build_app(doom
     SOURCES
      doomgeneric/doomgeneric/am_map.c

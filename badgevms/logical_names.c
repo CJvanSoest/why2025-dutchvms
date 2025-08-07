@@ -35,9 +35,8 @@
     } while (0)
 #endif
 
-#include "logical_names.h"
-
 #include "hash_helper.h"
+#include "logical_names.h"
 #include "thirdparty/khash.h"
 
 #include <stdio.h>

@@ -1,6 +1,20 @@
+#[[apps]]
+#name = "style"
+#path = "FLASH0:sdl_test.elf"
+#restart_on_failure = false
+#stack_size = 8192
+#args = []
+
 [[apps]]
-name = "style"
-path = "FLASH0:sdl_test.elf"
+name = "ota_update"
+path = "FLASH0:ota_wifi_update.elf"
+restart_on_failure = false
+stack_size = 8192
+args = []
+
+[[apps]]
+name = "sponsors"
+path = "FLASH0:sponsor_app.elf"
 restart_on_failure = false
 stack_size = 8192
 args = []
