@@ -635,7 +635,8 @@ static void IRAM_ATTR NOINLINE_ATTR compositor(void *ignored) {
             do {
                 task_info_t *task_info = (task_info_t*)atomic_load(&window->task_info);
                 if (!task_info) {
-                    continue;
+                    remove_window(window);
+                    break;
                 }
 
                 if (eTaskGetState(task_info->handle) != eDeleted) {
