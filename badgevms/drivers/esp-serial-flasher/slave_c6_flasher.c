@@ -64,7 +64,6 @@ esp_err_t flash_slave_c6_if_needed() {
 
     out:
         ESP_LOGW(TAG, "Resetting C6!");
-        esp_loader_flash_verify_known_md5(bin.app.addr, bin.app.size, bin.app.md5);
 
         esp_loader_reset_target();
 
