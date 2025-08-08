@@ -58,9 +58,6 @@ typedef struct {
     size_t         count;
 } startup_config_t;
 
-// Function declarations
-bool maybe_start_app(startup_app_t *app, nvs_handle_t nvs_handle, time_t boot_time, time_t current_time);
-
 void free_app(startup_app_t *app) {
     if (!app)
         return;
@@ -273,6 +270,11 @@ bool maybe_start_app(startup_app_t *app, nvs_handle_t nvs_handle, time_t boot_ti
         }
     }
 
+    if (!in_startup_delay && !app->start_every && app->restart_on_failure) {
+        should_start = true;
+        reason       = "restart on failure";
+    }
+
     // Handle start delay
     if (!app->last_started && current_time - boot_time >= app->start_delay) {
         should_start = true;
@@ -358,17 +360,21 @@ void run_init(void) {
 
     printf("Entering main supervision loop...\n");
 
+    time_t last_printed = time(NULL);
     while (1) {
         time_t current_time = time(NULL);
 
-        size_t free_ram = heap_caps_get_free_size(MALLOC_CAP_DEFAULT);
-        printf(
-            "Init: Free main memory: %zi, free PSRAM pages: %zi/%zi, running processes %lu\n",
-            free_ram,
-            get_free_psram_pages(),
-            get_total_psram_pages(),
-            get_num_tasks()
-        );
+        if (current_time - last_printed > 5) {
+            size_t free_ram = heap_caps_get_free_size(MALLOC_CAP_DEFAULT);
+            printf(
+                "Init: Free main memory: %zi, free PSRAM pages: %zi/%zi, running processes %lu\n",
+                free_ram,
+                get_free_psram_pages(),
+                get_total_psram_pages(),
+                get_num_tasks()
+            );
+            last_printed = current_time;
+        }
 
         for (size_t i = 0; i < config.count; ++i) {
             startup_app_t *app = &config.apps[i];
@@ -376,13 +382,12 @@ void run_init(void) {
         }
 
         // Wait for processes to end
-        pid_t c = wait(false, 10000);
+        pid_t c = wait(false, 1000);
         if (c != -1) {
             for (size_t i = 0; i < config.count; ++i) {
                 startup_app_t *app = &config.apps[i];
 
                 if (app && app->pid == c) {
-                    printf("Process %s (%s) ended\n", app->name, app->path);
                     // Currently dead
                     app->pid = 0;
 
@@ -407,7 +412,10 @@ void run_init(void) {
                     }
 
                     if (!app->restart_on_failure && !app->start_every) {
+                        printf("Process %s (%s) ended\n", app->name, app->path);
                         app->should_start = false;
+                    } else {
+                        printf("Process %s (%s) ended, restarting\n", app->name, app->path);
                     }
                 }
             }
