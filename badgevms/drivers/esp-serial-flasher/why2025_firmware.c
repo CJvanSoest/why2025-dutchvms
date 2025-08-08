@@ -129,7 +129,7 @@ bool get_why2025_binaries(why2025_binaries_t *bins) {
         ESP_LOGE(TAG, "Failed to read partition-table.bin");
         return false;
     }
-    bins->part.fp = why_fopen("APPS:[why2025_firmware_ota_c6]bootloader.bin", "r");
+    bins->part.fp = why_fopen("APPS:[why2025_firmware_ota_c6]partition-table.bin", "r");
 
     if (!read_file_size( "APPS:[why2025_firmware_ota_c6]partition-table.bin.md5", (void **)(&bins->part.md5), NULL, true)) {
         ESP_LOGE(TAG, "Failed to read partition-table.bin.md5");
