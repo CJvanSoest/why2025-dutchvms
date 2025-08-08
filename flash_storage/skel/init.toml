@@ -1,14 +1,20 @@
 [[apps]]
-name = "snake"
-path = "FLASH0:sdl_test.elf"
+name = "ota_update"
+path = "FLASH0:[BADGEVMS.APPS.ota_wifi_update]ota_wifi_update.elf"
 restart_on_failure = false
 stack_size = 8192
-start_delay = 30
 args = []
 
 [[apps]]
+name = "sponsors"
+path = "FLASH0:[BADGEVMS.APPS.why2025_sponsors]why2025_sponsors.elf"
+restart_on_failure = false
+stack_size = 16384
+args = ["--boot"]
+
+[[apps]]
 name = "hello"
-path = "FLASH0:hello.elf"
+path = "FLASH0:[BADGEVMS.APPS.hello]hello.elf"
 restart_on_failure = false
 stack_size = 8192
 start_delay = 15
@@ -16,16 +22,9 @@ start_every = 5
 args = []
 
 [[apps]]
-name = "ota_update"
-path = "FLASH0:ota_wifi_update.elf"
+name = "snake"
+path = "FLASH0:[BADGEVMS.APPS.sdl_test]sdl_test.elf"
 restart_on_failure = false
 stack_size = 8192
+start_delay = 30
 args = []
-
-[[apps]]
-name = "sponsors"
-path = "FLASH0:sponsor_app.elf"
-restart_on_failure = false
-stack_size = 16384
-args = ["--boot"]
-

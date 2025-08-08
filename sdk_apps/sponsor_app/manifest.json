@@ -1,10 +1,10 @@
 {
-    "unique_identifier": "why2025_firmware_ota_c6",
-    "name": "why2025_firmware_ota_c6",
+    "unique_identifier": "sponsor_app",
+    "name": "sponsor_app",
     "author": "Team:Badge",
     "version": "1",
     "interpreter": "",
     "metadata_file": "",
-    "binary_path": "",
+    "binary_path": "sponsor_app",
     "source": 1
 }
