@@ -68,7 +68,7 @@ BMI2_INTF_RETURN_TYPE bmi2_spi_write(uint8_t reg_addr, const uint8_t *reg_data, 
  */
 void bmi2_delay_us(uint32_t period, void *intf_ptr)
 {
-    vTaskDelay((period + (1000 * portTICK_PERIOD_MS - 1) / (1000 * portTICK_PERIOD_MS)));
+    vTaskDelay(MIN(1, period / 1000 / portTICK_PERIOD_MS));
 }
 
 /*!
