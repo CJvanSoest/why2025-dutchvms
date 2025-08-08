@@ -55,6 +55,7 @@ typedef struct wifi_station {
 typedef struct {
     badgevms_wifi_status_t            status;
     badgevms_wifi_connection_status_t connection_status;
+    badgevms_wifi_connection_status_t connection_status_want;
     SemaphoreHandle_t                 mutex;
     wifi_station_t                    current;
     int                               num_scan_results;
@@ -192,7 +193,7 @@ static void event_handler(void *arg, esp_event_base_t event_base, int32_t event_
     if (event_base == WIFI_EVENT && event_id == WIFI_EVENT_STA_START) {
         esp_wifi_connect();
     } else if (event_base == WIFI_EVENT && event_id == WIFI_EVENT_STA_DISCONNECTED) {
-        if (status.connection_status == WIFI_CONNECTED) {
+        if (status.connection_status_want == WIFI_DISCONNECTED) {
             status.connection_status = WIFI_DISCONNECTED;
             ESP_LOGW(TAG, "unexpected wifi disconnect, reconnecting");
             if (s_retry_num < 10) {
@@ -220,6 +221,7 @@ static void event_handler(void *arg, esp_event_base_t event_base, int32_t event_
 }
 
 static void hermes_do_disconnect() {
+    status.connection_status_want = WIFI_DISCONNECTED;
     if (status.connection_status == WIFI_DISCONNECTED) {
         ESP_LOGW("HERMES", "Already disconnected");
         return;
@@ -243,10 +245,12 @@ again:
 }
 
 static void hermes_do_connect() {
+    status.connection_status_want = WIFI_CONNECTED;
     if (status.connection_status == WIFI_CONNECTED) {
         ESP_LOGW("HERMES", "Already connected");
         return;
     }
+
     ESP_ERROR_CHECK(esp_wifi_disconnect());
     ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_STA));
 
