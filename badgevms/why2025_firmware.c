@@ -21,9 +21,9 @@
 #endif
 
 #include "application_private.h"
-#include "badgevms_config.h"
 #include "badgevms/device.h"
 #include "badgevms/process.h"
+#include "badgevms_config.h"
 #include "compositor/compositor_private.h"
 #include "device_private.h"
 #include "drivers/badgevms_i2c_bus.h"
