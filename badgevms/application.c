@@ -389,7 +389,7 @@ bool application_destroy(application_t *app) {
     return success;
 }
 
-char *application_create_file_string(application_t *app, char const *file_path) {
+char *application_create_file_string(application_t const *app, char const *file_path) {
     if (!app) {
         return NULL;
     }
@@ -423,7 +423,7 @@ char *application_create_file_string(application_t *app, char const *file_path) 
     return absolute_file_path;
 }
 
-FILE *application_create_file(application_t *app, char const *file_path) {
+FILE *application_create_file(application_t const *app, char const *file_path) {
     char *absolute_file_path = application_create_file_string(app, file_path);
     if (!absolute_file_path) {
         return NULL;

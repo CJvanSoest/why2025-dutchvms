@@ -81,14 +81,14 @@ bool application_destroy(application_t *application);
 // filename.ext to be placed in APP:filename.ext or
 // [dir.subdir]filename.ext to be placed in APP:[dir.subdir]filename.ext
 // subdirectories are automatically created if needed
-FILE *application_create_file(application_t *application, char const *file_path);
+FILE *application_create_file(application_t const *application, char const *file_path);
 
 // Generate an absolute path to install the file with the given name into the application
 // see application_create_file for details. Subdirectories will be created even if the file
 // is never created. Note that it is not necessary to additionally also call
 // application_create_file() if you create the file based on the returned name.
 // The caller should free() the string.
-char *application_create_file_string(application_t *application, char const *file_path);
+char *application_create_file_string(application_t const *application, char const *file_path);
 
 // Query the list of installed applications, giving a list and the first application in the list.
 // out can be NULL.
