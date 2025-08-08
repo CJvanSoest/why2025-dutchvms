@@ -5,6 +5,6 @@
     "version": "1",
     "interpreter": "",
     "metadata_file": "",
-    "binary_path": "REPLACEME",
+    "binary_path": "REPLACEME.elf",
     "source": 1
 }
