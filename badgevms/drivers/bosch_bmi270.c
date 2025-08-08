@@ -16,7 +16,7 @@
 
 #include "bosch_bmi270.h"
 
-#include "badgevms/badgevms_config.h"
+#include "badgevms_config.h"
 #include "bmi270.h"
 #include "esp_log.h"
 

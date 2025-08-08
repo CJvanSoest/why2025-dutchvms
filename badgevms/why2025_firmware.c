@@ -21,7 +21,7 @@
 #endif
 
 #include "application_private.h"
-#include "badgevms/badgevms_config.h"
+#include "badgevms_config.h"
 #include "badgevms/device.h"
 #include "badgevms/process.h"
 #include "compositor/compositor_private.h"

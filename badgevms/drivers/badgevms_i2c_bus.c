@@ -16,7 +16,7 @@
 
 #include "badgevms_i2c_bus.h"
 
-#include "badgevms/badgevms_config.h"
+#include "badgevms_config.h"
 #include "esp_log.h"
 #include "i2c_bus.h"
 #include "task.h"
