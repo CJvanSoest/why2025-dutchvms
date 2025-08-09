@@ -313,6 +313,7 @@ static void task_info_delete(task_info_t *task_info) {
 
 // Try and handle misbehaving tasks
 void IRAM_ATTR cerberos() {
+    vTaskDelete(NULL);
     esp_rom_printf("CERBEROS: Chewing...\n");
     while (1) {
     }
@@ -321,9 +322,6 @@ void IRAM_ATTR cerberos() {
 void IRAM_ATTR __wrap_xt_unhandled_exception(void *frame) {
     task_info_t *task_info = get_task_info();
     if (task_info && task_info->pid) {
-        // We can do this because we are running in ISR context, not the task context.
-        vTaskSuspend(NULL);
-        vTaskDelete(NULL);
         esp_rom_printf("Task %u caused an unhandled exception, Cerberos will deal with it\n", task_info->pid);
 
         // Send task off to think about what it did until its timeslice runs out

@@ -906,8 +906,8 @@ simple_function:
   - application_set_name
   - application_set_version
   - device_get
+  - get_mac_address
   - get_screen_info
-  - get_unique_id
   - mkdir_p
   - ota_get_invalid_version
   - ota_get_running_version

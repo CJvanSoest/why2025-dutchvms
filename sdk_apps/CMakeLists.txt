@@ -124,77 +124,77 @@ build_app(hello
      main.c
 )
 
-build_app(bench_basic_a
-    SOURCES 
-     bench_basic_a.c
-)
+#build_app(bench_basic_a
+#    SOURCES 
+#     bench_basic_a.c
+#)
+#
+#build_app(bench_basic_b
+#    SOURCES
+#     bench_basic_b.c
+#)
+#
+#build_app(framebuffer_test
+#    SOURCES
+#     framebuffer_test_a.c
+#)
+#
+#build_app(hardware_test
+#    SOURCES
+#     thirdparty/microui.c
+#     test_badge.c
+#     test_drawing_helper.c
+#     test_keyboard.c
+#     run_tests.c
+#)
+#
+#build_app(sdl_test
+#    SOURCES
+#     sdl_test.c
+#    LIBRARIES
+#     sdl3
+#)
+#
+#build_app(wifi_test
+#    SOURCES
+#     wifi_test.c
+#)
+#
+#build_app(socket_test
+#    SOURCES
+#     socket_test.c
+#)
+#
+#
+#build_app(curl_test
+#    SOURCES
+#     curl_test.c
+#)
+#
+#build_app(bmi270_test
+#    SOURCES
+#     bmi270_test.c
+#)
 
-build_app(bench_basic_b
-    SOURCES
-     bench_basic_b.c
-)
+#build_app(thread_test
+#    SOURCES
+#     main.c
+#)
 
-build_app(framebuffer_test
-    SOURCES
-     framebuffer_test_a.c
-)
+#build_app(process_test
+#    SOURCES
+#     main.c
+#)
 
-build_app(hardware_test
-    SOURCES
-     thirdparty/microui.c
-     test_badge.c
-     test_drawing_helper.c
-     test_keyboard.c
-     run_tests.c
-)
+#build_app(appdb_test
+#    SOURCES
+#     main.c
+#)
 
-build_app(sdl_test
-    SOURCES
-     sdl_test.c
-    LIBRARIES
-     sdl3
-)
-
-build_app(wifi_test
-    SOURCES
-     wifi_test.c
-)
-
-build_app(socket_test
-    SOURCES
-     socket_test.c
-)
-
-
-build_app(curl_test
-    SOURCES
-     curl_test.c
-)
-
-build_app(bmi270_test
-    SOURCES
-     bmi270_test.c
-)
-
-build_app(thread_test
-    SOURCES
-     main.c
-)
-
-build_app(process_test
-    SOURCES
-     main.c
-)
-
-build_app(appdb_test
-    SOURCES
-     main.c
-)
-
-build_app(readdir_test
-    SOURCES
-     main.c
-)
+#build_app(readdir_test
+#    SOURCES
+#     main.c
+#)
 
 #build_app(style_test
 #    SOURCES
@@ -203,11 +203,11 @@ build_app(readdir_test
 #     style_test/test_drawing_helper.c
 #)
 
-build_app(ota_wifi_update
-    SOURCES
-     ota_wifi_update.c
-     thirdparty/microui.c
-)
+#build_app(ota_wifi_update
+#    SOURCES
+#     ota_wifi_update.c
+#     thirdparty/microui.c
+#)
 
 build_app(why2025_sponsors
     SOURCES
@@ -215,93 +215,112 @@ build_app(why2025_sponsors
      image.c
 )
 
-build_app(doomgeneric
+#build_app(badge
+#    SOURCES
+#     main.c
+#     image.c
+#)
+
+build_app(why2025_ota
     SOURCES
-     doomgeneric/am_map.c
-     doomgeneric/d_event.c
-     doomgeneric/d_items.c
-     doomgeneric/d_iwad.c
-     doomgeneric/d_loop.c
-     doomgeneric/d_main.c
-     doomgeneric/d_mode.c
-     doomgeneric/d_net.c
-     doomgeneric/doomdef.c
-     doomgeneric/doomgeneric.c
-     doomgeneric/doomgeneric_badgevms.c
-     doomgeneric/doomstat.c
-     doomgeneric/dstrings.c
-     doomgeneric/dummy.c
-     doomgeneric/f_finale.c
-     doomgeneric/f_wipe.c
-     doomgeneric/g_game.c
-     doomgeneric/gusconf.c
-     doomgeneric/hu_lib.c
-     doomgeneric/hu_stuff.c
-     doomgeneric/i_cdmus.c
-     doomgeneric/icon.c
-     doomgeneric/i_endoom.c
-     doomgeneric/i_input.c
-     doomgeneric/i_joystick.c
-     doomgeneric/info.c
-     doomgeneric/i_scale.c
-     doomgeneric/i_sound.c
-     doomgeneric/i_system.c
-     doomgeneric/i_timer.c
-     doomgeneric/i_video.c
-     doomgeneric/m_argv.c
-     doomgeneric/m_bbox.c
-     doomgeneric/m_cheat.c
-     doomgeneric/m_config.c
-     doomgeneric/m_controls.c
-     doomgeneric/memio.c
-     doomgeneric/m_fixed.c
-     doomgeneric/m_menu.c
-     doomgeneric/m_misc.c
-     doomgeneric/m_random.c
-     doomgeneric/mus2mid.c
-     doomgeneric/p_ceilng.c
-     doomgeneric/p_doors.c
-     doomgeneric/p_enemy.c
-     doomgeneric/p_floor.c
-     doomgeneric/p_inter.c
-     doomgeneric/p_lights.c
-     doomgeneric/p_map.c
-     doomgeneric/p_maputl.c
-     doomgeneric/p_mobj.c
-     doomgeneric/p_plats.c
-     doomgeneric/p_pspr.c
-     doomgeneric/p_saveg.c
-     doomgeneric/p_setup.c
-     doomgeneric/p_sight.c
-     doomgeneric/p_spec.c
-     doomgeneric/p_switch.c
-     doomgeneric/p_telept.c
-     doomgeneric/p_tick.c
-     doomgeneric/p_user.c
-     doomgeneric/r_bsp.c
-     doomgeneric/r_data.c
-     doomgeneric/r_draw.c
-     doomgeneric/r_main.c
-     doomgeneric/r_plane.c
-     doomgeneric/r_segs.c
-     doomgeneric/r_sky.c
-     doomgeneric/r_things.c
-     doomgeneric/sha1.c
-     doomgeneric/sounds.c
-     doomgeneric/s_sound.c
-     doomgeneric/statdump.c
-     doomgeneric/st_lib.c
-     doomgeneric/st_stuff.c
-     doomgeneric/tables.c
-     doomgeneric/v_video.c
-     doomgeneric/w_checksum.c
-     doomgeneric/w_file.c
-     doomgeneric/w_file_stdc.c
-     doomgeneric/wi_stuff.c
-     doomgeneric/w_main.c
-     doomgeneric/w_wad.c
-     doomgeneric/z_zone.c
+     main.c
+     thirdparty/cJSON.c
 )
+
+#build_app(badgevms_launcher
+#    SOURCES
+#     main.c
+#    LIBRARIES
+#     sdl3
+#)
+
+#build_app(doomgeneric
+#    SOURCES
+#     doomgeneric/am_map.c
+#     doomgeneric/d_event.c
+#     doomgeneric/d_items.c
+#     doomgeneric/d_iwad.c
+#     doomgeneric/d_loop.c
+#     doomgeneric/d_main.c
+#     doomgeneric/d_mode.c
+#     doomgeneric/d_net.c
+#     doomgeneric/doomdef.c
+#     doomgeneric/doomgeneric.c
+#     doomgeneric/doomgeneric_badgevms.c
+#     doomgeneric/doomstat.c
+#     doomgeneric/dstrings.c
+#     doomgeneric/dummy.c
+#     doomgeneric/f_finale.c
+#     doomgeneric/f_wipe.c
+#     doomgeneric/g_game.c
+#     doomgeneric/gusconf.c
+#     doomgeneric/hu_lib.c
+#     doomgeneric/hu_stuff.c
+#     doomgeneric/i_cdmus.c
+#     doomgeneric/icon.c
+#     doomgeneric/i_endoom.c
+#     doomgeneric/i_input.c
+#     doomgeneric/i_joystick.c
+#     doomgeneric/info.c
+#     doomgeneric/i_scale.c
+#     doomgeneric/i_sound.c
+#     doomgeneric/i_system.c
+#     doomgeneric/i_timer.c
+#     doomgeneric/i_video.c
+#     doomgeneric/m_argv.c
+#     doomgeneric/m_bbox.c
+#     doomgeneric/m_cheat.c
+#     doomgeneric/m_config.c
+#     doomgeneric/m_controls.c
+#     doomgeneric/memio.c
+#     doomgeneric/m_fixed.c
+#     doomgeneric/m_menu.c
+#     doomgeneric/m_misc.c
+#     doomgeneric/m_random.c
+#     doomgeneric/mus2mid.c
+#     doomgeneric/p_ceilng.c
+#     doomgeneric/p_doors.c
+#     doomgeneric/p_enemy.c
+#     doomgeneric/p_floor.c
+#     doomgeneric/p_inter.c
+#     doomgeneric/p_lights.c
+#     doomgeneric/p_map.c
+#     doomgeneric/p_maputl.c
+#     doomgeneric/p_mobj.c
+#     doomgeneric/p_plats.c
+#     doomgeneric/p_pspr.c
+#     doomgeneric/p_saveg.c
+#     doomgeneric/p_setup.c
+#     doomgeneric/p_sight.c
+#     doomgeneric/p_spec.c
+#     doomgeneric/p_switch.c
+#     doomgeneric/p_telept.c
+#     doomgeneric/p_tick.c
+#     doomgeneric/p_user.c
+#     doomgeneric/r_bsp.c
+#     doomgeneric/r_data.c
+#     doomgeneric/r_draw.c
+#     doomgeneric/r_main.c
+#     doomgeneric/r_plane.c
+#     doomgeneric/r_segs.c
+#     doomgeneric/r_sky.c
+#     doomgeneric/r_things.c
+#     doomgeneric/sha1.c
+#     doomgeneric/sounds.c
+#     doomgeneric/s_sound.c
+#     doomgeneric/statdump.c
+#     doomgeneric/st_lib.c
+#     doomgeneric/st_stuff.c
+#     doomgeneric/tables.c
+#     doomgeneric/v_video.c
+#     doomgeneric/w_checksum.c
+#     doomgeneric/w_file.c
+#     doomgeneric/w_file_stdc.c
+#     doomgeneric/wi_stuff.c
+#     doomgeneric/w_main.c
+#     doomgeneric/w_wad.c
+#     doomgeneric/z_zone.c
+#)
 
 get_property(SDK_APP_ELFS GLOBAL PROPERTY SDK_APP_ELFS)
 add_custom_target(sdk_app_build_all ALL DEPENDS ${SDK_APP_ELFS})

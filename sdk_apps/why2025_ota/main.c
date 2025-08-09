@@ -5,6 +5,7 @@
 #include <stdlib.h>
 
 #include <badgevms/application.h>
+#include <badgevms/misc_funcs.h>
 #include <badgevms/process.h>
 #include <badgevms/wifi.h>
 #include <curl/curl.h>
@@ -16,6 +17,7 @@
 #define BADGEHUB_LATEST_REVISION BADGEHUB_BASE_URL "/project-latest-revisions/%s"
 #define BADGEHUB_REVISION_FILE   BADGEHUB_BASE_URL "/projects/%s/rev%i/files/%s"
 #define BADGEHUB_REVISION        BADGEHUB_BASE_URL "/projects/%s/rev%i"
+#define BADGEHUB_PING            BADGEHUB_BASE_URL "/ping?id=%s-v1&mac=%s"
 
 static bool debug;
 
@@ -152,6 +154,20 @@ out:
     curl_easy_cleanup(curl);
     debug_printf("do_http(%s) returned %i\n", url, ret);
     return ret;
+}
+
+void badgehub_ping() {
+    char       *url = NULL;
+    http_data_t response_data;
+    const char *mac = get_mac_address();
+
+    asprintf(&url, BADGEHUB_PING, mac, mac);
+    if (!do_http(url, &response_data, NULL)) {
+        printf("Failed to ping badgehub\n");
+    }
+
+    free(response_data.memory);
+    free(url);
 }
 
 int get_project_latest_revision(char const *unique_identifier) {
@@ -377,13 +393,12 @@ out:
     return result;
 }
 
-bool check_for_updates(application_t *app) {
+bool check_for_updates(application_t *app, char **version) {
     if (!app) {
         return false;
     }
 
-    bool  ret     = false;
-    char *version = NULL;
+    bool ret = false;
 
     printf("Checking for updates for %s\n", app->unique_identifier);
     int revision = get_project_latest_revision(app->unique_identifier);
@@ -392,17 +407,16 @@ bool check_for_updates(application_t *app) {
         goto out;
     }
 
-    if (!get_project_latest_version(app->unique_identifier, revision, &version)) {
+    if (!get_project_latest_version(app->unique_identifier, revision, version)) {
         printf("Failed to get project version\n");
         goto out;
     }
 
-    int vers = strverscmp(app->version, version);
+    int vers = strverscmp(app->version, *version);
     if (vers < 0) {
         ret = true;
     }
 out:
-    free(version);
     return ret;
 }
 
@@ -425,7 +439,10 @@ int main(int argc, char *argv[]) {
     debug_printf("Initializing curl\n");
     curl_global_init(0);
 
-    application_t         **updateable_apps = NULL;
+    debug_printf("Pinging badgehub\n");
+    badgehub_ping();
+    
+    application_t         **updateable_apps     = NULL;
     size_t                  num_updateable_apps = 0;
     application_t          *app;
     application_list_handle app_list = application_list(&app);
@@ -436,12 +453,15 @@ int main(int argc, char *argv[]) {
         debug_printf("  Version: %s\n", app->version);
         debug_printf("  Source: %s\n", source_to_name(app->source));
         if (app->source == APPLICATION_SOURCE_BADGEHUB) {
-            if (check_for_updates(app)) {
+            char *version = NULL;
+            if (check_for_updates(app, &version)) {
                 debug_printf("New version available for %s\n", app->name);
-                ++num_updateable_apps;
-                updateable_apps = realloc(updateable_apps, sizeof(application_t *) * num_updateable_apps);
-                updateable_apps[num_updateable_apps - 1] = app;
+                update_application(app, version);
+                // ++num_updateable_apps;
+                // updateable_apps = realloc(updateable_apps, sizeof(application_t *) * num_updateable_apps);
+                // updateable_apps[num_updateable_apps - 1] = app;
             }
+            free(version);
         }
         app = application_list_get_next(app_list);
     }

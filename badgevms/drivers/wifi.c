@@ -70,8 +70,8 @@ typedef enum {
 } wifi_command_t;
 
 typedef struct {
-    TaskHandle_t        caller;
-    wifi_command_t                    command;
+    TaskHandle_t   caller;
+    wifi_command_t command;
 } wifi_command_message_t;
 
 static int           s_retry_num = 0;
@@ -334,10 +334,10 @@ static void hermes_do_scan() {
 
 static void hermes(void *ignored) {
     ESP_LOGW("HERMES", "Starting");
-    wifi_command_message_t command;
+    wifi_command_message_t *command;
     while (1) {
         if (xQueueReceive(hermes_queue, &command, portMAX_DELAY) == pdTRUE) {
-            switch (command.command) {
+            switch (command->command) {
                 case WIFI_COMMAND_CONNECT:
                     ESP_LOGW("HERMES", "Connecting to the divine realm");
                     hermes_do_connect();
@@ -350,23 +350,24 @@ static void hermes(void *ignored) {
                     ESP_LOGW("HERMES", "Scanning for pathways to olympus");
                     hermes_do_scan();
                     break;
-                default: ESP_LOGW("HERMES", "I don't know how to do %u", command.command);
+                default: ESP_LOGW("HERMES", "I don't know how to do %u", command->command);
             }
 
-            if (command.caller) {
-                if (eTaskGetState(command.caller) != eDeleted) {
-                    xTaskNotifyIndexed(command.caller, 0, status.connection_status, eSetValueWithOverwrite);
+            if (command->caller) {
+                if (eTaskGetState(command->caller) != eDeleted) {
+                    xTaskNotifyIndexed(command->caller, 0, status.connection_status, eSetValueWithOverwrite);
                 }
             }
+            free(command);
         }
     }
 }
 
 static badgevms_wifi_connection_status_t send_command(wifi_command_t command) {
-    wifi_command_message_t c = {
-        .caller  = xTaskGetCurrentTaskHandle(),
-        .command = command,
-    };
+    wifi_command_message_t *c = calloc(1, sizeof(wifi_command_message_t));
+
+    c->caller  = xTaskGetCurrentTaskHandle();
+    c->command = command;
 
     xQueueSend(hermes_queue, &c, portMAX_DELAY);
     badgevms_wifi_connection_status_t status = ulTaskNotifyTakeIndexed(0, pdTRUE, portMAX_DELAY);

@@ -1,4 +1,10 @@
 dependencies:
+  bmi270:
+    dependencies: []
+    source:
+      path: /home/hp/Projects/why2025/why2025_firmware_main/components/bmi270
+      type: local
+    version: 1.1.0~2
   espressif/cmake_utilities:
     component_hash: 351350613ceafba240b761b4ea991e0f231ac7a9f59a9ee901f751bddc0bb18f
     dependencies:
@@ -94,24 +100,6 @@ dependencies:
       registry_url: https://components.espressif.com/
       type: service
     version: 1.2.0
-  espressif2022/bmi270:
-    component_hash: 6c6637680a233845d13961f23df39426a7fad9c02c6c289bf8facbb7f8624e22
-    dependencies:
-    - name: espressif/cmake_utilities
-      registry_url: https://components.espressif.com
-      require: private
-      version: 0.*
-    - name: espressif/i2c_bus
-      registry_url: https://components.espressif.com
-      require: private
-      version: 1.*
-    - name: idf
-      require: private
-      version: '>=4.4'
-    source:
-      registry_url: https://components.espressif.com/
-      type: service
-    version: 1.1.0~2
   idf:
     source:
       type: idf
@@ -124,6 +112,6 @@ direct_dependencies:
 - espressif/i2c_bus
 - espressif2022/bmi270
 - idf
-manifest_hash: b3cfbfc88bcc52fe2c801f77b7fb244823c8bd8e52ee902130008ca6eb06caa5
+manifest_hash: 263438c0b52b896b3e317bda56cbd049e799f74d96f3785f62b69e91162ee34c
 target: esp32p4
 version: 2.0.0
