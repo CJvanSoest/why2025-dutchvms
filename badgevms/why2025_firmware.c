@@ -153,7 +153,7 @@ int app_main(void) {
 
     if (!device_register("ORIENTATION0", bosch_bmi270_sensor_create())) {
         ESP_LOGE(TAG, "Failed to initialize ORIENTATION0 driver");
-        invalidate_ota_partition();
+        // invalidate_ota_partition();
     }
 
     if (!compositor_init("PANEL0", "KEYBOARD0")) {
