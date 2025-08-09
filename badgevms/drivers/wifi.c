@@ -70,9 +70,8 @@ typedef enum {
 } wifi_command_t;
 
 typedef struct {
+    TaskHandle_t        caller;
     wifi_command_t                    command;
-    badgevms_wifi_connection_status_t status;
-    SemaphoreHandle_t                 ready;
 } wifi_command_message_t;
 
 static int           s_retry_num = 0;
@@ -335,49 +334,43 @@ static void hermes_do_scan() {
 
 static void hermes(void *ignored) {
     ESP_LOGW("HERMES", "Starting");
-    wifi_command_message_t *command;
+    wifi_command_message_t command;
     while (1) {
         if (xQueueReceive(hermes_queue, &command, portMAX_DELAY) == pdTRUE) {
-            switch (command->command) {
+            switch (command.command) {
                 case WIFI_COMMAND_CONNECT:
                     ESP_LOGW("HERMES", "Connecting to the divine realm");
                     hermes_do_connect();
-                    command->status = status.connection_status;
                     break;
                 case WIFI_COMMAND_DISCONNECT:
                     ESP_LOGW("HERMES", "Confining to the mortal plane");
                     hermes_do_disconnect();
-                    command->status = status.connection_status;
                     break;
                 case WIFI_COMMAND_SCAN:
                     ESP_LOGW("HERMES", "Scanning for pathways to olympus");
                     hermes_do_scan();
-                    command->status = status.connection_status;
                     break;
-                default: ESP_LOGW("HERMES", "I don't know how to do %u", command->command);
+                default: ESP_LOGW("HERMES", "I don't know how to do %u", command.command);
             }
 
-            xSemaphoreGive(command->ready);
+            if (command.caller) {
+                if (eTaskGetState(command.caller) != eDeleted) {
+                    xTaskNotifyIndexed(command.caller, 0, status.connection_status, eSetValueWithOverwrite);
+                }
+            }
         }
     }
 }
 
 static badgevms_wifi_connection_status_t send_command(wifi_command_t command) {
-    wifi_command_message_t *c = malloc(sizeof(wifi_command_message_t));
-    if (!c) {
-        return WIFI_ERROR;
-    }
+    wifi_command_message_t c = {
+        .caller  = xTaskGetCurrentTaskHandle(),
+        .command = command,
+    };
 
-    c->command = command;
-    c->ready   = xSemaphoreCreateBinary();
     xQueueSend(hermes_queue, &c, portMAX_DELAY);
-    xSemaphoreTake(c->ready, portMAX_DELAY);
-
-    badgevms_wifi_connection_status_t ret = c->status;
-    vSemaphoreDelete(c->ready);
-    free(c);
-
-    return ret;
+    badgevms_wifi_connection_status_t status = ulTaskNotifyTakeIndexed(0, pdTRUE, portMAX_DELAY);
+    return status;
 }
 
 badgevms_wifi_status_t wifi_get_status() {
