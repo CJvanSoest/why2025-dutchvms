@@ -16,9 +16,11 @@
 
 #include "badgevms/compositor.h"
 
+#include "badgevms/application.h"
 #include "badgevms/device.h"
 #include "badgevms/event.h"
 #include "badgevms/pixel_formats.h"
+#include "badgevms/process.h"
 #include "badgevms_config.h"
 #include "compositor_private.h"
 #include "driver/ppa.h"
@@ -450,8 +452,9 @@ static void IRAM_ATTR NOINLINE_ATTR compositor(void *ignored) {
     ppa_register_client(&ppa_srm_config, &ppa_srm_handle);
     // ppa_client_register_event_callbacks(ppa_srm_handle, &srm_callbacks);
 
-    bool fn_down     = false;
-    bool frame_ready = false;
+    bool   fn_down               = false;
+    bool   frame_ready           = false;
+    time_t launcher_last_started = time(NULL);
 
     while (1) {
         bool changes   = false;
@@ -462,6 +465,14 @@ static void IRAM_ATTR NOINLINE_ATTR compositor(void *ignored) {
             lcd_device->_draw(lcd_device, 0, 0, FRAMEBUFFER_MAX_W, FRAMEBUFFER_MAX_H, framebuffers[cur_fb]);
             cur_fb      = (cur_fb + 1) % DISPLAY_FRAMEBUFFERS;
             frame_ready = false;
+        }
+
+        if (!window_stack) {
+            time_t current_time = time(NULL);
+            if (current_time - launcher_last_started > 2) {
+                application_launch("badgevms_launcher");
+                launcher_last_started = current_time;
+            }
         }
 
         compositor_message_t message;
@@ -513,7 +524,6 @@ static void IRAM_ATTR NOINLINE_ATTR compositor(void *ignored) {
                 case FRAMEBUFFER_SWAP: framebuffer_swap(message.fb_a, message.fb_b); break;
                 default: ESP_LOGE(TAG, "Unknown command %u", message.command);
             }
-
 
             if (message.caller) {
                 if (eTaskGetState(message.caller) != eDeleted) {
