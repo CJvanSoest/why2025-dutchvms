@@ -594,8 +594,8 @@ int main() {
     app_state_t app = {0};
 
     app.window = window_create("OTA update", (window_size_t){720, 720}, WINDOW_FLAG_DOUBLE_BUFFERED);
-    //int fb_num;
-    app.fb = window_framebuffer_create(app.window, (window_size_t){720, 720}, BADGEVMS_PIXELFORMAT_RGB565);
+    // int fb_num;
+    app.fb     = window_framebuffer_create(app.window, (window_size_t){720, 720}, BADGEVMS_PIXELFORMAT_RGB565);
 
     app.ctx = malloc(sizeof(mu_Context));
     mu_init(app.ctx);

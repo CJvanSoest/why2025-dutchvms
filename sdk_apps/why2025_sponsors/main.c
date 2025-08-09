@@ -21,14 +21,14 @@
 #define SPONSOR_DISPLAY_TIME_MS 3000
 #define SPONSOR_DIR             "APPS:[WHY2025_SPONSORS.IMAGES]"
 
-#define SPONSOR_WIDTH_ORIGINAL 256
+#define SPONSOR_WIDTH_ORIGINAL  256
 #define SPONSOR_HEIGHT_ORIGINAL 128
-#define SPONSOR_SCALE_FACTOR 2
-#define SPONSOR_WIDTH_SCALED (SPONSOR_WIDTH_ORIGINAL * SPONSOR_SCALE_FACTOR)
-#define SPONSOR_HEIGHT_SCALED (SPONSOR_HEIGHT_ORIGINAL * SPONSOR_SCALE_FACTOR)
+#define SPONSOR_SCALE_FACTOR    2
+#define SPONSOR_WIDTH_SCALED    (SPONSOR_WIDTH_ORIGINAL * SPONSOR_SCALE_FACTOR)
+#define SPONSOR_HEIGHT_SCALED   (SPONSOR_HEIGHT_ORIGINAL * SPONSOR_SCALE_FACTOR)
 
 #define SPONSOR_REGION_Y_START ((720 - SPONSOR_HEIGHT_SCALED) / 2)
-#define SPONSOR_REGION_Y_END (SPONSOR_REGION_Y_START + SPONSOR_HEIGHT_SCALED)
+#define SPONSOR_REGION_Y_END   (SPONSOR_REGION_Y_START + SPONSOR_HEIGHT_SCALED)
 
 #define LIGHTEST_R 0xaa
 #define LIGHTEST_G 0xb9
@@ -180,7 +180,7 @@ void sponsor_loader_thread(void *user_data) {
                             printf("Seen all sponsors!\n");
                             state->all_seen = true;
                         }
-                        last_change_time             = current_time;
+                        last_change_time = current_time;
                     } else {
                         free(temp_fb);
                     }
@@ -218,7 +218,7 @@ int main(int argc, char *argv[]) {
         printf("Argv[%i] %s\n", i, argv[i]);
         if (strcmp(argv[i], "--boot") == 0) {
             at_boot = true;
-        } 
+        }
     }
 
     // If our flag exists, and we are at boot, exit
@@ -239,7 +239,14 @@ int main(int argc, char *argv[]) {
     window_handle_t window      = window_create("FB test", size, WINDOW_FLAG_FULLSCREEN);
     framebuffer_t  *framebuffer = window_framebuffer_create(window, size, BADGEVMS_PIXELFORMAT_RGB565);
 
-    render_jpg_to_framebuffer(framebuffer->pixels, framebuffer->w, framebuffer->h, "APPS:[WHY2025_SPONSORS]BACKGROUND.JPG", 0, 0);
+    render_jpg_to_framebuffer(
+        framebuffer->pixels,
+        framebuffer->w,
+        framebuffer->h,
+        "APPS:[WHY2025_SPONSORS]BACKGROUND.JPG",
+        0,
+        0
+    );
 
     g_sponsor_state.fb_width              = framebuffer->w;
     g_sponsor_state.fb_height             = framebuffer->h;
@@ -263,11 +270,19 @@ int main(int argc, char *argv[]) {
     static int gradient_offset    = 0;
     uint32_t   last_sponsor_check = 0;
 
-    bool can_exit = !at_boot;
-    int rendered_exit = 0;
+    bool can_exit      = !at_boot;
+    int  rendered_exit = 0;
     while (true) {
         if (can_exit && rendered_exit < 2) {
-            render_png_with_alpha_scaled(framebuffer->pixels, framebuffer->w, framebuffer->h, "APPS:[WHY2025_SPONSORS]esc.png", 620, 30, 1);
+            render_png_with_alpha_scaled(
+                framebuffer->pixels,
+                framebuffer->w,
+                framebuffer->h,
+                "APPS:[WHY2025_SPONSORS]esc.png",
+                620,
+                30,
+                1
+            );
             ++rendered_exit;
         }
 
@@ -283,13 +298,13 @@ int main(int argc, char *argv[]) {
         if (atomic_load(&g_sponsor_state.new_image_ready)) {
             printf("New sponsor image ready\n");
 
-            size_t bytes_per_row = framebuffer->w * sizeof(uint16_t);
+            size_t bytes_per_row     = framebuffer->w * sizeof(uint16_t);
             size_t copy_start_offset = SPONSOR_REGION_Y_START * framebuffer->w;
-            size_t copy_size = SPONSOR_HEIGHT_SCALED * bytes_per_row;
+            size_t copy_size         = SPONSOR_HEIGHT_SCALED * bytes_per_row;
 
             memcpy(
-                (uint8_t*)framebuffer->pixels + (copy_start_offset * sizeof(uint16_t)),
-                (uint8_t*)g_sponsor_state.temp_framebuffer + (copy_start_offset * sizeof(uint16_t)),
+                (uint8_t *)framebuffer->pixels + (copy_start_offset * sizeof(uint16_t)),
+                (uint8_t *)g_sponsor_state.temp_framebuffer + (copy_start_offset * sizeof(uint16_t)),
                 copy_size
             );
 
