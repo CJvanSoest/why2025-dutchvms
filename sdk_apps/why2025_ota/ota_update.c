@@ -6,9 +6,11 @@
 #include <stdio.h>
 #include <stdlib.h>
 
+#include <badgevms/ota.h>
 #include <ctype.h>
 #include <string.h>
 
+#define FIRMWARE_PROJECT         "why2025_firmware"
 #define HTTP_USERAGENT           "BadgeVMS-ota/1.0"
 #define BADGEHUB_BASE_URL        "https://badge.why2025.org/api/v3"
 #define BADGEHUB_PROJECT_DETAIL  BADGEHUB_BASE_URL "/projects/%s"
@@ -16,6 +18,8 @@
 #define BADGEHUB_REVISION_FILE   BADGEHUB_BASE_URL "/projects/%s/rev%i/files/%s"
 #define BADGEHUB_REVISION        BADGEHUB_BASE_URL "/projects/%s/rev%i"
 #define BADGEHUB_PING            BADGEHUB_BASE_URL "/ping?id=%s-v1&mac=%s"
+#define BADGEHUB_DEFAULT_APPS    BADGEHUB_BASE_URL "/project-summaries?category=Default"
+#define BADGEHUB_FIRMWARE_URL    BADGEHUB_BASE_URL "/projects/" FIRMWARE_PROJECT "/rev%i/files/badgevms.bin"
 
 char *source_to_name(application_source_t s) {
     switch (s) {
@@ -57,6 +61,24 @@ static size_t file_cb(void *contents, size_t size, size_t nmemb, void *userp) {
     }
 
     file->size += realsize;
+    return realsize;
+}
+
+static size_t firmware_cb(void *contents, size_t size, size_t nmemb, ota_handle_t handle) {
+    debug_printf("firmware_cb(%p, %zu, %zu, %p)\n", contents, size, nmemb, handle);
+    bool   err;
+    size_t realsize = size * nmemb;
+
+    char *buffer = (char *)calloc(realsize + 1, sizeof(char));
+    memcpy(buffer, contents, realsize);
+
+    err = ota_write(handle, buffer, realsize);
+    if (err == false) {
+        printf("ota_write() failed\n");
+        return 0;
+    }
+
+    free(buffer);
     return realsize;
 }
 
@@ -191,7 +213,7 @@ bool get_project_latest_version(char const *unique_identifier, int revision, cha
 
     *version = strdup(response_data.memory);
     // Strip any whitespace and such
-    int k = 0;
+    int k    = 0;
     for (int i = 0; i < strlen(response_data.memory); ++i) {
         if (isgraph(response_data.memory[i])) {
             (*version)[k++] = response_data.memory[i];
@@ -199,7 +221,7 @@ bool get_project_latest_version(char const *unique_identifier, int revision, cha
     }
 
     (*version)[k] = 0;
-    ret = true;
+    ret           = true;
 
 out:
     free(url);
@@ -315,10 +337,20 @@ bool update_application(application_t *app, char const *version) {
         }
 
         app_application = cJSON_GetObjectItemCaseSensitive(app_metadata, "application");
-        if (app_application && cJSON_IsObject(app_application)) {
-            executable_field = cJSON_GetObjectItemCaseSensitive(app_application, "executable");
-            if (executable_field && cJSON_IsString(executable_field)) {
-                executable = executable_field->valuestring;
+        debug_printf("Found 'application' in 'app_metadata'\n");
+        if (app_application && cJSON_IsArray(app_application)) {
+            debug_printf("Found 'application' in 'app_metadata' is array\n");
+            cJSON *application_item = NULL;
+            cJSON_ArrayForEach(application_item, app_application) {
+                debug_printf("ForEach 'application'\n");
+                if (cJSON_IsObject(application_item)) {
+                    executable_field = cJSON_GetObjectItemCaseSensitive(application_item, "executable");
+                    debug_printf("Found 'executable'\n");
+                    if (executable_field && cJSON_IsString(executable_field)) {
+                        executable = executable_field->valuestring;
+                        debug_printf("Executable field %s\n", executable);
+                    }
+                }
             }
         }
     }
@@ -371,7 +403,7 @@ bool update_application(application_t *app, char const *version) {
         }
 
         if (executable) {
-            application_set_name(app, executable);
+            application_set_binary_path(app, executable);
         }
     }
 out:
@@ -379,6 +411,59 @@ out:
     free(url);
     free(response_data.memory);
     return result;
+}
+
+size_t list_default_applications(char ***app_slugs) {
+    if (!app_slugs) {
+        return 0;
+    }
+    size_t num      = 0;
+    cJSON *json     = NULL;
+    cJSON *app_item = NULL;
+    cJSON *app_slug = NULL;
+
+    http_data_t response_data;
+
+    if (!do_http(BADGEHUB_DEFAULT_APPS, &response_data, NULL)) {
+        printf("Failed to read default application list\n");
+        goto out;
+    }
+
+    json = cJSON_Parse(response_data.memory);
+    if (!json) {
+        char const *error_ptr = cJSON_GetErrorPtr();
+        if (error_ptr != NULL) {
+            printf("Error: JSON parse error before: %s\n", error_ptr);
+        }
+        goto out;
+    }
+
+    if (!cJSON_IsArray(json)) {
+        printf("Error: root is not an array\n");
+        goto out;
+    }
+
+    cJSON_ArrayForEach(app_item, json) {
+        if (!cJSON_IsObject(app_item)) {
+            printf("Warning: Skipping non-object item in applications array\n");
+            continue;
+        }
+
+        cJSON *app_slug = cJSON_GetObjectItemCaseSensitive(app_item, "slug");
+
+        if (!app_slug || !cJSON_IsString(app_slug)) {
+            printf("Warning: Missing or invalid 'slug' field\n");
+            continue;
+        }
+
+        ++num;
+        *app_slugs            = realloc(*app_slugs, sizeof(char *) * num);
+        (*app_slugs)[num - 1] = strdup(app_slug->valuestring);
+    }
+
+out:
+    cJSON_Delete(json);
+    return num;
 }
 
 bool check_for_updates(application_t *app, char **version) {
@@ -401,6 +486,118 @@ bool check_for_updates(application_t *app, char **version) {
     }
 
     int vers = strverscmp(app->version, *version);
+    if (vers < 0) {
+        ret = true;
+    }
+out:
+    return ret;
+}
+
+bool do_firmware_http(char const *url, ota_handle_t ota_session) {
+    debug_printf("do_firmware_http(%s, %p)\n", url, ota_session);
+
+    bool ret = false;
+
+    if (!url) {
+        printf("No URL provided\n");
+        return false;
+    }
+
+    CURL *curl = curl_easy_init();
+    if (!curl) {
+        printf("Failed to allocate curl\n");
+        return false;
+    }
+
+    curl_easy_setopt(curl, CURLOPT_URL, url);
+    curl_easy_setopt(curl, CURLOPT_BUFFERSIZE, 1024);
+    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, firmware_cb);
+    curl_easy_setopt(curl, CURLOPT_WRITEDATA, (void *)ota_session);
+    curl_easy_setopt(curl, CURLOPT_USERAGENT, HTTP_USERAGENT);
+    curl_easy_setopt(curl, CURLOPT_VERBOSE, 1L);
+
+    CURLcode res = curl_easy_perform(curl);
+    if (res != CURLE_OK) {
+        char const *error_string = curl_easy_strerror(res);
+        if (error_string) {
+            printf("do_firmware_http(%s) curl_easy_perform() failed: %s\n", url, curl_easy_strerror(res));
+        } else {
+            printf("do_firmware_http(%s) curl_easy_perform() failed: %u\n", url, res);
+        }
+        goto out;
+    }
+
+    long response_code;
+    curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &response_code);
+
+    debug_printf("do_firmware_http(%s) response code: %ld\n", url, response_code);
+
+    if (response_code < 200 || response_code > 299) {
+        printf("do_firmware_http(%s) error: server response: <no response>\n", url);
+        goto out;
+    }
+
+    ret = true;
+out:
+    curl_easy_cleanup(curl);
+    debug_printf("do_firmware_http(%s) returned %i\n", url, ret);
+    return ret;
+}
+
+bool update_firmware() {
+    bool  ret = false;
+    char *url = NULL;
+
+    ota_handle_t ota_session = ota_session_open();
+    if (!ota_session) {
+        printf("Failed to open OTA session\n");
+        goto out;
+    }
+
+    char const *firmware_name = FIRMWARE_PROJECT;
+    printf("getting revision for %s\n", firmware_name);
+    int revision = get_project_latest_revision(firmware_name);
+    if (revision < 0) {
+        printf("Failed to get firmware revision\n");
+        goto out;
+    }
+
+    asprintf(&url, BADGEHUB_FIRMWARE_URL, revision);
+    if (!do_firmware_http(url, ota_session)) {
+        printf("Failed to update firmware\n");
+        goto out;
+    }
+
+    ota_session_commit(ota_session);
+    debug_printf("Firmware updated!\n");
+out:
+    free(url);
+    return ret;
+}
+
+bool check_for_firmware_updates(char **version) {
+    if (!version) {
+        return false;
+    }
+    bool ret = false;
+
+    char const *firmware_name = FIRMWARE_PROJECT;
+    printf("Checking for updates for %s\n", firmware_name);
+    int revision = get_project_latest_revision(firmware_name);
+    if (revision < 0) {
+        printf("Failed to get firmware revision\n");
+        goto out;
+    }
+
+    if (!get_project_latest_version(firmware_name, revision, version)) {
+        printf("Failed to get firmware version\n");
+        goto out;
+    }
+
+    char *running = (char *)calloc(32, sizeof(char));
+    ota_get_running_version(running);
+
+    int vers = strverscmp(running, *version);
     if (vers < 0) {
         ret = true;
     }

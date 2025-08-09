@@ -225,7 +225,7 @@ void draw_progress_window(UI_Context *ctx) {
             current_text,
             sizeof(current_text),
             "Currently updating: %s",
-            ctx->updates[ctx->current_update_index].app->name
+            ctx->updates[ctx->current_update_index].name
         );
         draw_text_centered(ctx, window_x, bar_y + bar_height + 60, window_w, current_text, CDE_TEXT_COLOR);
     }
@@ -282,7 +282,7 @@ void draw_update_window(UI_Context *ctx) {
 
         Uint32 text_color = (i == ctx->selected_item) ? CDE_SELECTED_TEXT : CDE_TEXT_COLOR;
 
-        draw_text_bold(ctx, item_x + 8, item_y + 6, ctx->updates[i].app->name, text_color);
+        draw_text_bold(ctx, item_x + 8, item_y + 6, ctx->updates[i].name, text_color);
 
         char version_text[64];
         snprintf(version_text, sizeof(version_text), "Version: %s", ctx->updates[i].version);
@@ -383,10 +383,15 @@ void handle_keyboard(UI_Context *ctx, SDL_Scancode key_code) {
 
 void update_progress(UI_Context *ctx) {
     if (ctx->state == UI_STATE_PROGRESS && ctx->updates_completed < ctx->total_items) {
-        update_application(
-            ctx->updates[ctx->current_update_index].app,
-            ctx->updates[ctx->current_update_index].version
-        );
+        if (!ctx->updates[ctx->current_update_index].is_firmware) {
+            update_application(
+                ctx->updates[ctx->current_update_index].app,
+                ctx->updates[ctx->current_update_index].version
+            );
+        } else {
+            update_firmware();
+        }
+
         ctx->updates_completed++;
         ctx->current_update_index++;
 

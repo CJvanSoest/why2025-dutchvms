@@ -33,6 +33,32 @@ int main(int argc, char *argv[]) {
     debug_printf("Pinging badgehub\n");
     badgehub_ping();
 
+    char **default_apps     = NULL;
+    size_t num_default_apps = list_default_applications(&default_apps);
+
+    if (num_default_apps) {
+        debug_printf("Default apps: \n");
+        for (int i = 0; i < num_default_apps; ++i) {
+            application_t *installed = application_get(default_apps[i]);
+            if (installed) {
+                printf(" %s already installed\n", default_apps[i]);
+                application_free(installed);
+                continue;
+            }
+
+            printf(" %s not yet installed\n", default_apps[i]);
+            // Create a dummy app for the updater
+            application_t *new_app =
+                application_create(default_apps[i], default_apps[i], NULL, "-1", NULL, APPLICATION_SOURCE_BADGEHUB);
+            if (!new_app) {
+                printf("Failed to create an application for %s\n", default_apps[i]);
+                continue;
+            }
+            application_create_file_string(new_app, "dummy");
+            application_free(new_app);
+        }
+    }
+
     update_item_t          *updates     = NULL;
     size_t                  num_updates = 0;
     application_t          *app;
@@ -49,9 +75,16 @@ int main(int argc, char *argv[]) {
                 ++num_updates;
                 updates                              = realloc(updates, sizeof(update_item_t) * num_updates);
                 updates[num_updates - 1].app         = app;
+                updates[num_updates - 1].name        = strdup(app->name);
                 updates[num_updates - 1].version     = strdup(version);
                 updates[num_updates - 1].description = NULL;
-                debug_printf("New version available for %s (%s < %s)\n", app->name, app->version, updates[num_updates - 1].version);
+                updates[num_updates - 1].is_firmware = false;
+                debug_printf(
+                    "New version available for %s (%s < %s)\n",
+                    app->name,
+                    app->version,
+                    updates[num_updates - 1].version
+                );
             } else {
                 debug_printf("No updates available for  %s (%s >= %s)\n", app->name, app->version, version);
             }
@@ -60,9 +93,21 @@ int main(int argc, char *argv[]) {
         app = application_list_get_next(app_list);
     }
 
+    char *firmware_version = NULL;
+    if (check_for_firmware_updates(&firmware_version)) {
+        debug_printf("New firmware version available!");
+        ++num_updates;
+        updates                              = realloc(updates, sizeof(update_item_t) * num_updates);
+        updates[num_updates - 1].app         = NULL;
+        updates[num_updates - 1].name        = strdup("BadgeVMS Firmware");
+        updates[num_updates - 1].version     = strdup(firmware_version);
+        updates[num_updates - 1].description = strdup("Main badge firmware");
+        updates[num_updates - 1].is_firmware = true;
+    }
+
     if (num_updates) {
         printf("Updates available!\n");
-        if (get_num_tasks() == 1) {
+        if (get_num_tasks() <= 2) {
             debug_printf("I'm the only process running, showing UI\n");
             run_update_window(updates, num_updates);
         } else {
