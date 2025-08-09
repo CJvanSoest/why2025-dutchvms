@@ -192,7 +192,7 @@ static void event_handler(void *arg, esp_event_base_t event_base, int32_t event_
     if (event_base == WIFI_EVENT && event_id == WIFI_EVENT_STA_START) {
         esp_wifi_connect();
     } else if (event_base == WIFI_EVENT && event_id == WIFI_EVENT_STA_DISCONNECTED) {
-        if (status.connection_status_want == WIFI_DISCONNECTED) {
+        if (status.connection_status_want != WIFI_DISCONNECTED) {
             status.connection_status = WIFI_DISCONNECTED;
             ESP_LOGW(TAG, "unexpected wifi disconnect, reconnecting");
             if (s_retry_num < 10) {
