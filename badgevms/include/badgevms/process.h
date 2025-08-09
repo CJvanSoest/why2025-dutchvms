@@ -32,5 +32,5 @@ pid_t thread_create(void (*thread_entry)(void *user_data), void *user_data, uint
 // blocking was requested, or the pid of the child process that terminated.
 pid_t wait(bool block, uint32_t timeout_msec);
 
-// Get the total number of running tasks. 
-uint32_t    get_num_tasks();
+// Get the total number of running tasks.
+uint32_t get_num_tasks();
