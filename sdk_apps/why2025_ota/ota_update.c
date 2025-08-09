@@ -191,13 +191,14 @@ bool get_project_latest_version(char const *unique_identifier, int revision, cha
 
     *version = strdup(response_data.memory);
     // Strip any whitespace and such
-    for (int i = 0; i < strlen(*version); ++i) {
-        if (isblank((*version)[i]) || iscntrl((*version)[i])) {
-            (*version)[i] = 0;
-            break;
+    int k = 0;
+    for (int i = 0; i < strlen(response_data.memory); ++i) {
+        if (isgraph(response_data.memory[i])) {
+            (*version)[k++] = response_data.memory[i];
         }
     }
 
+    (*version)[k] = 0;
     ret = true;
 
 out:

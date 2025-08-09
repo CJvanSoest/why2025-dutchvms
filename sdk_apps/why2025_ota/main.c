@@ -46,15 +46,16 @@ int main(int argc, char *argv[]) {
         if (app->source == APPLICATION_SOURCE_BADGEHUB) {
             char *version = NULL;
             if (check_for_updates(app, &version)) {
-                debug_printf("New version available for %s\n", app->name);
                 ++num_updates;
-                updates                              = realloc(updates, sizeof(update_item_t *) * num_updates);
+                updates                              = realloc(updates, sizeof(update_item_t) * num_updates);
                 updates[num_updates - 1].app         = app;
-                updates[num_updates - 1].version     = version;
+                updates[num_updates - 1].version     = strdup(version);
                 updates[num_updates - 1].description = NULL;
+                debug_printf("New version available for %s (%s < %s)\n", app->name, app->version, updates[num_updates - 1].version);
             } else {
-                free(version);
+                debug_printf("No updates available for  %s (%s >= %s)\n", app->name, app->version, version);
             }
+            free(version);
         }
         app = application_list_get_next(app_list);
     }
@@ -62,6 +63,7 @@ int main(int argc, char *argv[]) {
     if (num_updates) {
         printf("Updates available!\n");
         if (get_num_tasks() == 1) {
+            debug_printf("I'm the only process running, showing UI\n");
             run_update_window(updates, num_updates);
         } else {
             printf("Other tasks running, trying again later\n");
@@ -70,4 +72,5 @@ int main(int argc, char *argv[]) {
     }
 
     application_list_close(app_list);
+    debug_printf("All done!\n");
 }

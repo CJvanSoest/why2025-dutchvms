@@ -398,10 +398,12 @@ void update_progress(UI_Context *ctx) {
 }
 
 bool run_update_window(update_item_t *updates, size_t num) {
+    debug_printf("run_update_window()\n");
     if (SDL_Init(SDL_INIT_VIDEO) < 0) {
         printf("SDL could not initialize! SDL_Error: %s\n", SDL_GetError());
         return false;
     }
+    debug_printf("SDK Init complete\n");
 
     UI_Context ctx           = {0};
     ctx.updates              = updates;
@@ -411,6 +413,8 @@ bool run_update_window(update_item_t *updates, size_t num) {
     ctx.state                = UI_STATE_LIST;
     ctx.updates_completed    = 0;
     ctx.current_update_index = 0;
+
+    debug_printf("Starting update window with %u updates\n", num);
 
     ctx.window = SDL_CreateWindow("System Updates", SCREEN_WIDTH, SCREEN_HEIGHT, SDL_WINDOW_FULLSCREEN);
 
@@ -506,7 +510,5 @@ bool run_update_window(update_item_t *updates, size_t num) {
     SDL_DestroyTexture(ctx.framebuffer);
     SDL_DestroyRenderer(ctx.renderer);
     SDL_DestroyWindow(ctx.window);
-    SDL_Quit();
-
     return true;
 }
