@@ -10,6 +10,7 @@
 #include <badgevms/wifi.h>
 #include <curl/curl.h>
 #include <string.h>
+#include <ctype.h>
 
 #define HTTP_USERAGENT           "BadgeVMS-ota/1.0"
 #define BADGEHUB_BASE_URL        "https://badge.why2025.org/api/v3"
@@ -37,6 +38,11 @@ typedef struct http_file {
     FILE  *fp;
     size_t size;
 } http_file_t;
+
+typedef struct {
+    application_t *app;
+    char *version;
+} updateable_app_t;
 
 char *source_to_name(application_source_t s) {
     switch (s) {
@@ -211,6 +217,14 @@ bool get_project_latest_version(char const *unique_identifier, int revision, cha
     }
 
     *version = strdup(response_data.memory);
+    // Strip any whitespace and such
+    for (int i = 0; i < strlen(*version); ++i) {
+        if (isblank((*version)[i]) || iscntrl((*version)[i])) {
+            (*version)[i] = 0;
+            break;
+        }
+    }
+
     ret      = true;
 
 out:
@@ -442,7 +456,7 @@ int main(int argc, char *argv[]) {
     debug_printf("Pinging badgehub\n");
     badgehub_ping();
     
-    application_t         **updateable_apps     = NULL;
+    updateable_app_t        *updateable_apps     = NULL;
     size_t                  num_updateable_apps = 0;
     application_t          *app;
     application_list_handle app_list = application_list(&app);
@@ -456,18 +470,23 @@ int main(int argc, char *argv[]) {
             char *version = NULL;
             if (check_for_updates(app, &version)) {
                 debug_printf("New version available for %s\n", app->name);
-                update_application(app, version);
-                // ++num_updateable_apps;
-                // updateable_apps = realloc(updateable_apps, sizeof(application_t *) * num_updateable_apps);
-                // updateable_apps[num_updateable_apps - 1] = app;
+                ++num_updateable_apps;
+                updateable_apps = realloc(updateable_apps, sizeof(updateable_app_t *) * num_updateable_apps);
+                updateable_apps[num_updateable_apps - 1].app = app;
+                updateable_apps[num_updateable_apps - 1].version = version;
+            } else {
+                free(version);
             }
-            free(version);
         }
         app = application_list_get_next(app_list);
     }
 
     if (num_updateable_apps) {
         printf("Updates available!\n");
+        for (int i = 0; i < num_updateable_apps; ++i) {
+            update_application(updateable_apps[i].app, updateable_apps[i].version);
+            free(updateable_apps[i].version);
+        }
     }
 
     application_list_close(app_list);

@@ -1032,6 +1032,7 @@ simple_function_extern:
   - __umoddi3
 
 simple_object:
+  - _ctype_b
 
 wrapped_function:
   - _Exit
