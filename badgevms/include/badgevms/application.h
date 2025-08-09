@@ -71,6 +71,9 @@ bool application_set_version(application_t *application, char const *version);
 // Change the author of an application_t instance
 bool application_set_author(application_t *application, char const *author);
 
+// Change the name of an application_t instance
+bool application_set_name(application_t *application, char const *name);
+
 // Change the interpreter of an application_t instance
 bool application_set_interpreter(application_t *application, char const *interpreter);
 
@@ -81,22 +84,22 @@ bool application_destroy(application_t *application);
 // filename.ext to be placed in APP:filename.ext or
 // [dir.subdir]filename.ext to be placed in APP:[dir.subdir]filename.ext
 // subdirectories are automatically created if needed
-FILE *application_create_file(application_t const *application, char const *file_path);
+FILE *application_create_file(application_t *application, char const *file_path);
 
 // Generate an absolute path to install the file with the given name into the application
 // see application_create_file for details. Subdirectories will be created even if the file
 // is never created. Note that it is not necessary to additionally also call
 // application_create_file() if you create the file based on the returned name.
 // The caller should free() the string.
-char *application_create_file_string(application_t const *application, char const *file_path);
+char *application_create_file_string(application_t *application, char const *file_path);
 
 // Query the list of installed applications, giving a list and the first application in the list.
 // out can be NULL.
-application_list_handle application_list(application_t const **out);
+application_list_handle application_list(application_t **out);
 
 // Get the next application_t* in the list, application*'s do not need to be separately
 // application_free()'d they will be freed by application_list_close()
-application_t const *application_list_get_next(application_list_handle list);
+application_t *application_list_get_next(application_list_handle list);
 
 // Close the application list and free associated resources
 void application_list_close(application_list_handle list);

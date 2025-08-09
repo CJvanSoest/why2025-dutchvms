@@ -891,6 +891,7 @@ simple_function:
 # BadgeVMS
   - application_create
   - application_create_file
+  - application_create_file_string
   - application_destroy
   - application_free
   - application_get
@@ -902,6 +903,7 @@ simple_function:
   - application_set_binary_path
   - application_set_interpreter
   - application_set_metadata
+  - application_set_name
   - application_set_version
   - device_get
   - get_screen_info
@@ -991,7 +993,9 @@ simple_function_extern:
   - __floatdisf
   - __floatsidf
   - __floatunsidf
+  - __gedf2
   - __gtdf2
+  - __ledf2
   - __ltdf2
   - __muldf3
   - __popcountsi2

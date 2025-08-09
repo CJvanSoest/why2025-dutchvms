@@ -358,6 +358,16 @@ bool application_set_author(application_t *app, char const *author) {
     return save_application_metadata(app);
 }
 
+bool application_set_name(application_t *app, char const *name) {
+    if (!app)
+        return false;
+
+    why_free((void *)app->name);
+    app->name = why_strdup(name);
+
+    return save_application_metadata(app);
+}
+
 bool application_set_interpreter(application_t *app, char const *interpreter) {
     if (!app)
         return false;
@@ -389,7 +399,7 @@ bool application_destroy(application_t *app) {
     return success;
 }
 
-char *application_create_file_string(application_t const *app, char const *file_path) {
+char *application_create_file_string(application_t *app, char const *file_path) {
     if (!app) {
         return NULL;
     }
@@ -423,7 +433,7 @@ char *application_create_file_string(application_t const *app, char const *file_
     return absolute_file_path;
 }
 
-FILE *application_create_file(application_t const *app, char const *file_path) {
+FILE *application_create_file(application_t *app, char const *file_path) {
     char *absolute_file_path = application_create_file_string(app, file_path);
     if (!absolute_file_path) {
         return NULL;
@@ -434,7 +444,7 @@ FILE *application_create_file(application_t const *app, char const *file_path) {
     return ret;
 }
 
-application_list_handle application_list(application_t const **out) {
+application_list_handle application_list(application_t **out) {
     if (!applications_base_dir[0])
         return NULL;
 
@@ -504,7 +514,7 @@ application_list_handle application_list(application_t const **out) {
     return list;
 }
 
-application_t const *application_list_get_next(application_list_handle list) {
+application_t *application_list_get_next(application_list_handle list) {
     if (!list)
         return NULL;
 
