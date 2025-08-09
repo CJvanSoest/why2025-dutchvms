@@ -423,6 +423,7 @@ char *application_create_file_string(application_t *app, char const *file_path) 
         return NULL;
     }
 
+    ESP_LOGW(TAG, "Creating directory %s", dirname);
     if (!mkdir_p(dirname)) {
         ESP_LOGW(TAG, "Couldn't create directory %s", dirname);
         why_free(dirname);
