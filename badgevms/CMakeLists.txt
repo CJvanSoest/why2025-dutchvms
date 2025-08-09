@@ -37,6 +37,7 @@ idf_component_register(
      ${CMAKE_CURRENT_SOURCE_DIR}/include
     PRIV_REQUIRES
      "app_update"
+     "bmi270"
      "elf_loader"
      "esp-tls"
      "esp_driver_ppa"
