@@ -633,11 +633,11 @@ int inet_aton(char const *__cp, struct in_addr *__inp) {
     return ip4addr_aton(__cp, (ip4_addr_t *)__inp);
 }
 
-const char *get_mac_address() {
+char const *get_mac_address() {
     static char mac_address_string[18] = {0};
-    uint8_t mac[6];
+    uint8_t     mac[6];
     if (mac_address_string[0]) {
-        return (const char*)&mac_address_string;
+        return (char const *)&mac_address_string;
     }
 
     // Attempt to read the base MAC address. This is the universal MAC address
@@ -648,10 +648,10 @@ const char *get_mac_address() {
         ESP_LOGE("MAC_ADDR", "Failed to get base MAC address with error code %d", ret);
         // Clear the string on failure
         strncpy(mac_address_string, "00:00:00:00:00:00", 18);
-        return (const char*)&mac_address_string;
+        return (char const *)&mac_address_string;
     }
     snprintf(mac_address_string, 18, "%02X:%02X:%02X:%02X:%02X:%02X", mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
-    return (const char*)&mac_address_string;
+    return (char const *)&mac_address_string;
 }
 
 void wrapped_functions_init(void) {

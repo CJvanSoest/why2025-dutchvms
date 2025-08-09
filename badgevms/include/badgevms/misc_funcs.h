@@ -18,6 +18,6 @@
 
 #include <stdint.h>
 
-void     die(char const *reason);
-uint32_t vaddr_to_paddr(uint32_t vaddr);
-const char *get_mac_address();
+void        die(char const *reason);
+uint32_t    vaddr_to_paddr(uint32_t vaddr);
+char const *get_mac_address();

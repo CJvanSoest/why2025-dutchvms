@@ -148,12 +148,12 @@ build_app(hello
 #     run_tests.c
 #)
 #
-#build_app(sdl_test
-#    SOURCES
-#     sdl_test.c
-#    LIBRARIES
-#     sdl3
-#)
+build_app(sdl_test
+    SOURCES
+     sdl_test.c
+    LIBRARIES
+     sdl3
+)
 #
 #build_app(wifi_test
 #    SOURCES
@@ -164,7 +164,6 @@ build_app(hello
 #    SOURCES
 #     socket_test.c
 #)
-#
 #
 #build_app(curl_test
 #    SOURCES
@@ -224,7 +223,11 @@ build_app(why2025_sponsors
 build_app(why2025_ota
     SOURCES
      main.c
+     window.c
+     ota_update.c
      thirdparty/cJSON.c
+    LIBRARIES
+     sdl3
 )
 
 #build_app(badgevms_launcher
