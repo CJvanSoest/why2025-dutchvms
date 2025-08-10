@@ -336,6 +336,8 @@ bool maybe_start_app(startup_app_t *app, nvs_handle_t nvs_handle, time_t boot_ti
 }
 
 bool update_flash0_init() {
+    rm_rf("FLASH0:init.toml");
+
     FILE *fp = why_fopen("FLASH0:init.toml", "w");
     if (!fp) {
         ESP_LOGW(TAG, "Cannot open %s", "FLASH0:init.toml");
