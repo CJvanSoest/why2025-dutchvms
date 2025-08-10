@@ -23,7 +23,13 @@
 #define CDE_PROGRESS_FG   0x0078D4
 #define CDE_SUCCESS_COLOR 0x00AA00
 
-typedef enum { UI_STATE_LIST, UI_STATE_PROGRESS, UI_STATE_COMPLETE } UI_State;
+typedef enum {
+    UI_STATE_CHECKING,
+    UI_STATE_NO_UPDATES,
+    UI_STATE_LIST,
+    UI_STATE_PROGRESS,
+    UI_STATE_COMPLETE
+} UI_State;
 
 typedef struct {
     SDL_Window    *window;
@@ -338,9 +344,8 @@ void draw_update_window(UI_Context *ctx) {
 }
 
 void handle_keyboard(UI_Context *ctx, SDL_Scancode key_code) {
-    if (ctx->state == UI_STATE_COMPLETE) {
+    if (ctx->state == UI_STATE_COMPLETE || ctx->state == UI_STATE_NO_UPDATES) {
         if (key_code == SDL_SCANCODE_ESCAPE) {
-            // Exit application
             SDL_Event quit_event;
             quit_event.type = SDL_EVENT_QUIT;
             SDL_PushEvent(&quit_event);
@@ -348,36 +353,44 @@ void handle_keyboard(UI_Context *ctx, SDL_Scancode key_code) {
         return;
     }
 
-    if (ctx->state == UI_STATE_PROGRESS) {
+    if (ctx->state == UI_STATE_CHECKING || ctx->state == UI_STATE_PROGRESS) {
         return;
     }
 
-    switch (key_code) {
-        case SDL_SCANCODE_UP:
-            if (ctx->selected_item > 0) {
-                ctx->selected_item--;
-                if (ctx->selected_item < ctx->scroll_offset) {
-                    ctx->scroll_offset = ctx->selected_item;
+    if (ctx->state == UI_STATE_LIST) {
+        switch (key_code) {
+            case SDL_SCANCODE_UP:
+                if (ctx->selected_item > 0) {
+                    ctx->selected_item--;
+                    if (ctx->selected_item < ctx->scroll_offset) {
+                        ctx->scroll_offset = ctx->selected_item;
+                    }
                 }
-            }
-            break;
+                break;
 
-        case SDL_SCANCODE_DOWN:
-            if (ctx->selected_item < ctx->total_items - 1) {
-                ctx->selected_item++;
-                if (ctx->selected_item >= ctx->scroll_offset + ctx->items_per_page) {
-                    ctx->scroll_offset = ctx->selected_item - ctx->items_per_page + 1;
+            case SDL_SCANCODE_DOWN:
+                if (ctx->selected_item < ctx->total_items - 1) {
+                    ctx->selected_item++;
+                    if (ctx->selected_item >= ctx->scroll_offset + ctx->items_per_page) {
+                        ctx->scroll_offset = ctx->selected_item - ctx->items_per_page + 1;
+                    }
                 }
-            }
-            break;
+                break;
 
-        case SDL_SCANCODE_SPACE:
-        case SDL_SCANCODE_RETURN:
-            printf("Starting updates...\n");
-            ctx->state                = UI_STATE_PROGRESS;
-            ctx->updates_completed    = 0;
-            ctx->current_update_index = 0;
-            break;
+            case SDL_SCANCODE_SPACE:
+            case SDL_SCANCODE_RETURN:
+                printf("Starting updates...\n");
+                ctx->state                = UI_STATE_PROGRESS;
+                ctx->updates_completed    = 0;
+                ctx->current_update_index = 0;
+                break;
+
+            case SDL_SCANCODE_ESCAPE: {
+                SDL_Event quit_event;
+                quit_event.type = SDL_EVENT_QUIT;
+                SDL_PushEvent(&quit_event);
+            } break;
+        }
     }
 }
 
@@ -395,11 +408,248 @@ void update_progress(UI_Context *ctx) {
         ctx->updates_completed++;
         ctx->current_update_index++;
 
-        // Check if all updates are complete
         if (ctx->updates_completed >= ctx->total_items) {
             ctx->state = UI_STATE_COMPLETE;
         }
     }
+}
+
+void draw_checking_window(UI_Context *ctx) {
+    int window_x = 30;
+    int window_y = 30;
+    int window_w = SCREEN_WIDTH - 60;
+    int window_h = SCREEN_HEIGHT - 60;
+
+    draw_rect(ctx, 0, 0, SCREEN_WIDTH, SCREEN_HEIGHT, CDE_BG_COLOR);
+
+    draw_rect(ctx, window_x, window_y, window_w, window_h, CDE_PANEL_COLOR);
+    draw_3d_border(ctx, window_x, window_y, window_w, window_h, 0);
+
+    int title_h = 45;
+    draw_rect(ctx, window_x + 3, window_y + 3, window_w - 6, title_h, CDE_TITLE_BG);
+    draw_text_bold(ctx, window_x + 15, window_y + 11, "System Update Check", CDE_SELECTED_TEXT);
+
+    int content_y = window_y + window_h / 2 - 60;
+
+    draw_text_centered(ctx, window_x, content_y, window_w, "Checking for updates...", CDE_TEXT_COLOR);
+
+    static int    animation_frame = 0;
+    static Uint32 last_frame_time = 0;
+    Uint32        current_time    = SDL_GetTicks();
+
+    if (current_time - last_frame_time > 500) { // Update every 500ms
+        animation_frame = (animation_frame + 1) % 4;
+        last_frame_time = current_time;
+    }
+
+    char dots[5] = "    ";
+    for (int i = 0; i < animation_frame; i++) {
+        dots[i] = '.';
+    }
+
+    char progress_text[128];
+    snprintf(progress_text, sizeof(progress_text), "Please wait%s", dots);
+    draw_text_centered(ctx, window_x, content_y + 40, window_w, progress_text, CDE_TEXT_COLOR);
+
+    draw_text_centered(
+        ctx,
+        window_x,
+        window_y + window_h - 45,
+        window_w,
+        "Connecting to update server...",
+        CDE_TEXT_COLOR
+    );
+}
+
+void draw_no_updates_window(UI_Context *ctx) {
+    int window_x = 30;
+    int window_y = 30;
+    int window_w = SCREEN_WIDTH - 60;
+    int window_h = SCREEN_HEIGHT - 60;
+
+    draw_rect(ctx, 0, 0, SCREEN_WIDTH, SCREEN_HEIGHT, CDE_BG_COLOR);
+
+    draw_rect(ctx, window_x, window_y, window_w, window_h, CDE_PANEL_COLOR);
+    draw_3d_border(ctx, window_x, window_y, window_w, window_h, 0);
+
+    int title_h = 45;
+    draw_rect(ctx, window_x + 3, window_y + 3, window_w - 6, title_h, CDE_TITLE_BG);
+    draw_text_bold(ctx, window_x + 15, window_y + 11, "System Update Check", CDE_SELECTED_TEXT);
+
+    int content_y = window_y + window_h / 2 - 80;
+
+    int icon_size = 60;
+    int icon_x    = window_x + (window_w - icon_size) / 2;
+    int icon_y    = content_y;
+
+    draw_rect(ctx, icon_x + 10, icon_y + 30, 15, 4, CDE_SUCCESS_COLOR);
+    draw_rect(ctx, icon_x + 22, icon_y + 27, 4, 10, CDE_SUCCESS_COLOR);
+    draw_rect(ctx, icon_x + 25, icon_y + 20, 4, 10, CDE_SUCCESS_COLOR);
+    draw_rect(ctx, icon_x + 28, icon_y + 15, 4, 10, CDE_SUCCESS_COLOR);
+    draw_rect(ctx, icon_x + 31, icon_y + 10, 4, 10, CDE_SUCCESS_COLOR);
+    draw_rect(ctx, icon_x + 34, icon_y + 5, 4, 10, CDE_SUCCESS_COLOR);
+
+    content_y += icon_size + 40;
+    draw_text_centered(ctx, window_x, content_y, window_w, "Your system is up to date!", CDE_TEXT_COLOR);
+
+    draw_text_centered(
+        ctx,
+        window_x,
+        content_y + 40,
+        window_w,
+        "No updates are available at this time.",
+        CDE_TEXT_COLOR
+    );
+
+    draw_text_centered(ctx, window_x, window_y + window_h - 45, window_w, "Press ESC to exit", CDE_TEXT_COLOR);
+}
+
+bool run_update_window_with_check(void) {
+    debug_printf("run_update_window_with_check()\n");
+    if (SDL_Init(SDL_INIT_VIDEO) < 0) {
+        printf("SDL could not initialize! SDL_Error: %s\n", SDL_GetError());
+        return false;
+    }
+    debug_printf("SDL Init complete\n");
+
+    UI_Context ctx           = {0};
+    ctx.updates              = NULL;
+    ctx.total_items          = 0;
+    ctx.selected_item        = 0;
+    ctx.scroll_offset        = 0;
+    ctx.state                = UI_STATE_CHECKING; // Start in checking state
+    ctx.updates_completed    = 0;
+    ctx.current_update_index = 0;
+
+    ctx.window = SDL_CreateWindow("System Updates", SCREEN_WIDTH, SCREEN_HEIGHT, SDL_WINDOW_FULLSCREEN);
+
+    if (ctx.window == NULL) {
+        printf("Window could not be created! SDL_Error: %s\n", SDL_GetError());
+        SDL_Quit();
+        return false;
+    }
+
+    ctx.renderer = SDL_CreateRenderer(ctx.window, NULL);
+    if (ctx.renderer == NULL) {
+        printf("Renderer could not be created! SDL_Error: %s\n", SDL_GetError());
+        SDL_DestroyWindow(ctx.window);
+        SDL_Quit();
+        return false;
+    }
+
+    ctx.framebuffer = SDL_CreateTexture(
+        ctx.renderer,
+        SDL_PIXELFORMAT_RGB565,
+        SDL_TEXTUREACCESS_STREAMING,
+        SCREEN_WIDTH,
+        SCREEN_HEIGHT
+    );
+
+    if (ctx.framebuffer == NULL) {
+        printf("Framebuffer texture could not be created! SDL_Error: %s\n", SDL_GetError());
+        SDL_DestroyRenderer(ctx.renderer);
+        SDL_DestroyWindow(ctx.window);
+        SDL_Quit();
+        return false;
+    }
+
+    ctx.pixels = malloc(SCREEN_WIDTH * SCREEN_HEIGHT * sizeof(Uint16));
+    if (ctx.pixels == NULL) {
+        printf("Could not allocate pixel buffer!\n");
+        SDL_DestroyTexture(ctx.framebuffer);
+        SDL_DestroyRenderer(ctx.renderer);
+        SDL_DestroyWindow(ctx.window);
+        SDL_Quit();
+        return false;
+    }
+
+    int          quit = 0;
+    SDL_Event    e;
+    Uint32       frame_start, frame_time;
+    Uint32 const frame_delay = 1000 / 60; // 60 FPS cap
+
+    bool         check_started          = false;
+    bool         check_complete         = false;
+    Uint32       check_start_time       = 0;
+    Uint32 const min_check_display_time = 1500; // Show checking screen for at least 1.5 seconds
+
+    while (!quit) {
+        frame_start = SDL_GetTicks();
+
+        while (SDL_PollEvent(&e)) {
+            if (e.type == SDL_EVENT_QUIT) {
+                quit = 1;
+            } else if (e.type == SDL_EVENT_KEY_DOWN) {
+                if (e.key.scancode == SDL_SCANCODE_ESCAPE) {
+                    if (ctx.state == UI_STATE_COMPLETE || ctx.state == UI_STATE_LIST ||
+                        ctx.state == UI_STATE_NO_UPDATES) {
+                        quit = 1;
+                    }
+                } else {
+                    handle_keyboard(&ctx, e.key.scancode);
+                }
+            }
+        }
+
+        memset(ctx.pixels, 0, SCREEN_WIDTH * SCREEN_HEIGHT * sizeof(Uint16));
+
+        if (ctx.state == UI_STATE_CHECKING) {
+            draw_checking_window(&ctx);
+
+            if (!check_started) {
+                check_started    = true;
+                check_start_time = SDL_GetTicks();
+            }
+
+            if (check_started && !check_complete && (SDL_GetTicks() - check_start_time > 100)) {
+                size_t num_updates = perform_update_check(&ctx.updates);
+                ctx.total_items    = num_updates;
+                check_complete     = true;
+            }
+
+            if (check_complete && (SDL_GetTicks() - check_start_time > min_check_display_time)) {
+                if (ctx.total_items > 0) {
+                    ctx.state = UI_STATE_LIST;
+                } else {
+                    ctx.state = UI_STATE_NO_UPDATES;
+                }
+            }
+        } else if (ctx.state == UI_STATE_NO_UPDATES) {
+            draw_no_updates_window(&ctx);
+        } else if (ctx.state == UI_STATE_LIST) {
+            draw_update_window(&ctx);
+        } else if (ctx.state == UI_STATE_PROGRESS) {
+            draw_progress_window(&ctx);
+        } else if (ctx.state == UI_STATE_COMPLETE) {
+            draw_completion_window(&ctx);
+        }
+
+        SDL_UpdateTexture(ctx.framebuffer, NULL, ctx.pixels, SCREEN_WIDTH * sizeof(Uint16));
+        SDL_SetRenderDrawColor(ctx.renderer, 0, 0, 0, 255);
+        SDL_RenderClear(ctx.renderer);
+        SDL_RenderTexture(ctx.renderer, ctx.framebuffer, NULL, NULL);
+        SDL_RenderPresent(ctx.renderer);
+
+        if (ctx.state == UI_STATE_PROGRESS) {
+            update_progress(&ctx);
+        }
+
+        frame_time = SDL_GetTicks() - frame_start;
+        if (frame_delay > frame_time) {
+            SDL_Delay(frame_delay - frame_time);
+        }
+    }
+
+    if (ctx.updates) {
+        free(ctx.updates);
+    }
+
+    free(ctx.pixels);
+    SDL_DestroyTexture(ctx.framebuffer);
+    SDL_DestroyRenderer(ctx.renderer);
+    SDL_DestroyWindow(ctx.window);
+    SDL_Quit();
+    return true;
 }
 
 bool run_update_window(update_item_t *updates, size_t num) {

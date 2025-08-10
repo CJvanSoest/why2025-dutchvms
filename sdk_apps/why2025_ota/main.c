@@ -6,33 +6,16 @@
 #include <stdio.h>
 #include <stdlib.h>
 
+#include <badgevms/process.h>
 #include <badgevms/wifi.h>
 #include <string.h>
 
-bool debug = false;
+bool debug  = false;
+bool window = true;
 
-int main(int argc, char *argv[]) {
-    for (int i = 1; i < argc; ++i) {
-        if (strcmp(argv[i], "--debug") == 0) {
-            debug = true;
-        }
-    }
-
-    debug_printf("BadgeVMS OTA starting...\n");
-    debug_printf("Connecting to wifi\n");
-
-    wifi_connection_status_t status = wifi_connect();
-    if (status != WIFI_CONNECTED) {
-        printf("Unable to connect to wifi\n");
-        return 1;
-    }
-
-    debug_printf("Initializing curl\n");
-    curl_global_init(0);
-
-    debug_printf("Pinging badgehub\n");
-    badgehub_ping();
-
+size_t perform_update_check(update_item_t **updates) {
+    size_t num_updates = 0;
+    
     char **default_apps     = NULL;
     size_t num_default_apps = list_default_applications(&default_apps);
 
@@ -59,8 +42,6 @@ int main(int argc, char *argv[]) {
         }
     }
 
-    update_item_t          *updates     = NULL;
-    size_t                  num_updates = 0;
     application_t          *app;
     application_list_handle app_list = application_list(&app);
 
@@ -73,17 +54,17 @@ int main(int argc, char *argv[]) {
             char *version = NULL;
             if (check_for_updates(app, &version)) {
                 ++num_updates;
-                updates                              = realloc(updates, sizeof(update_item_t) * num_updates);
-                updates[num_updates - 1].app         = app;
-                updates[num_updates - 1].name        = strdup(app->name);
-                updates[num_updates - 1].version     = strdup(version);
-                updates[num_updates - 1].description = NULL;
-                updates[num_updates - 1].is_firmware = false;
+                *updates                              = realloc(*updates, sizeof(update_item_t) * num_updates);
+                (*updates)[num_updates - 1].app         = app;
+                (*updates)[num_updates - 1].name        = strdup(app->name);
+                (*updates)[num_updates - 1].version     = strdup(version);
+                (*updates)[num_updates - 1].description = NULL;
+                (*updates)[num_updates - 1].is_firmware = false;
                 debug_printf(
                     "New version available for %s (%s < %s)\n",
                     app->name,
                     app->version,
-                    updates[num_updates - 1].version
+                    (*updates)[num_updates - 1].version
                 );
             } else {
                 debug_printf("No updates available for  %s (%s >= %s)\n", app->name, app->version, version);
@@ -97,25 +78,70 @@ int main(int argc, char *argv[]) {
     if (check_for_firmware_updates(&firmware_version)) {
         debug_printf("New firmware version available!");
         ++num_updates;
-        updates                              = realloc(updates, sizeof(update_item_t) * num_updates);
-        updates[num_updates - 1].app         = NULL;
-        updates[num_updates - 1].name        = strdup("BadgeVMS Firmware");
-        updates[num_updates - 1].version     = strdup(firmware_version);
-        updates[num_updates - 1].description = strdup("Main badge firmware");
-        updates[num_updates - 1].is_firmware = true;
+        *updates                              = realloc(*updates, sizeof(update_item_t) * num_updates);
+        (*updates)[num_updates - 1].app         = NULL;
+        (*updates)[num_updates - 1].name        = strdup("BadgeVMS Firmware");
+        (*updates)[num_updates - 1].version     = strdup(firmware_version);
+        (*updates)[num_updates - 1].description = strdup("Main badge firmware");
+        (*updates)[num_updates - 1].is_firmware = true;
     }
 
-    if (num_updates) {
-        printf("Updates available!\n");
-        if (get_num_tasks() <= 2) {
-            debug_printf("I'm the only process running, showing UI\n");
-            run_update_window(updates, num_updates);
-        } else {
-            printf("Other tasks running, trying again later\n");
+    // application_list_close(app_list);
+    return num_updates;
+}
+
+int main(int argc, char *argv[]) {
+    for (int i = 1; i < argc; ++i) {
+        if (strcmp(argv[i], "--debug") == 0) {
+            debug = true;
         }
-        free(updates);
+        if (strcmp(argv[i], "--background") == 0) {
+            window = false;
+        }
     }
 
-    application_list_close(app_list);
+    debug_printf("BadgeVMS OTA starting...\n");
+    debug_printf("Connecting to wifi\n");
+
+    if (!window) {
+        debug_printf("Running in background, lowering priority\n");
+        task_priority_lower();
+    }
+
+    wifi_connection_status_t status = wifi_connect();
+    if (status != WIFI_CONNECTED) {
+        printf("Unable to connect to wifi\n");
+        return 1;
+    }
+
+    debug_printf("Initializing curl\n");
+    curl_global_init(0);
+
+    debug_printf("Pinging badgehub\n");
+    badgehub_ping();
+
+    if (window) {
+        debug_printf("Showing update check window\n");
+        run_update_window_with_check();
+    } else {
+        update_item_t *updates     = NULL;
+        size_t         num_updates = perform_update_check(&updates);
+        
+        if (num_updates) {
+            printf("Updates available!\n");
+            if (get_num_tasks() <= 2) {
+                debug_printf("I'm the only process running, showing UI and restoring priority\n");
+                task_priority_restore();
+                run_update_window(updates, num_updates);
+            } else {
+                printf("Other tasks running, trying again later\n");
+            }
+            free(updates);
+        } else {
+            printf("No updates available\n");
+        }
+    }
+
     debug_printf("All done!\n");
+    return 0;
 }

@@ -43,4 +43,6 @@ size_t list_default_applications(char ***app_slugs);
 char  *source_to_name(application_source_t s);
 void   badgehub_ping();
 
-bool run_update_window(update_item_t *updates, size_t num);
+bool   run_update_window(update_item_t *updates, size_t num);
+bool   run_update_window_with_check(void);
+size_t perform_update_check(update_item_t **updates);
