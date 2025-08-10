@@ -59,7 +59,7 @@ IRAM_ATTR static volatile pid_t current_mapped_task = 0;
 static allocator_t              page_allocator;
 static allocator_t              framebuffer_allocator;
 
-static portMUX_TYPE cache_mmu_mutex = portMUX_INITIALIZER_UNLOCKED;
+IRAM_ATTR static portMUX_TYPE cache_mmu_mutex = portMUX_INITIALIZER_UNLOCKED;
 
 // Copied from ESP-IDF 5.4.2 for speed
 __attribute__((always_inline)) static inline uint32_t why_mmu_hal_get_id_from_target(mmu_target_t target) {
@@ -697,6 +697,14 @@ size_t get_free_psram_pages() {
 
 size_t get_total_psram_pages() {
     return buddy_get_total_pages(&page_allocator);
+}
+
+size_t get_free_framebuffer_pages() {
+    return buddy_get_free_pages(&framebuffer_allocator);
+}
+
+size_t get_total_framebuffer_pages() {
+    return buddy_get_total_pages(&framebuffer_allocator);
 }
 
 void writeback_and_invalidate_task(task_info_t *task_info) {

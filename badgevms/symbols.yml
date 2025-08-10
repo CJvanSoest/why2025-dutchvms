@@ -926,6 +926,8 @@ simple_function:
   - path_free
   - process_create
   - rm_rf
+  - task_priority_lower
+  - task_priority_restore
   - thread_create
   - vaddr_to_paddr
   - wait

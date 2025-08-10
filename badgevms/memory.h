@@ -29,7 +29,7 @@
  * ...                      Kernel SPIRAM heap
  * SOC_EXTRAM_LOW + 5MB
  * ...                      Framebuffers
- * SOC_EXTRAM_LOW + 20MB
+ * SOC_EXTRAM_LOW + 30MB
  * ...                      Unused
  * SOC_EXTRAM_LOW + 32MB - 1 page
  * ...                      Guard page
@@ -46,8 +46,8 @@
 #define KERNEL_HEAP_START SOC_EXTRAM_LOW + SOC_MMU_PAGE_SIZE
 
 // Allocate 15MB of VADDR space for framebuffers
-#define FRAMEBUFFER_HEAP_SIZE  (1024 * 1024 * 15)
-#define FRAMEBUFFER_HEAP_START ((SOC_EXTRAM_LOW + FRAMEBUFFER_HEAP_SIZE) & ~(SOC_MMU_PAGE_SIZE - 1))
+#define FRAMEBUFFER_HEAP_SIZE  (1024 * 1024 * 25)
+#define FRAMEBUFFER_HEAP_START ((SOC_EXTRAM_LOW + (1024 * 1024 *5)) & ~(SOC_MMU_PAGE_SIZE - 1))
 #define FRAMEBUFFERS_START     FRAMEBUFFFER_HEAP_START + SOC_MMU_PAGE_SIZE
 
 #define ADDR_TO_PADDR(a) (a - VADDR_START)
@@ -81,6 +81,8 @@ void      framebuffer_map_pages(allocation_range_t *head_range, allocation_range
 void      framebuffer_unmap_pages(allocation_range_t *head_range);
 size_t    get_free_psram_pages();
 size_t    get_total_psram_pages();
+size_t get_free_framebuffer_pages();
+size_t get_total_framebuffer_pages();
 
 void memory_init();
 void dump_mmu();
