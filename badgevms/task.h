@@ -31,7 +31,6 @@
 #define STRERROR_BUFLEN 128
 #define NUM_PIDS        128
 #define MAX_PID         127
-#define MIN_STACK_SIZE  8192
 
 #define TASK_PRIORITY            5
 #define TASK_PRIORITY_FOREGROUND 6

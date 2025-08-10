@@ -258,7 +258,8 @@ static void hermes_do_connect() {
             .ssid = "WHY2025-open",
         },
     };
-    ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_STA, &wifi_config));
+
+
     // esp_eap_client_set_identity((uint8_t *)EXAMPLE_EAP_ID, strlen(EXAMPLE_EAP_ID));
 
     // esp_eap_client_set_username((unsigned char const *)"badge", 5);
@@ -270,6 +271,14 @@ static void hermes_do_connect() {
     int retries = 10;
 again:
     ESP_LOGW("HERMES", "Dialing...");
+
+    esp_err_t err = esp_wifi_set_config(WIFI_IF_STA, &wifi_config); 
+    if (err != ESP_OK && retries) {
+        --retries;
+        vTaskDelay(100);
+        goto again;
+    }
+
     esp_wifi_connect();
     EventBits_t bits = xEventGroupWaitBits(
         wifi_event_group,
