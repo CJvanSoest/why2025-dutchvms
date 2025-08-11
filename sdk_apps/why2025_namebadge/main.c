@@ -8,6 +8,7 @@
 #include <math.h>
 #include <string.h>
 #include <time.h>
+#include <unistd.h>
 
 #define STB_TRUETYPE_IMPLEMENTATION
 #include "stb_truetype.h"
@@ -810,35 +811,46 @@ int main(int argc, char *argv[]) {
 
     event_t event;
     while (running) {
-        event = window_event_poll(app->window, false, 0);
-        switch (event.type) {
-            case EVENT_QUIT: running = 0; break;
-            case EVENT_KEY_DOWN:
-                if (!app->is_flipped) {
-                    if (isprint(event.keyboard.text)) {
-                        handle_text_input(app, event.keyboard.text);
-                    } else {
-                        handle_key(app, event.keyboard.scancode);
-                    }
-                }
-                break;
-        }
-
         uint32_t now = get_ticks_ms();
-        if (now - app->last_cursor_blink > CURSOR_BLINK_MS) {
-            app->cursor_visible                 = !app->cursor_visible;
-            app->last_cursor_blink              = now;
-            app->lines[app->current_line].dirty = true;
-        }
-
         if (now - app->last_flip_check > 1000) {
             bool should_flip = get_orientation(app);
             if (should_flip != app->is_flipped) {
                 printf("Flipping ...\n");
                 app->is_flipped        = should_flip;
                 app->needs_full_redraw = true;
+
+                if (app->is_flipped) {
+                    // Render a last frame before sleeping
+                    render_frame(app);
+                }
             }
             app->last_flip_check = now;
+        }
+
+        if (app->is_flipped) {
+            // Don't burn precious CPU cycles and battery when just
+            // being a badge
+            usleep(1000 * 1000);
+            continue;
+        }
+
+        event = window_event_poll(app->window, false, 0);
+        switch (event.type) {
+            case EVENT_QUIT: running = 0; break;
+            case EVENT_KEY_DOWN:
+                if (isprint(event.keyboard.text)) {
+                    handle_text_input(app, event.keyboard.text);
+                } else {
+                    handle_key(app, event.keyboard.scancode);
+                }
+                break;
+        }
+
+        now = get_ticks_ms();
+        if (now - app->last_cursor_blink > CURSOR_BLINK_MS) {
+            app->cursor_visible                 = !app->cursor_visible;
+            app->last_cursor_blink              = now;
+            app->lines[app->current_line].dirty = true;
         }
 
         render_frame(app);
