@@ -1,8 +1,11 @@
 #include <stdio.h>
 #include <stdlib.h>
 
+#include <badgevms/compositor.h>
+#include <badgevms/device.h>
+#include <badgevms/event.h>
+#include <ctype.h>
 #include <math.h>
-#include <SDL3/SDL.h>
 #include <string.h>
 #include <time.h>
 
@@ -79,7 +82,8 @@ char const *names[]    = {
     "Incredible",
 };
 
-int running = 1;
+int             running = 1;
+struct timespec start_time;
 
 int render_png_with_alpha_scaled(
     uint16_t *framebuffer, int fb_width, int fb_height, char const *filename, int dest_x, int dest_y, int scale_factor
@@ -90,23 +94,22 @@ typedef struct {
 } color_t;
 
 typedef struct {
-    char    text[MAX_LINE_LENGTH];
-    char    prev_text[MAX_LINE_LENGTH];
-    color_t color;
-    float   font_size;
-    float   max_height;
-    bool    dirty;
-    bool    draft_mode;
-    Uint64  last_edit_time;
-    bool    needs_hq_render;
+    char     text[MAX_LINE_LENGTH];
+    char     prev_text[MAX_LINE_LENGTH];
+    color_t  color;
+    float    font_size;
+    float    max_height;
+    bool     dirty;
+    bool     draft_mode;
+    uint32_t last_edit_time;
+    bool     needs_hq_render;
 } textline_t;
 
 typedef struct {
-    SDL_Window   *window;
-    SDL_Renderer *renderer;
-    SDL_Texture  *texture;
-    SDL_Surface  *surface;
-    Uint64        last_save_time;
+    window_handle_t window;
+    uint16_t       *framebuffer;
+    framebuffer_t  *window_framebuffer;
+    uint32_t        last_save_time;
 
     stbtt_fontinfo font;
     unsigned char *font_data;
@@ -115,15 +118,38 @@ typedef struct {
     int        current_line;
     int        prev_line;
     int        cursor_pos;
-    Uint64     last_cursor_blink;
+    uint32_t   last_cursor_blink;
     int        cursor_visible;
     int        prev_cursor_visible;
     int        image_index;
 
-    color_t cursor_color;
-    bool    needs_full_redraw;
-    bool    has_been_edited;
+    color_t               cursor_color;
+    bool                  needs_full_redraw;
+    bool                  has_been_edited;
+    orientation_device_t *orientation_device;
+    bool                  is_flipped;
+    uint32_t              last_flip_check;
 } state_t;
+
+bool get_orientation(state_t *app) {
+    if (app->orientation_device) {
+        orientation_t orientation = app->orientation_device->_get_orientation(app->orientation_device);
+        if (app->is_flipped) {
+            if (orientation == ORIENTATION_0) {
+                return false;
+            } else {
+                return true;
+            }
+        } else {
+            if (orientation == ORIENTATION_180) {
+                return true;
+            } else {
+                return false;
+            }
+        }
+    }
+    return false;
+}
 
 static void save_state(state_t *app) {
     // Work around the truncation bug by removing the file first
@@ -178,16 +204,15 @@ static bool load_state(state_t *app) {
     return true;
 }
 
-static Uint16 rgb_to_565(unsigned char r, unsigned char g, unsigned char b) {
+static uint16_t rgb_to_565(unsigned char r, unsigned char g, unsigned char b) {
     return ((r & 0xF8) << 8) | ((g & 0xFC) << 3) | (b >> 3);
 }
 
-static void set_pixel_565(SDL_Surface *surface, int x, int y, unsigned char r, unsigned char g, unsigned char b) {
-    if (x < 0 || x >= surface->w || y < 0 || y >= surface->h)
+static void set_pixel_565(uint16_t *fb, int x, int y, unsigned char r, unsigned char g, unsigned char b) {
+    if (x < 0 || x >= WINDOW_WIDTH || y < 0 || y >= WINDOW_HEIGHT)
         return;
 
-    Uint16 *pixels             = (Uint16 *)surface->pixels;
-    pixels[y * surface->w + x] = rgb_to_565(r, g, b);
+    fb[y * WINDOW_WIDTH + x] = rgb_to_565(r, g, b);
 }
 
 static int get_text_width(state_t *app, char const *text, float size) {
@@ -244,12 +269,11 @@ static void clear_line_area(state_t *app, int line_index) {
         x_end   = WINDOW_WIDTH - (PADDING / 2);
     }
 
-    Uint16 *pixels = (Uint16 *)app->surface->pixels;
-    Uint16  black  = rgb_to_565(0, 0, 0);
+    uint16_t black = rgb_to_565(0, 0, 0);
 
     for (int y = y_start; y < y_end && y < WINDOW_HEIGHT; y++) {
         for (int x = x_start; x < x_end && x < WINDOW_WIDTH; x++) {
-            pixels[y * WINDOW_WIDTH + x] = black;
+            app->framebuffer[y * WINDOW_WIDTH + x] = black;
         }
     }
 }
@@ -287,7 +311,7 @@ static void render_text_draft(state_t *app, char const *text, int x, int y, floa
                             for (int sx = 0; sx < DRAFT_QUALITY_SCALE; sx++) {
                                 int draw_x = text_x + (px * DRAFT_QUALITY_SCALE) + sx + (c_x1 * DRAFT_QUALITY_SCALE);
                                 int draw_y = baseline + (py * DRAFT_QUALITY_SCALE) + sy + (c_y1 * DRAFT_QUALITY_SCALE);
-                                set_pixel_565(app->surface, draw_x, draw_y, color.r, color.g, color.b);
+                                set_pixel_565(app->framebuffer, draw_x, draw_y, color.r, color.g, color.b);
                             }
                         }
                     }
@@ -338,7 +362,7 @@ static void render_text_hq(state_t *app, char const *text, int x, int y, float s
                         unsigned char g = (color.g * alpha) / 255;
                         unsigned char b = (color.b * alpha) / 255;
 
-                        set_pixel_565(app->surface, draw_x, draw_y, r, g, b);
+                        set_pixel_565(app->framebuffer, draw_x, draw_y, r, g, b);
                     }
                 }
             }
@@ -428,7 +452,7 @@ static void render_cursor(state_t *app) {
         for (int cy = y - 20; cy < y + 20; cy++) {
             for (int cx = x; cx < x + 3; cx++) {
                 set_pixel_565(
-                    app->surface,
+                    app->framebuffer,
                     cx,
                     cy,
                     app->lines[app->current_line].color.r,
@@ -440,8 +464,17 @@ static void render_cursor(state_t *app) {
     }
 }
 
+uint32_t get_ticks_ms() {
+    struct timespec cur_time;
+    clock_gettime(CLOCK_MONOTONIC, &cur_time);
+    long elapsed_us =
+        (cur_time.tv_sec - start_time.tv_sec) * 1000000L + (cur_time.tv_nsec - start_time.tv_nsec) / 1000L;
+
+    return elapsed_us / 1000;
+}
+
 static void update_draft_modes(state_t *app) {
-    Uint64 now = SDL_GetTicks();
+    uint32_t now = get_ticks_ms();
 
     for (int i = 0; i < NUM_LINES; i++) {
         textline_t *line = &app->lines[i];
@@ -455,7 +488,7 @@ static void update_draft_modes(state_t *app) {
 }
 
 static void maybe_save(state_t *app) {
-    Uint64 now = SDL_GetTicks();
+    uint32_t now = get_ticks_ms();
 
     if (app->has_been_edited) {
         if (app->last_save_time > SAVE_TIMEOUT_MS) {
@@ -493,48 +526,36 @@ static int load_font(state_t *app, char const *filename) {
 static state_t *init_app(char const *font_path) {
     state_t *app = calloc(1, sizeof(state_t));
 
-    if (SDL_Init(SDL_INIT_VIDEO) < 0) {
-        printf("SDL_Init failed: %s\n", SDL_GetError());
-        free(app);
-        return NULL;
-    }
-
-    app->window = SDL_CreateWindow("Badge Application", WINDOW_WIDTH, WINDOW_HEIGHT, SDL_WINDOW_FULLSCREEN);
-    if (!app->window) {
-        printf("SDL_CreateWindow failed: %s\n", SDL_GetError());
-        free(app);
-        return NULL;
-    }
-
-    app->renderer = SDL_CreateRenderer(app->window, NULL);
-    if (!app->renderer) {
-        printf("SDL_CreateRenderer failed: %s\n", SDL_GetError());
-        SDL_DestroyWindow(app->window);
-        free(app);
-        return NULL;
-    }
-
-    app->surface = SDL_CreateSurface(WINDOW_WIDTH, WINDOW_HEIGHT, SDL_PIXELFORMAT_RGB565);
-    if (!app->surface) {
-        printf("SDL_CreateSurface failed: %s\n", SDL_GetError());
-        SDL_DestroyRenderer(app->renderer);
-        SDL_DestroyWindow(app->window);
-        free(app);
-        return NULL;
-    }
-
-    app->texture = SDL_CreateTexture(
-        app->renderer,
-        SDL_PIXELFORMAT_RGB565,
-        SDL_TEXTUREACCESS_STREAMING,
-        WINDOW_WIDTH,
-        WINDOW_HEIGHT
+    app->window = window_create(
+        "Badge Application",
+        (window_size_t){WINDOW_WIDTH, WINDOW_HEIGHT},
+        WINDOW_FLAG_FULLSCREEN | WINDOW_FLAG_DOUBLE_BUFFERED
     );
+    if (!app->window) {
+        printf("window_create failed\n");
+        free(app);
+        return NULL;
+    }
+
+    app->window_framebuffer = window_framebuffer_create(
+        app->window,
+        (window_size_t){WINDOW_WIDTH, WINDOW_HEIGHT},
+        BADGEVMS_PIXELFORMAT_RGB565
+    );
+    if (!app->window_framebuffer) {
+        printf("window_framebuffer_create failed\n");
+        free(app);
+        return NULL;
+    }
+
+    app->framebuffer = malloc(WINDOW_WIDTH * WINDOW_HEIGHT * 2);
+    if (!app->framebuffer) {
+        printf("allocation of framebuffer failed\n");
+        free(app);
+        return NULL;
+    }
 
     if (!load_font(app, font_path)) {
-        SDL_DestroySurface(app->surface);
-        SDL_DestroyRenderer(app->renderer);
-        SDL_DestroyWindow(app->window);
         free(app);
         return NULL;
     }
@@ -575,9 +596,16 @@ static state_t *init_app(char const *font_path) {
     app->cursor_pos          = strlen(app->lines[0].text);
     app->cursor_visible      = 1;
     app->prev_cursor_visible = 1;
-    app->last_cursor_blink   = SDL_GetTicks();
+    app->last_cursor_blink   = get_ticks_ms();
     app->needs_full_redraw   = true;
     app->has_been_edited     = false;
+    app->last_flip_check     = get_ticks_ms();
+    app->is_flipped          = false;
+
+    app->orientation_device = (orientation_device_t *)device_get("ORIENTATION0");
+    if (!app->orientation_device) {
+        printf("Unable to open the orientation sensor device!\n");
+    }
 
     return app;
 }
@@ -588,8 +616,8 @@ static void render_frame(state_t *app) {
     update_draft_modes(app);
 
     if (app->needs_full_redraw) {
-        SDL_FillSurfaceRect(app->surface, NULL, 0);
-        render_png_with_alpha_scaled(app->surface->pixels, 720, 720, images[app->image_index], 0, 0, 1);
+        memset(app->framebuffer, 0, WINDOW_WIDTH * WINDOW_HEIGHT * 2);
+        render_png_with_alpha_scaled(app->framebuffer, WINDOW_WIDTH, WINDOW_HEIGHT, images[app->image_index], 0, 0, 1);
 
         for (int i = 0; i < NUM_LINES; i++) {
             render_line(app, i);
@@ -640,36 +668,40 @@ static void render_frame(state_t *app) {
     }
 
     if (needs_update) {
-        SDL_UpdateTexture(app->texture, NULL, app->surface->pixels, app->surface->pitch);
-        SDL_RenderClear(app->renderer);
-        SDL_RenderTexture(app->renderer, app->texture, NULL, NULL);
-        SDL_RenderPresent(app->renderer);
+        if (app->is_flipped) {
+            window_flags_set(app->window, window_flags_get(app->window) | WINDOW_FLAG_FLIP_HORIZONTAL);
+        } else {
+            window_flags_set(app->window, window_flags_get(app->window) & ~WINDOW_FLAG_FLIP_HORIZONTAL);
+        }
+
+        memcpy(app->window_framebuffer->pixels, app->framebuffer, WINDOW_WIDTH * WINDOW_HEIGHT * 2);
+        window_present(app->window, true, NULL, 0);
         maybe_save(app);
     }
 }
 
-static void handle_text_input(state_t *app, char const *text) {
+static void handle_text_input(state_t *app, char const text) {
     textline_t *line = &app->lines[app->current_line];
     int         len  = strlen(line->text);
 
     if (len < MAX_LINE_LENGTH - 1) {
         memmove(&line->text[app->cursor_pos + 1], &line->text[app->cursor_pos], len - app->cursor_pos + 1);
-        line->text[app->cursor_pos] = text[0];
+        line->text[app->cursor_pos] = text;
         app->cursor_pos++;
 
         line->draft_mode     = true;
-        line->last_edit_time = SDL_GetTicks();
+        line->last_edit_time = get_ticks_ms();
         line->dirty          = true;
 
         app->has_been_edited = true;
     }
 }
 
-static void handle_key(state_t *app, SDL_Scancode scancode) {
+static void handle_key(state_t *app, keyboard_scancode_t scancode) {
     textline_t *line = &app->lines[app->current_line];
 
     switch (scancode) {
-        case SDL_SCANCODE_BACKSPACE:
+        case KEY_SCANCODE_BACKSPACE:
             if (app->cursor_pos > 0) {
                 memmove(
                     &line->text[app->cursor_pos - 1],
@@ -679,7 +711,7 @@ static void handle_key(state_t *app, SDL_Scancode scancode) {
                 app->cursor_pos--;
 
                 line->draft_mode     = true;
-                line->last_edit_time = SDL_GetTicks();
+                line->last_edit_time = get_ticks_ms();
                 line->dirty          = true;
 
                 app->has_been_edited = true;
@@ -694,7 +726,7 @@ static void handle_key(state_t *app, SDL_Scancode scancode) {
             }
             break;
 
-        case SDL_SCANCODE_DELETE:
+        case KEY_SCANCODE_DELETE:
             if (app->cursor_pos < strlen(line->text)) {
                 memmove(
                     &line->text[app->cursor_pos],
@@ -703,28 +735,28 @@ static void handle_key(state_t *app, SDL_Scancode scancode) {
                 );
 
                 line->draft_mode     = true;
-                line->last_edit_time = SDL_GetTicks();
+                line->last_edit_time = get_ticks_ms();
                 line->dirty          = true;
 
                 app->has_been_edited = true;
             }
             break;
 
-        case SDL_SCANCODE_LEFT:
+        case KEY_SCANCODE_LEFT:
             if (app->cursor_pos > 0) {
                 app->cursor_pos--;
                 line->dirty = true;
             }
             break;
 
-        case SDL_SCANCODE_RIGHT:
+        case KEY_SCANCODE_RIGHT:
             if (app->cursor_pos < strlen(line->text)) {
                 app->cursor_pos++;
                 line->dirty = true;
             }
             break;
 
-        case SDL_SCANCODE_UP:
+        case KEY_SCANCODE_UP:
             app->lines[app->current_line].draft_mode      = false;
             app->lines[app->current_line].needs_hq_render = true;
 
@@ -733,12 +765,12 @@ static void handle_key(state_t *app, SDL_Scancode scancode) {
             } else {
                 app->current_line = NUM_LINES - 1;
             }
-            app->cursor_pos    = strlen(app->lines[app->current_line].text);
+            app->cursor_pos = strlen(app->lines[app->current_line].text);
             break;
 
-        case SDL_SCANCODE_DOWN:
-        case SDL_SCANCODE_RETURN:
-        case SDL_SCANCODE_TAB:
+        case KEY_SCANCODE_DOWN:
+        case KEY_SCANCODE_RETURN:
+        case KEY_SCANCODE_TAB:
             app->lines[app->current_line].draft_mode      = false;
             app->lines[app->current_line].needs_hq_render = true;
 
@@ -747,7 +779,7 @@ static void handle_key(state_t *app, SDL_Scancode scancode) {
             app->cursor_pos    = strlen(app->lines[app->current_line].text);
             break;
 
-        case 296:
+        case KEY_SCANCODE_CLOUD:
             app->image_index++;
             app->image_index       %= images_size;
             app->needs_full_redraw  = true;
@@ -755,12 +787,13 @@ static void handle_key(state_t *app, SDL_Scancode scancode) {
             app->has_been_edited = true;
             break;
 
-        case SDL_SCANCODE_ESCAPE: running = 0; break;
+        case KEY_SCANCODE_ESCAPE: running = 0; break;
     }
 }
 
 int main(int argc, char *argv[]) {
     srand(time(0));
+    clock_gettime(CLOCK_MONOTONIC, &start_time);
 
     char *font_path = "APPS:[why2025_namebadge]font.ttf";
     if (argc > 1) {
@@ -775,36 +808,44 @@ int main(int argc, char *argv[]) {
         return 1;
     }
 
-    SDL_Event event;
-
-    SDL_StartTextInput(app->window);
-
+    event_t event;
     while (running) {
-        while (SDL_PollEvent(&event)) {
-            switch (event.type) {
-                case SDL_EVENT_QUIT: running = 0; break;
-
-                case SDL_EVENT_TEXT_INPUT: handle_text_input(app, event.text.text); break;
-
-                case SDL_EVENT_KEY_DOWN: handle_key(app, event.key.scancode); break;
-            }
+        event = window_event_poll(app->window, false, 0);
+        switch (event.type) {
+            case EVENT_QUIT: running = 0; break;
+            case EVENT_KEY_DOWN:
+                if (isprint(event.keyboard.text)) {
+                    if (!app->is_flipped) {
+                        handle_text_input(app, event.keyboard.text);
+                    }
+                } else {
+                    handle_key(app, event.keyboard.scancode);
+                }
+                break;
         }
 
-        Uint64 now = SDL_GetTicks();
+        uint32_t now = get_ticks_ms();
         if (now - app->last_cursor_blink > CURSOR_BLINK_MS) {
             app->cursor_visible                 = !app->cursor_visible;
             app->last_cursor_blink              = now;
             app->lines[app->current_line].dirty = true;
         }
 
+        if (now - app->last_flip_check > 1000) {
+            bool should_flip = get_orientation(app);
+            if (should_flip != app->is_flipped) {
+                printf("Flipping ...\n");
+                app->is_flipped        = should_flip;
+                app->needs_full_redraw = true;
+            }
+            app->last_flip_check = now;
+        }
+
         render_frame(app);
-        SDL_Delay(16); // ~60 FPS
     }
 
-    SDL_StopTextInput(app->window);
     if (app->has_been_edited) {
         save_state(app);
     }
-    SDL_Quit();
     return 0;
 }
