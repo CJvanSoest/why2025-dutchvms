@@ -984,6 +984,7 @@ simple_function:
 
 simple_function_extern:
   - __adddf3
+  - __assert_func
   - __clzsi2
   - __divdf3
   - __divdi3
@@ -998,6 +999,7 @@ simple_function_extern:
   - __floatunsidf
   - __gedf2
   - __gtdf2
+  - __issignalingf
   - __ledf2
   - __ltdf2
   - __muldf3
