@@ -846,7 +846,7 @@ framebuffer_t *window_framebuffer_create(window_t *window, window_size_t size, p
         return NULL;
     }
     window->front_fb = 0;
-    window->back_fb  = 1;
+    window->back_fb  = 0;
 
     window->framebuffers[0] = window_framebuffer_allocate(window, size, pixel_format);
     if (!window->framebuffers[0]) {
@@ -859,12 +859,15 @@ framebuffer_t *window_framebuffer_create(window_t *window, window_size_t size, p
         return NULL;
     }
 
-    window->framebuffers[1] = window_framebuffer_allocate(window, size, pixel_format);
-    if (!window->framebuffers[1]) {
-        ESP_LOGW(TAG, "Unable to allocate framebuffer 1 for window %p", window);
-        framebuffer_free(window->framebuffers[0]);
-        window->framebuffers[0] = NULL;
-        return NULL;
+    if (window->flags & WINDOW_FLAG_DOUBLE_BUFFERED) {
+        window->framebuffers[1] = window_framebuffer_allocate(window, size, pixel_format);
+        if (!window->framebuffers[1]) {
+            ESP_LOGW(TAG, "Unable to allocate framebuffer 1 for window %p", window);
+            framebuffer_free(window->framebuffers[0]);
+            window->framebuffers[0] = NULL;
+            return NULL;
+        }
+        window->back_fb = 1;
     }
 
     window->fb_dirty = 7;
@@ -1074,6 +1077,7 @@ pixel_format_t window_framebuffer_format_get(window_handle_t window) {
     return window->framebuffers[0]->format;
 }
 
+#if 0
 static inline void copy_framebuffer_rect(managed_framebuffer_t *dst, managed_framebuffer_t *src, window_rect_t rect) {
     if (rect.x == 0 && rect.y == 0 && rect.w == dst->w && rect.h == dst->h) {
         // Full rect damage
@@ -1107,6 +1111,7 @@ static inline void copy_framebuffer_rect(managed_framebuffer_t *dst, managed_fra
         memcpy(dst_row, src_row, copy_width);
     }
 }
+#endif
 
 void window_present(window_t *window, bool block, window_rect_t *rects, int num_rects) {
     if (!window || !window->framebuffers[0]) {
@@ -1116,35 +1121,28 @@ void window_present(window_t *window, bool block, window_rect_t *rects, int num_
     managed_framebuffer_t *front_buffer = NULL;
     managed_framebuffer_t *back_buffer  = NULL;
 
-    front_buffer = window->framebuffers[window->front_fb];
-    back_buffer  = window->framebuffers[window->back_fb];
-
-    if (!front_buffer || !back_buffer) {
-        abort();
-    }
-
-    compositor_message_t message = {
-        .command = FRAMEBUFFER_SWAP,
-        .fb_a    = front_buffer,
-        .fb_b    = back_buffer,
-        .caller  = xTaskGetCurrentTaskHandle(),
-    };
-
-    xQueueSend(compositor_queue, &message, portMAX_DELAY);
-    ulTaskNotifyTakeIndexed(0, pdTRUE, portMAX_DELAY);
-
     if (window->flags & WINDOW_FLAG_DOUBLE_BUFFERED && window->framebuffers[1]) {
+        front_buffer = window->framebuffers[window->front_fb];
+        back_buffer  = window->framebuffers[window->back_fb];
+
+        if (!front_buffer || !back_buffer) {
+            abort();
+        }
+
+        compositor_message_t message = {
+            .command = FRAMEBUFFER_SWAP,
+            .fb_a    = front_buffer,
+            .fb_b    = back_buffer,
+            .caller  = xTaskGetCurrentTaskHandle(),
+        };
+
+        xQueueSend(compositor_queue, &message, portMAX_DELAY);
+        ulTaskNotifyTakeIndexed(0, pdTRUE, portMAX_DELAY);
+
         // We've waited long enough
         block = false;
     } else {
-        // Single buffered, copy the damage back 
-        if (!num_rects) {
-                copy_framebuffer_rect(back_buffer, front_buffer, (window_rect_t){0, 0, back_buffer->w, back_buffer->h});
-        } else {
-            for (int i = 0; i < num_rects; ++i) {
-                copy_framebuffer_rect(back_buffer, front_buffer, rects[i]);
-            }
-        }
+        front_buffer = window->framebuffers[window->front_fb];
     }
 
     atomic_flag_clear(&front_buffer->clean);
