@@ -662,7 +662,7 @@ static void render_frame(state_t *app) {
         }
     }
 
-    if (app->cursor_visible) {
+    if (app->cursor_visible && !app->is_flipped) {
         render_cursor(app);
         needs_update = true;
     }
@@ -814,12 +814,12 @@ int main(int argc, char *argv[]) {
         switch (event.type) {
             case EVENT_QUIT: running = 0; break;
             case EVENT_KEY_DOWN:
-                if (isprint(event.keyboard.text)) {
-                    if (!app->is_flipped) {
+                if (!app->is_flipped) {
+                    if (isprint(event.keyboard.text)) {
                         handle_text_input(app, event.keyboard.text);
+                    } else {
+                        handle_key(app, event.keyboard.scancode);
                     }
-                } else {
-                    handle_key(app, event.keyboard.scancode);
                 }
                 break;
         }
