@@ -723,6 +723,10 @@ static void IRAM_ATTR NOINLINE_ATTR compositor(void *ignored) {
                     bool                     byte_swap    = false;
                     ppa_srm_color_mode_t     mode         = PPA_SRM_COLOR_MODE_RGB565;
 
+                    if (window->flags & WINDOW_FLAG_FLIP_HORIZONTAL) {
+                        ppa_rotation = PPA_SRM_ROTATION_ANGLE_270;
+                    }
+
                     switch (framebuffer->format) {
                         case BADGEVMS_PIXELFORMAT_RGB565: rgb_swap = true; // Fallthrough
                         case BADGEVMS_PIXELFORMAT_BGR565: break;

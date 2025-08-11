@@ -12,6 +12,7 @@
 * scaled window content will always appear at the top of the windows, there's no pillar boxing or letter boxing
 * single buffered windows could be better
 * we should never allow tasks to hold FreeRTOS synchtonization primitives, if the task gets killed FreeRTOS will just randomly kill a different task in retaliation after a timeout
+* what `WINDOW_FLAG_FLIP_HORIZONTAL` means is currently hardcoded for the why2025 badge
 
 # Notes
 
