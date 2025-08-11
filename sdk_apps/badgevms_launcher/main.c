@@ -429,7 +429,8 @@ int main(int argc, char *argv[]) {
         printf("  UID: %s\n", app->unique_identifier);
         printf("  Version: %s\n", app->version);
         printf("  Binary : %s\n", app->binary_path);
-        if (app->binary_path && strlen(app->binary_path) && app->unique_identifier && (strcmp(app->unique_identifier, "badgevms_launcher") != 0) &&
+        if (app->binary_path && strlen(app->binary_path) && app->unique_identifier &&
+            (strcmp(app->unique_identifier, "badgevms_launcher") != 0) &&
             (strcmp(app->unique_identifier, "why2025_firmware_ota_c6") != 0)) {
             ++num_apps;
             apps               = realloc(apps, sizeof(application_t *) * num_apps);

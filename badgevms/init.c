@@ -409,7 +409,8 @@ void run_init(void) {
         if (current_time - last_printed > 5) {
             size_t free_ram = heap_caps_get_free_size(MALLOC_CAP_DEFAULT);
             printf(
-                "Init: Free main memory: %zi, free PSRAM pages: %zi/%zi, free framebuffer pages: %zi/%zi running processes %lu\n",
+                "Init: Free main memory: %zi, free PSRAM pages: %zi/%zi, free framebuffer pages: %zi/%zi running "
+                "processes %lu\n",
                 free_ram,
                 get_free_psram_pages(),
                 get_total_psram_pages(),

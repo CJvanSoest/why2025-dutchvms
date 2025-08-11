@@ -477,9 +477,9 @@ pid_t run_task_path(char const *path, uint16_t stack_size, task_type_t type, int
     if (argc) {
         ret = run_task(strdup((void const *)path), stack_size, type, argc, argv);
     } else {
-        char **argv_tmp = malloc(sizeof(char*));
-        argv_tmp[0] = strdup(path);
-        ret = run_task(strdup((void const *)path), stack_size, type, 1, argv_tmp);
+        char **argv_tmp = malloc(sizeof(char *));
+        argv_tmp[0]     = strdup(path);
+        ret             = run_task(strdup((void const *)path), stack_size, type, 1, argv_tmp);
         free(argv_tmp[0]);
         free(argv_tmp);
     }
@@ -722,7 +722,8 @@ static void IRAM_ATTR zeus(void *ignored) {
             snprintf(task_name, 9, "Task %u", task_info->pid);
 
             TaskHandle_t new_task;
-            BaseType_t   res = xTaskCreatePinnedToCore(task_entry, task_name, task_info->stack_size, param, 5, &new_task, 1);
+            BaseType_t   res =
+                xTaskCreatePinnedToCore(task_entry, task_name, task_info->stack_size, param, 5, &new_task, 1);
             if (res == pdPASS) {
                 // Since Zeus is the highest priority task on the core the task should never be able to run
                 task_info->handle = new_task;

@@ -32,13 +32,13 @@
 #include <dirent.h>
 #include <fcntl.h>
 #include <iconv.h>
+#include <math.h>
 #include <regex.h>
 #include <string.h>
 #include <sys/errno.h>
 #include <sys/types.h>
 #include <time.h>
 #include <wchar.h>
-#include <math.h>
 
 static char const *TAG = "wrapped_functions";
 
@@ -661,31 +661,25 @@ void wrapped_functions_init(void) {
     kernel_malloc_lock = xSemaphoreCreateMutex();
 }
 
-static __always_inline uint32_t
-asuint (float f)
-{
+static __always_inline uint32_t asuint(float f) {
 #if defined(__riscv_flen) && __riscv_flen >= 32
-  uint32_t result;
-  __asm__("fmv.x.w\t%0, %1" : "=r" (result) : "f" (f));
-  return result;
+    uint32_t result;
+    __asm__("fmv.x.w\t%0, %1" : "=r"(result) : "f"(f));
+    return result;
 #else
-  union
-  {
-    float f;
-    uint32_t i;
-  } u = {f};
-  return u.i;
+    union {
+        float    f;
+        uint32_t i;
+    } u = {f};
+    return u.i;
 #endif
 }
 
-static __always_inline int
-issignalingf_inline (float x)
-{
-  uint32_t ix = asuint (x);
-  return 2 * (ix ^ 0x00400000u) > 0xFF800000u;
+static __always_inline int issignalingf_inline(float x) {
+    uint32_t ix = asuint(x);
+    return 2 * (ix ^ 0x00400000u) > 0xFF800000u;
 }
 
 int __issignalingf(float f) {
     return issignalingf_inline(f);
 }
-

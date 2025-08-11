@@ -14,7 +14,7 @@ bool window = true;
 
 size_t perform_update_check(update_item_t **updates) {
     size_t num_updates = 0;
-    
+
     char **default_apps     = NULL;
     size_t num_default_apps = list_default_applications(&default_apps);
 
@@ -53,7 +53,7 @@ size_t perform_update_check(update_item_t **updates) {
             char *version = NULL;
             if (check_for_updates(app, &version)) {
                 ++num_updates;
-                *updates                              = realloc(*updates, sizeof(update_item_t) * num_updates);
+                *updates                                = realloc(*updates, sizeof(update_item_t) * num_updates);
                 (*updates)[num_updates - 1].app         = app;
                 (*updates)[num_updates - 1].name        = strdup(app->name);
                 (*updates)[num_updates - 1].version     = strdup(version);
@@ -77,7 +77,7 @@ size_t perform_update_check(update_item_t **updates) {
     if (check_for_firmware_updates(&firmware_version)) {
         debug_printf("New firmware version available!");
         ++num_updates;
-        *updates                              = realloc(*updates, sizeof(update_item_t) * num_updates);
+        *updates                                = realloc(*updates, sizeof(update_item_t) * num_updates);
         (*updates)[num_updates - 1].app         = NULL;
         (*updates)[num_updates - 1].name        = strdup("BadgeVMS Firmware");
         (*updates)[num_updates - 1].version     = strdup(firmware_version);
@@ -120,7 +120,7 @@ int main(int argc, char *argv[]) {
     } else {
         update_item_t *updates     = NULL;
         size_t         num_updates = perform_update_check(&updates);
-        
+
         if (num_updates) {
             printf("Updates available!\n");
             if (get_num_tasks() <= 2) {
