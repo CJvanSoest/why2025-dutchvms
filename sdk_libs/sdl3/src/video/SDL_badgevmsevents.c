@@ -77,7 +77,7 @@ void BADGEVMS_PumpEvents(SDL_VideoDevice *_this)
                 sdl_event.type = badgevms_event.keyboard.down ? SDL_EVENT_KEY_DOWN : SDL_EVENT_KEY_UP;
                 sdl_event.key.windowID = SDL_GetWindowID(sdl_window);
                 sdl_event.key.scancode = badgevms_event.keyboard.scancode;
-                sdl_event.key.key = badgevms_event.keyboard.key;
+                sdl_event.key.key = SDL_GetKeyFromScancode(badgevms_event.keyboard.scancode, badgevms_event.keyboard.mod, true);
                 sdl_event.key.mod = badgevms_event.keyboard.mod;
                 sdl_event.key.down = badgevms_event.keyboard.down;
                 sdl_event.key.repeat = badgevms_event.keyboard.repeat;
