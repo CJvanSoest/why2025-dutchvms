@@ -29,6 +29,7 @@ typedef enum {
     WIFI_ERROR,
     WIFI_DISCONNECTED,
     WIFI_CONNECTED,
+    WIFI_ERROR_WRONG_CREDENTIALS,
 } wifi_connection_status_t;
 
 // From ESP-IDF 5.5
@@ -101,3 +102,4 @@ int              wifi_station_get_secondary_channel(wifi_station_handle station)
 int              wifi_station_get_rssi(wifi_station_handle station);
 wifi_auth_mode_t wifi_station_get_mode(wifi_station_handle station);
 bool             wifi_station_wps(wifi_station_handle station);
+bool             wifi_set_connection_parameters(char const *ssid, char const *password);

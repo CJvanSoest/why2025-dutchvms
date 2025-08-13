@@ -38,6 +38,7 @@
 #define WIFI_CONNECTED_BIT     BIT0
 #define WIFI_DISCONNECTED_BIT  BIT1
 #define WIFI_FAIL_BIT          BIT2
+#define WIFI_AUTH_ERR_BIT      BIT3
 
 typedef struct wifi_station {
     mac_address_t                   bssid[6];
@@ -83,7 +84,8 @@ static EventGroupHandle_t           wifi_event_group;
 static esp_event_handler_instance_t instance_any_id;
 static esp_event_handler_instance_t instance_got_ip;
 
-#define MIN_SCAN_INTERVAL 60 * 1000
+#define MIN_SCAN_INTERVAL       10 * 1000 * 1000
+#define MIN_SCAN_INTERVAL_EMPTY 1000 * 1000
 
 static badgevms_wifi_auth_mode_t esp_authmode_to_badgevms(wifi_auth_mode_t mode) {
     switch (mode) {
@@ -188,12 +190,39 @@ static badgevms_wifi_connection_mode_t esp_phy_to_badgevms_mode(wifi_ap_record_t
     return (badgevms_wifi_connection_mode_t)mode;
 }
 
+static void result_to_station(wifi_station_t *s, wifi_ap_record_t *r) {
+    memcpy(&s->bssid, r->bssid, sizeof(mac_address_t));
+    memcpy(&s->ssid, r->ssid, sizeof(s->ssid));
+    s->primary         = r->primary;
+    s->secondary       = r->second;
+    s->rssi            = r->rssi;
+    s->authmode        = esp_authmode_to_badgevms(r->authmode);
+    s->pairwise_cipher = esp_cipher_to_badgevms(r->pairwise_cipher);
+    s->group_cipher    = esp_cipher_to_badgevms(r->group_cipher);
+    s->mode            = esp_phy_to_badgevms_mode(r);
+    s->wps             = r->wps;
+}
+
 static void event_handler(void *arg, esp_event_base_t event_base, int32_t event_id, void *event_data) {
     if (event_base == WIFI_EVENT && event_id == WIFI_EVENT_STA_START) {
         esp_wifi_connect();
     } else if (event_base == WIFI_EVENT && event_id == WIFI_EVENT_STA_DISCONNECTED) {
+        wifi_event_sta_disconnected_t *disconnected = (wifi_event_sta_disconnected_t *)event_data;
+        ESP_LOGW(TAG, "Disconnect reason: %d", disconnected->reason);
+        wifi_err_reason_t reason = disconnected->reason;
+        status.connection_status = WIFI_DISCONNECTED;
         if (status.connection_status_want != WIFI_DISCONNECTED) {
-            status.connection_status = WIFI_DISCONNECTED;
+            switch (reason) {
+                case WIFI_REASON_ASSOC_NOT_AUTHED:
+                case WIFI_REASON_AUTH_FAIL:
+                case WIFI_REASON_802_1X_AUTH_FAILED:
+                    ESP_LOGW(TAG, "Wifi disconnected due to wrong credentials");
+                    status.connection_status = WIFI_ERROR_WRONG_CREDENTIALS;
+                    xEventGroupSetBits(wifi_event_group, WIFI_AUTH_ERR_BIT);
+                    return;
+                default: break;
+            }
+
             ESP_LOGW(TAG, "unexpected wifi disconnect, reconnecting");
             if (s_retry_num < 10) {
                 esp_wifi_connect();
@@ -215,13 +244,16 @@ static void event_handler(void *arg, esp_event_base_t event_base, int32_t event_
         s_retry_num = 0;
 
         status.connection_status = WIFI_CONNECTED;
+        wifi_ap_record_t ap;
+        esp_wifi_sta_get_ap_info(&ap);
+        result_to_station(&status.current, &ap);
         xEventGroupSetBits(wifi_event_group, WIFI_CONNECTED_BIT);
     }
 }
 
 static void hermes_do_disconnect() {
     status.connection_status_want = WIFI_DISCONNECTED;
-    if (status.connection_status == WIFI_DISCONNECTED) {
+    if (status.connection_status != WIFI_CONNECTED) {
         ESP_LOGW("HERMES", "Already disconnected");
         return;
     }
@@ -253,20 +285,31 @@ static void hermes_do_connect() {
     ESP_ERROR_CHECK(esp_wifi_disconnect());
     ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_STA));
 
-    wifi_config_t wifi_config = {
-        .sta = {
-            .ssid = "WHY2025-open",
-        },
-    };
+    size_t size;
+    char   ssid[32]     = "WHY2025-open";
+    char   password[64] = "";
 
+    nvs_handle_t nvs_handle;
+    esp_err_t    nvs_err = nvs_open("badgevms_wifi", NVS_READONLY, &nvs_handle);
+    if (nvs_err == ESP_OK) {
+        size = 32;
+        nvs_get_str(nvs_handle, "ssid", ssid, &size);
+        size = 64;
+        nvs_get_str(nvs_handle, "password", password, &size);
+        nvs_close(nvs_handle);
+    } else {
+        ESP_LOGW(TAG, "Unable to open NVS store");
+    }
 
-    // esp_eap_client_set_identity((uint8_t *)EXAMPLE_EAP_ID, strlen(EXAMPLE_EAP_ID));
-
-    // esp_eap_client_set_username((unsigned char const *)"badge", 5);
-    // esp_eap_client_set_password((unsigned char const *)"badge", 5);
-    // esp_eap_client_set_ttls_phase2_method(ESP_EAP_TTLS_PHASE2_MSCHAPV2);
-    // esp_wifi_sta_enterprise_enable();
-    // ESP_ERROR_CHECK(esp_wifi_start());
+    wifi_config_t wifi_config;
+    memset(&wifi_config, 0, sizeof(wifi_config));
+    strncpy((char *)wifi_config.sta.ssid, ssid, sizeof(wifi_config.sta.ssid));
+    if (password[0]) {
+        strncpy((char *)wifi_config.sta.password, password, sizeof(wifi_config.sta.password));
+        ESP_LOGW(TAG, "Connecting to %s with password %s", wifi_config.sta.ssid, wifi_config.sta.password);
+    } else {
+        ESP_LOGW(TAG, "Connecting to %s without password", wifi_config.sta.ssid);
+    }
 
     int retries = 10;
 again:
@@ -282,11 +325,16 @@ again:
     esp_wifi_connect();
     EventBits_t bits = xEventGroupWaitBits(
         wifi_event_group,
-        WIFI_CONNECTED_BIT | WIFI_FAIL_BIT,
+        WIFI_CONNECTED_BIT | WIFI_FAIL_BIT | WIFI_AUTH_ERR_BIT,
         pdFALSE,
         pdTRUE,
         5000 / portTICK_PERIOD_MS
     );
+
+    if (bits & WIFI_AUTH_ERR_BIT) {
+        ESP_LOGW("HERMES", "Invalid credentials");
+        return;
+    }
 
     if ((!(bits & WIFI_CONNECTED_BIT)) && retries) {
         ESP_LOGW("HERMES", "Timeout, maybe Apollo is on the phone?");
@@ -303,7 +351,13 @@ static void hermes_do_scan() {
     long elapsed_us = (cur_time.tv_sec - status.last_scan_time.tv_sec) * 1000000L +
                       (cur_time.tv_nsec - status.last_scan_time.tv_nsec) / 1000L;
 
-    if (elapsed_us < MIN_SCAN_INTERVAL && (status.last_scan_time.tv_sec + status.last_scan_time.tv_nsec)) {
+    if ((status.last_scan_time.tv_sec + status.last_scan_time.tv_nsec) && status.num_scan_results &&
+        elapsed_us < MIN_SCAN_INTERVAL) {
+        ESP_LOGW("HERMES", "Unwilling to scan again so soon");
+        return;
+    }
+
+    if ((status.last_scan_time.tv_sec + status.last_scan_time.tv_nsec) && elapsed_us < MIN_SCAN_INTERVAL_EMPTY) {
         ESP_LOGW("HERMES", "Unwilling to scan again so soon");
         return;
     }
@@ -326,17 +380,7 @@ static void hermes_do_scan() {
 
     for (int i = 0; i < ap_count; i++) {
         wifi_station_t *s = &status.scan_results[i];
-
-        memcpy(&s->bssid, ap_info[i].bssid, sizeof(mac_address_t));
-        memcpy(&s->ssid, ap_info[i].ssid, sizeof(s->ssid));
-        s->primary         = ap_info[i].primary;
-        s->secondary       = ap_info[i].second;
-        s->rssi            = ap_info[i].rssi;
-        s->authmode        = esp_authmode_to_badgevms(ap_info[i].authmode);
-        s->pairwise_cipher = esp_cipher_to_badgevms(ap_info[i].pairwise_cipher);
-        s->group_cipher    = esp_cipher_to_badgevms(ap_info[i].group_cipher);
-        s->mode            = esp_phy_to_badgevms_mode(&ap_info[i]);
-        s->wps             = ap_info[i].wps;
+        result_to_station(s, &ap_info[i]);
     }
     xSemaphoreGive(status.mutex);
 }
@@ -433,9 +477,7 @@ badgevms_wifi_connection_status_t wifi_disconnect() {
 
 int wifi_scan_get_num_results() {
     if (status.status != WIFI_DISABLED) {
-        if (send_command(WIFI_COMMAND_SCAN) == WIFI_ERROR) {
-            return 0;
-        }
+        send_command(WIFI_COMMAND_SCAN);
     }
 
     xSemaphoreTake(status.mutex, portMAX_DELAY);
@@ -474,7 +516,7 @@ mac_address_t *wifi_station_get_bssid(wifi_station_handle station) {
 }
 
 badgevms_wifi_auth_mode_t wifi_station_get_mode(wifi_station_handle station) {
-    return station->mode;
+    return station->authmode;
 }
 
 int wifi_station_get_primary_channel(wifi_station_handle station) {
@@ -491,6 +533,37 @@ int wifi_station_get_rssi(wifi_station_handle station) {
 
 bool wifi_station_wps(wifi_station_handle station) {
     return station->wps;
+}
+
+bool wifi_set_connection_parameters(char const *ssid, char const *password) {
+    bool ret = true;
+    char store_ssid[32];
+    char store_password[64];
+    strncpy(store_ssid, ssid, 31);
+    store_ssid[31] = '\0';
+    strncpy(store_password, password, 63);
+    store_password[63] = '\0';
+
+    nvs_handle_t nvs_handle;
+    esp_err_t    nvs_err = nvs_open("badgevms_wifi", NVS_READWRITE, &nvs_handle);
+    if (nvs_err == ESP_OK) {
+        nvs_err = nvs_set_str(nvs_handle, "ssid", store_ssid);
+        if (nvs_err != ESP_OK) {
+            ESP_LOGE(TAG, "Unable to store SSID");
+            ret = false;
+        }
+        nvs_err = nvs_set_str(nvs_handle, "password", store_password);
+        if (nvs_err != ESP_OK) {
+            ESP_LOGE(TAG, "Unable to store password");
+            ret = false;
+        }
+
+        nvs_close(nvs_handle);
+    } else {
+        ESP_LOGE(TAG, "Unable to open NVS store");
+    }
+
+    return ret;
 }
 
 static int wifi_open(void *dev, path_t *path, int flags, mode_t mode) {
