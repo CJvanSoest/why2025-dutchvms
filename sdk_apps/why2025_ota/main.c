@@ -102,22 +102,23 @@ int main(int argc, char *argv[]) {
     debug_printf("BadgeVMS OTA starting...\n");
     debug_printf("Connecting to wifi\n");
 
-    wifi_connection_status_t status = wifi_connect();
-    if (status != WIFI_CONNECTED) {
-        printf("Unable to connect to wifi\n");
-        return 1;
-    }
 
     debug_printf("Initializing curl\n");
     curl_global_init(0);
-
-    debug_printf("Pinging badgehub\n");
-    badgehub_ping();
 
     if (window) {
         debug_printf("Showing update check window\n");
         run_update_window_with_check();
     } else {
+        wifi_connection_status_t status = wifi_connect();
+        if (status != WIFI_CONNECTED) {
+            printf("Unable to connect to wifi\n");
+            return 1;
+        }
+
+        debug_printf("Pinging badgehub\n");
+        badgehub_ping();
+
         update_item_t *updates     = NULL;
         size_t         num_updates = perform_update_check(&updates);
 

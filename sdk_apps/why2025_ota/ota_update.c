@@ -579,7 +579,9 @@ bool check_for_firmware_updates(char **version) {
     if (!version) {
         return false;
     }
-    bool ret = false;
+    bool  ret          = false;
+    char *running      = NULL;
+    char *running_back = NULL;
 
     char const *firmware_name = FIRMWARE_PROJECT;
     printf("Checking for updates for %s\n", firmware_name);
@@ -594,13 +596,22 @@ bool check_for_firmware_updates(char **version) {
         goto out;
     }
 
-    char *running = (char *)calloc(32, sizeof(char));
-    ota_get_running_version(running);
+    // Work around a bug in the v1 OTA apis
+    running      = calloc(1, 32);
+    // Old versions just overwrite running[0] with a single byte
+    // new versions give us back an stdup()'d string
+    running_back = running;
+
+    ota_get_running_version(&running);
 
     int vers = strverscmp(running, *version);
     if (vers < 0) {
         ret = true;
     }
 out:
+    if (running_back != running) {
+        free(running);
+    }
+    free(running_back);
     return ret;
 }

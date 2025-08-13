@@ -4,6 +4,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 
+#include <badgevms/wifi.h>
 #include <SDL3/SDL.h>
 #include <string.h>
 
@@ -22,6 +23,7 @@
 #define CDE_PROGRESS_BG   0x606060
 #define CDE_PROGRESS_FG   0x0078D4
 #define CDE_SUCCESS_COLOR 0x00AA00
+#define CDE_ERROR_COLOR   0xA00000
 
 typedef enum { UI_STATE_CHECKING, UI_STATE_NO_UPDATES, UI_STATE_LIST, UI_STATE_PROGRESS, UI_STATE_COMPLETE } UI_State;
 
@@ -31,6 +33,9 @@ typedef struct {
     SDL_Texture   *framebuffer;
     Uint16        *pixels;
     update_item_t *updates;
+    bool           connected;
+    bool           connection_failed;
+    bool           firmware_updated;
     int            scroll_offset;
     int            selected_item;
     int            total_items;
@@ -163,6 +168,17 @@ void draw_completion_window(UI_Context *ctx) {
         snprintf(summary_text, sizeof(summary_text), "%d applications have been updated", ctx->total_items);
     }
     draw_text_centered(ctx, window_x, content_y + 40, window_w, summary_text, CDE_TEXT_COLOR);
+
+    if (ctx->firmware_updated) {
+        draw_text_centered(
+            ctx,
+            window_x,
+            content_y + 80,
+            window_w,
+            "Firmware update installed, please reboot",
+            CDE_TEXT_COLOR
+        );
+    }
 
     draw_text_centered(
         ctx,
@@ -338,7 +354,7 @@ void draw_update_window(UI_Context *ctx) {
 }
 
 void handle_keyboard(UI_Context *ctx, SDL_Scancode key_code) {
-    if (ctx->state == UI_STATE_COMPLETE || ctx->state == UI_STATE_NO_UPDATES) {
+    if (ctx->state == UI_STATE_COMPLETE || ctx->state == UI_STATE_NO_UPDATES || ctx->connection_failed) {
         if (key_code == SDL_SCANCODE_ESCAPE) {
             SDL_Event quit_event;
             quit_event.type = SDL_EVENT_QUIT;
@@ -442,17 +458,42 @@ void draw_checking_window(UI_Context *ctx) {
     }
 
     char progress_text[128];
-    snprintf(progress_text, sizeof(progress_text), "Please wait%s", dots);
-    draw_text_centered(ctx, window_x, content_y + 40, window_w, progress_text, CDE_TEXT_COLOR);
 
-    draw_text_centered(
-        ctx,
-        window_x,
-        window_y + window_h - 45,
-        window_w,
-        "Connecting to update server...",
-        CDE_TEXT_COLOR
-    );
+    if (!ctx->connection_failed) {
+        snprintf(progress_text, sizeof(progress_text), "Please wait%s", dots);
+        draw_text_centered(ctx, window_x, content_y + 40, window_w, progress_text, CDE_TEXT_COLOR);
+
+        if (ctx->connected) {
+            draw_text_centered(
+                ctx,
+                window_x,
+                window_y + window_h - 45,
+                window_w,
+                "Connecting to update server...",
+                CDE_TEXT_COLOR
+            );
+        } else {
+            draw_text_centered(
+                ctx,
+                window_x,
+                window_y + window_h - 45,
+                window_w,
+                "Connecting to WiFi...",
+                CDE_TEXT_COLOR
+            );
+        }
+    } else {
+        snprintf(progress_text, sizeof(progress_text), "Press escape to exit");
+        draw_text_centered(ctx, window_x, content_y + 40, window_w, progress_text, CDE_ERROR_COLOR);
+        draw_text_centered(
+            ctx,
+            window_x,
+            window_y + window_h - 45,
+            window_w,
+            "Wifi connection failed",
+            CDE_ERROR_COLOR
+        );
+    }
 }
 
 void draw_no_updates_window(UI_Context *ctx) {
@@ -576,7 +617,7 @@ bool run_update_window_with_check(void) {
             } else if (e.type == SDL_EVENT_KEY_DOWN) {
                 if (e.key.scancode == SDL_SCANCODE_ESCAPE) {
                     if (ctx.state == UI_STATE_COMPLETE || ctx.state == UI_STATE_LIST ||
-                        ctx.state == UI_STATE_NO_UPDATES) {
+                        ctx.state == UI_STATE_NO_UPDATES || ctx.connection_failed) {
                         quit = 1;
                     }
                 } else {
@@ -590,7 +631,7 @@ bool run_update_window_with_check(void) {
         if (ctx.state == UI_STATE_CHECKING) {
             draw_checking_window(&ctx);
 
-            if (!check_started) {
+            if (!check_started && ctx.connected) {
                 check_started    = true;
                 check_start_time = SDL_GetTicks();
             }
@@ -608,6 +649,7 @@ bool run_update_window_with_check(void) {
                     ctx.state = UI_STATE_NO_UPDATES;
                 }
             }
+
         } else if (ctx.state == UI_STATE_NO_UPDATES) {
             draw_no_updates_window(&ctx);
         } else if (ctx.state == UI_STATE_LIST) {
@@ -631,6 +673,16 @@ bool run_update_window_with_check(void) {
         frame_time = SDL_GetTicks() - frame_start;
         if (frame_delay > frame_time) {
             SDL_Delay(frame_delay - frame_time);
+        }
+
+        if (!ctx.connected && !ctx.connection_failed) {
+            wifi_connection_status_t result = wifi_connect();
+            if (result != WIFI_CONNECTED) {
+                ctx.connected         = false;
+                ctx.connection_failed = true;
+            } else {
+                ctx.connected = true;
+            }
         }
     }
 
@@ -656,12 +708,15 @@ bool run_update_window(update_item_t *updates, size_t num) {
 
     UI_Context ctx           = {0};
     ctx.updates              = updates;
+    ctx.firmware_updated     = false;
     ctx.total_items          = num;
     ctx.selected_item        = 0;
     ctx.scroll_offset        = 0;
     ctx.state                = UI_STATE_LIST;
     ctx.updates_completed    = 0;
     ctx.current_update_index = 0;
+    ctx.connected            = true;
+    ctx.connection_failed    = false;
 
     debug_printf("Starting update window with %u updates\n", num);
 
