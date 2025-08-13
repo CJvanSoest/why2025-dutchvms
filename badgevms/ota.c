@@ -128,7 +128,7 @@ bool ota_session_abort(ota_handle_t session) {
 version is a pointer of type char[32].
 If function returns true then the passed pointer should contain the version of the running app
 */
-bool ota_get_running_version(char *version) {
+bool ota_get_running_version(char **version) {
     esp_app_desc_t running_app_info;
 
     esp_partition_t const *running = esp_ota_get_running_partition();
@@ -138,8 +138,7 @@ bool ota_get_running_version(char *version) {
         return false;
     }
 
-    *version = *running_app_info.version;
-
+    *version = strdup(running_app_info.version);
     return true;
 }
 
@@ -148,7 +147,7 @@ version is a pointer of type char[32].
 If function returns true then the passed pointer should contain the last invalid ota app
 Returns false if there was a problem or no invalid partition found
 */
-bool ota_get_invalid_version(char *version) {
+bool ota_get_invalid_version(char **version) {
     esp_app_desc_t invalid_app_info;
 
     esp_partition_t const *last_invalid_app = esp_ota_get_last_invalid_partition();
@@ -161,7 +160,7 @@ bool ota_get_invalid_version(char *version) {
         return false;
     }
 
-    *version = *invalid_app_info.version;
+    *version = strdup(invalid_app_info.version);
 
     return true;
 }

@@ -10,5 +10,5 @@ bool         ota_write(ota_handle_t session, void *buffer, int block_size);
 bool         ota_session_commit(ota_handle_t session);
 bool         ota_session_abort(ota_handle_t session);
 
-bool ota_get_running_version(char *version);
-bool ota_get_invalid_version(char *version);
+bool ota_get_running_version(char **version);
+bool ota_get_invalid_version(char **version);
