@@ -235,6 +235,13 @@ build_app(badgevms_launcher
      main.c
 )
 
+build_app(badgevms_settings
+    SOURCES
+     main.c
+    LIBRARIES
+     sdl3
+)
+
 build_app(why2025_namebadge
     SOURCES
      main.c

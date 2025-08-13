@@ -1,0 +1,10 @@
+{
+    "unique_identifier": "badgevms_settings",
+    "name": "System settings",
+    "author": "Team:Badge",
+    "version": "1",
+    "interpreter": "",
+    "metadata_file": "",
+    "binary_path": "badgevms_settings.elf",
+    "source": 1
+}
