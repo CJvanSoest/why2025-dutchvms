@@ -22,6 +22,7 @@
 
 #include "application_private.h"
 #include "badgevms/device.h"
+#include "badgevms/ota.h"
 #include "badgevms/process.h"
 #include "badgevms_config.h"
 #include "compositor/compositor_private.h"
@@ -37,6 +38,7 @@
 #include "esp_debug_helpers.h"
 #include "esp_event.h"
 #include "esp_log.h"
+#include "esp_ota_ops.h"
 #include "esp_private/panic_internal.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
@@ -77,7 +79,9 @@ void IRAM_ATTR __wrap_esp_panic_handler(panic_info_t *info) {
 }
 
 int app_main(void) {
-    printf("BadgeVMS Initializing...\n");
+    esp_app_desc_t *desc = esp_ota_get_app_description();
+    printf("BadgeVMS version '%s' Initializing...\n", desc->version);
+
     size_t free_ram = heap_caps_get_free_size(MALLOC_CAP_DEFAULT);
     ESP_LOGW(TAG, "Free main memory: %zi", free_ram);
 
