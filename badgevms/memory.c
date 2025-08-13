@@ -334,7 +334,8 @@ IRAM_ATTR bool pages_allocate(
     // not an option
     while (to_allocate) {
         uintptr_t new_page = 0;
-        allocate_size      = allocate_size > to_allocate ? to_allocate : allocate_size;
+        // allocate_size      = allocate_size > to_allocate ? to_allocate : allocate_size;
+        allocate_size      = 1;
         ESP_LOGI(TAG, "Attempting allocation of size %li pages\n", allocate_size);
 
         allocation_range_t *new_range = malloc(sizeof(allocation_range_t));
