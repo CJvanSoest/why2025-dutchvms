@@ -998,6 +998,7 @@ simple_function_extern:
   - __floatdisf
   - __floatsidf
   - __floatundidf
+  - __floatundisf
   - __floatunsidf
   - __gedf2
   - __gtdf2
@@ -1043,6 +1044,7 @@ simple_object:
   - _ctype_b
 
 wrapped_function:
+  - _exit
   - _Exit
   - abort
   - accept

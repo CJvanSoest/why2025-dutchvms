@@ -77,6 +77,7 @@ function(build_app app_name)
             ${APP_LINK_FLAGS}
             -isystem${SDK_INCLUDE_DIR}
             -o ${APP_ELF_DIR}/${app_name}.elf
+            -I ${APP_SOURCE_DIR}
             ${ABSOLUTE_SOURCES}
             ${LIBRARY_FLAGS}
             ${DEFINE_FLAGS}
@@ -332,6 +333,13 @@ build_app(sdl_test PREINSTALL
      sdl_test.c
     LIBRARIES
      sdl3
+)
+
+build_app(sdl2_test PREINSTALL
+    SOURCES
+     sdl2_test.c
+    LIBRARIES
+     sdl2
 )
 
 build_app(thread_test
