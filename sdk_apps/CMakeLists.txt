@@ -35,7 +35,7 @@ set(APP_ELF_DIR ${CMAKE_BINARY_DIR}/app_elfs)
 file(MAKE_DIRECTORY ${APP_ELF_DIR})
 
 function(build_app app_name)
-    cmake_parse_arguments(APP "PREINSTALL" "" "SOURCES;LIBRARIES" ${ARGN})
+    cmake_parse_arguments(APP "PREINSTALL" "" "SOURCES;LIBRARIES;COMPILE_DEFINITIONS" ${ARGN})
 
     if(NOT APP_SOURCES)
         message(FATAL_ERROR "build_app: SOURCES must be specified for ${app_name}")
@@ -271,6 +271,16 @@ build_app(hardware_test
      test_drawing_helper.c
      test_keyboard.c
      run_tests.c
+)
+
+build_app(memtester
+    SOURCES
+     memtester.c
+     tests.c
+     getopt.c
+    COMPILE_DEFINITIONS
+     "__badgevms__=(1)"
+     "TEST_NARROW_WRITES=(1)"
 )
 
 build_app(bench_basic_a
