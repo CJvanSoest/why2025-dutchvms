@@ -138,8 +138,8 @@ __attribute__((always_inline)) static inline window_coords_t
         ret.x = 0;
         ret.y = 0;
     } else {
-        int max_x = FRAMEBUFFER_MAX_W - (window->rect.w + (2 * BORDER_PX)) - 1;
-        int max_y = FRAMEBUFFER_MAX_H - (window->rect.h + (BORDER_TOP_PX + BORDER_PX)) - 1;
+        int max_x = FRAMEBUFFER_MAX_W - (window->rect.w + (2 * BORDER_PX));
+        int max_y = FRAMEBUFFER_MAX_H - (window->rect.h + (BORDER_TOP_PX + BORDER_PX));
         ret.x     = position.x > max_x ? max_x : position.x;
         ret.y     = position.y > max_y ? max_y : position.y;
     }
