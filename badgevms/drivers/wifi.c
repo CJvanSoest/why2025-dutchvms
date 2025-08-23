@@ -376,9 +376,9 @@ static void hermes_do_scan() {
 
     ESP_LOGW("HERMES", "Total APs scanned = %u, actual AP number ap_info holds = %u", ap_count, number);
     xSemaphoreTake(status.mutex, portMAX_DELAY);
-    status.num_scan_results = ap_count;
+    status.num_scan_results = number;
 
-    for (int i = 0; i < ap_count; i++) {
+    for (int i = 0; i < number; i++) {
         wifi_station_t *s = &status.scan_results[i];
         result_to_station(s, &ap_info[i]);
     }
