@@ -35,7 +35,7 @@ set(APP_ELF_DIR ${CMAKE_BINARY_DIR}/app_elfs)
 file(MAKE_DIRECTORY ${APP_ELF_DIR})
 
 function(build_app app_name)
-    cmake_parse_arguments(APP "PREINSTALL" "" "SOURCES;LIBRARIES;COMPILE_DEFINITIONS" ${ARGN})
+    cmake_parse_arguments(APP "PREINSTALL;PREINSTALL_CATALOG" "" "SOURCES;LIBRARIES;COMPILE_DEFINITIONS" ${ARGN})
 
     if(NOT APP_SOURCES)
         message(FATAL_ERROR "build_app: SOURCES must be specified for ${app_name}")
@@ -118,6 +118,35 @@ function(build_app app_name)
         add_dependencies(final_storage_staging storage_staging_add_app_${app_name})
     endif()
 
+    # CJ-PATCH: PREINSTALL_CATALOG installs app under BADGEVMS/CATALOG/ instead
+    # of /APPS/. BadgeVMS won't auto-load these (they're not in /APPS/), but our
+    # launcher's catalog view enumerates them and offers install-to-Flash/SD.
+    if(APP_PREINSTALL_CATALOG)
+        get_property(STORAGE_STAGING_DIR GLOBAL PROPERTY STORAGE_STAGING_DIR)
+        set(CATALOG_DIR ${STORAGE_STAGING_DIR}/BADGEVMS/CATALOG)
+        add_custom_target(storage_staging_add_catalog_${app_name} ALL
+            COMMAND ${CMAKE_COMMAND} -E rm -rf -- ${CATALOG_DIR}/${app_name}
+            COMMAND ${CMAKE_COMMAND} -E make_directory ${CATALOG_DIR}
+            COMMAND ${CMAKE_COMMAND} -E copy ${APP_SOURCE_DIR}/manifest.json
+                                            ${CATALOG_DIR}/${app_name}.json
+            COMMAND ${CMAKE_COMMAND} -E copy_directory ${APP_SOURCE_DIR}/storage_skel
+                                                    ${CATALOG_DIR}/${app_name}
+            COMMAND ${CMAKE_COMMAND} -E copy ${APP_ELF_DIR}/${app_name}.elf
+                                            ${CATALOG_DIR}/${app_name}/${app_name}.elf
+            COMMAND ${CMAKE_STRIP} ${CATALOG_DIR}/${app_name}/${app_name}.elf
+            DEPENDS
+            build_app_${app_name}
+            init_storage_staging
+            ${APP_ELF_DIR}/${app_name}.elf
+            BYPRODUCTS
+            ${CATALOG_DIR}/${app_name}.json
+            ${CATALOG_DIR}/${app_name}
+            COMMENT "Catalog: copying ${app_name} elf+manifest to /BADGEVMS/CATALOG/"
+            VERBATIM
+        )
+        add_dependencies(final_storage_staging storage_staging_add_catalog_${app_name})
+    endif()
+
     set_property(GLOBAL APPEND PROPERTY SDK_APP_ELFS ${APP_ELF_DIR}/${app_name}.elf)
     set_property(GLOBAL APPEND PROPERTY SDK_APP_BUILD_TARGETS build_app_${app_name})
 endfunction()
@@ -160,16 +189,15 @@ build_app(badgevms_settings PREINSTALL
 # Regular apps
 #
 
-# CJ-PATCH: PREINSTALL removed — these user-facing WHY apps now ship via
-# the upcoming catalog mechanism instead of being auto-installed.
-# System apps (launcher, settings, why2025_ota for FW updates) keep PREINSTALL.
-build_app(why2025_sponsors
+# CJ-PATCH: PREINSTALL_CATALOG — apps land in /FLASH0/BADGEVMS/CATALOG/
+# instead of /APPS/. Not auto-loaded; launcher catalog view offers install.
+build_app(why2025_sponsors PREINSTALL_CATALOG
     SOURCES
      main.c
      image.c
 )
 
-build_app(why2025_namebadge
+build_app(why2025_namebadge PREINSTALL_CATALOG
     SOURCES
      main.c
      image.c
@@ -320,7 +348,7 @@ build_app(framebuffer_test
      framebuffer_test_a.c
 )
 
-build_app(hello
+build_app(hello PREINSTALL_CATALOG
     SOURCES
      main.c
 )
@@ -340,15 +368,15 @@ build_app(socket_test
      socket_test.c
 )
 
-# AKA Snake (CJ-PATCH: PREINSTALL removed, goes through catalog)
-build_app(sdl_test
+# AKA Snake (CJ-PATCH: catalog)
+build_app(sdl_test PREINSTALL_CATALOG
     SOURCES
      sdl_test.c
     LIBRARIES
      sdl3
 )
 
-build_app(sdl2_test
+build_app(sdl2_test PREINSTALL_CATALOG
     SOURCES
      sdl2_test.c
     LIBRARIES
