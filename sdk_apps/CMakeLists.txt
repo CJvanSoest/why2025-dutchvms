@@ -160,13 +160,16 @@ build_app(badgevms_settings PREINSTALL
 # Regular apps
 #
 
-build_app(why2025_sponsors PREINSTALL
+# CJ-PATCH: PREINSTALL removed — these user-facing WHY apps now ship via
+# the upcoming catalog mechanism instead of being auto-installed.
+# System apps (launcher, settings, why2025_ota for FW updates) keep PREINSTALL.
+build_app(why2025_sponsors
     SOURCES
      main.c
      image.c
 )
 
-build_app(why2025_namebadge PREINSTALL
+build_app(why2025_namebadge
     SOURCES
      main.c
      image.c
@@ -317,8 +320,8 @@ build_app(framebuffer_test
      framebuffer_test_a.c
 )
 
-build_app(hello PREINSTALL
-    SOURCES 
+build_app(hello
+    SOURCES
      main.c
 )
 
@@ -337,15 +340,15 @@ build_app(socket_test
      socket_test.c
 )
 
-# AKA Snake
-build_app(sdl_test PREINSTALL
+# AKA Snake (CJ-PATCH: PREINSTALL removed, goes through catalog)
+build_app(sdl_test
     SOURCES
      sdl_test.c
     LIBRARIES
      sdl3
 )
 
-build_app(sdl2_test PREINSTALL
+build_app(sdl2_test
     SOURCES
      sdl2_test.c
     LIBRARIES
