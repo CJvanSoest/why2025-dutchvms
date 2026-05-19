@@ -610,11 +610,24 @@ static void start_wifi() {
     ESP_ERROR_CHECK(esp_wifi_start());
 }
 
+/* CJ-PATCH 2026-05-17: compile-time switch. Set to 0 to skip ESP-Hosted/SDIO
+ * because the C6 runs MeshCore instead. Returns a valid device shell so
+ * device_register() succeeds (avoids OTA rollback), but WiFi status stays
+ * DISABLED and no SDIO transport is started.
+ *
+ * To restore WiFi: set this to 1, flash backup/c6_factory_backup.bin back
+ * to the C6, then idf.py build && idf.py flash. */
+#define CJ_BADGEVMS_ENABLE_WIFI 0
+
 device_t *wifi_create() {
     ESP_LOGI(TAG, "Initializing");
 
+#if CJ_BADGEVMS_ENABLE_WIFI
     ESP_LOGI(TAG, "Flashing C6");
     flash_slave_c6_if_needed();
+#else
+    ESP_LOGW(TAG, "CJ-PATCH: ESP-Hosted/SDIO init SKIPPED -- C6 runs custom firmware");
+#endif
 
     wifi_device_t *dev      = malloc(sizeof(wifi_device_t));
     device_t      *base_dev = (device_t *)dev;
@@ -626,15 +639,24 @@ device_t *wifi_create() {
     base_dev->_read  = wifi_read;
     base_dev->_lseek = wifi_lseek;
 
+#if CJ_BADGEVMS_ENABLE_WIFI
     status.status            = WIFI_ENABLED;
     status.connection_status = WIFI_DISCONNECTED;
+#else
+    status.status            = WIFI_DISABLED;
+    status.connection_status = WIFI_DISCONNECTED;
+#endif
 
     wifi_event_group = xEventGroupCreate();
 
+#if CJ_BADGEVMS_ENABLE_WIFI
     start_wifi();
+#endif
 
     status.mutex = xSemaphoreCreateMutex();
     hermes_queue = xQueueCreate(5, sizeof(wifi_command_message_t *));
+#if CJ_BADGEVMS_ENABLE_WIFI
     create_kernel_task(hermes, "Hermes", 4096, NULL, 5, &hermes_handle, 0);
+#endif
     return (device_t *)dev;
 }

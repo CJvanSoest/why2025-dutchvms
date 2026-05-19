@@ -7,6 +7,7 @@ idf_component_register(
      "compositor/pixel_functions.c"
      "compositor/window_decorations.c"
      "curl.c"
+     "deploy_protocol.c"
      "device.c"
      "drivers/badgevms_i2c_bus.c"
      "drivers/bosch_bmi270.c"

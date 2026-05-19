@@ -26,6 +26,7 @@
 #include "badgevms/process.h"
 #include "badgevms_config.h"
 #include "compositor/compositor_private.h"
+#include "deploy_protocol.h"
 #include "device_private.h"
 #include "drivers/badgevms_i2c_bus.h"
 #include "drivers/bosch_bmi270.h"
@@ -176,6 +177,12 @@ int app_main(void) {
     }
 
     logical_name_set("SEARCH", "FLASH0:[SUBDIR], FLASH0:[SUBDIR.ANOTHER]", false);
+
+    /* CJ-PATCH: start UART deploy protocol listener (Phase A: echo stub).
+     * Allowed to fail — non-critical for boot. */
+    if (!deploy_protocol_init()) {
+        ESP_LOGW(TAG, "deploy_protocol_init failed (non-fatal)");
+    }
 
     printf("BadgeVMS is ready\n");
     free_ram = heap_caps_get_free_size(MALLOC_CAP_DEFAULT);
