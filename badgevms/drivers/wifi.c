@@ -659,7 +659,6 @@ device_t *wifi_create() {
 #if CJ_BADGEVMS_ENABLE_WIFI
     create_kernel_task(hermes, "Hermes", 4096, NULL, 5, &hermes_handle, 0);
     lora_proto_client_init();
-    lora_proto_start_echo_test_task();
 #endif
     return (device_t *)dev;
 }

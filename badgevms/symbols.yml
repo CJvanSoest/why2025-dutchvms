@@ -38,6 +38,7 @@ include:
   - badgevms/ota.h
   - badgevms/process.h
   - badgevms/wifi.h
+  - badgevms/lora.h
   - curl/curl.h
   - wrapped_funcs.h
 
@@ -909,6 +910,13 @@ simple_function:
   - get_mac_address
   - get_num_tasks
   - get_screen_info
+  - lora_get_config
+  - lora_get_mode
+  - lora_get_status
+  - lora_send_packet
+  - lora_set_config
+  - lora_set_mode
+  - lora_set_rx_callback
   - mkdir_p
   - ota_get_invalid_version
   - ota_get_running_version
