@@ -162,16 +162,18 @@ endfunction()
 #     thirdparty/microui.c
 #)
 
-# Current updater app
-build_app(why2025_ota PREINSTALL
-    SOURCES
-     main.c
-     window.c
-     ota_update.c
-     thirdparty/cJSON.c
-    LIBRARIES
-     sdl3
-)
+# Current updater app — disabled in PREINSTALL per user request.
+# WHY-team's OTA is not used; we drive updates manually via badge_deploy.
+# Re-enable by changing the comment marker back to active CMake call.
+#build_app(why2025_ota PREINSTALL
+#    SOURCES
+#     main.c
+#     window.c
+#     ota_update.c
+#     thirdparty/cJSON.c
+#    LIBRARIES
+#     sdl3
+#)
 
 build_app(badgevms_launcher PREINSTALL
     SOURCES
