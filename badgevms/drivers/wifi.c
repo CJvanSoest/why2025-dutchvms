@@ -617,7 +617,7 @@ static void start_wifi() {
  *
  * To restore WiFi: set this to 1, flash backup/c6_factory_backup.bin back
  * to the C6, then idf.py build && idf.py flash. */
-#define CJ_BADGEVMS_ENABLE_WIFI 0
+#define CJ_BADGEVMS_ENABLE_WIFI 1
 
 device_t *wifi_create() {
     ESP_LOGI(TAG, "Initializing");
