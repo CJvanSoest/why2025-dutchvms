@@ -2,7 +2,7 @@
     "unique_identifier": "cj_lora_info",
     "name": "LoRa Status",
     "author": "CJ van Soest",
-    "version": "1.0.0",
+    "version": "1.1.0",
     "interpreter": "",
     "metadata_file": "",
     "binary_path": "cj_lora_info.elf",
