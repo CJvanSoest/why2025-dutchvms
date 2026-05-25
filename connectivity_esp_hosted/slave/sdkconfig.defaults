@@ -40,3 +40,7 @@ CONFIG_ESP_WIFI_ENTERPRISE_SUPPORT=n
 #CONFIG_ESP_HOSTED_COPROCESSOR_EXAMPLE_LIGHT_SLEEP=y
 #
 #CONFIG_ESP_HOST_DEV_BOARD_P4_C5_CORE=y
+
+## WHY badge Tanmatsu LoRa port — Tanmatsu's tanmatsu_main.c provides app_main,
+## so disable upstream's app_main in esp_hosted_coprocessor.c to avoid duplicate symbol.
+CONFIG_ESP_HOSTED_COPROCESSOR_APP_MAIN=n

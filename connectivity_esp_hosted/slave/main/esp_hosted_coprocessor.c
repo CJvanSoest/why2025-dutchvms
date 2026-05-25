@@ -27,13 +27,6 @@
 
 #include "esp_hosted_coprocessor.h"
 #include "driver/gpio.h"
-#include "driver/ledc.h"
-
-/* WHY badge backlight PWM (display GPIO15, keyboard GPIO10). Ported from
- * upstream WHY-team v2.0.17 customization in app_main.c. */
-#define PWM_TIMER_BASE_CLK   LEDC_USE_XTAL_CLK
-#define PWM_TIMER_RESOLUTION LEDC_TIMER_8_BIT
-#define PWM_TIMER_FREQ_HZ    25000  /* Set well above hearing frequency */
 
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
@@ -1274,47 +1267,6 @@ esp_err_t esp_hosted_coprocessor_init(void)
 }
 
 #ifdef CONFIG_ESP_HOSTED_COPROCESSOR_APP_MAIN
-/* WHY badge backlight PWM helpers (ported from v2.0.17 app_main.c). */
-static void why_configure_pwm_timer(ledc_timer_t timer_num)
-{
-	ledc_timer_config_t timer_conf = {
-		.speed_mode      = LEDC_LOW_SPEED_MODE,
-		.duty_resolution = PWM_TIMER_RESOLUTION,
-		.timer_num       = timer_num,
-		.freq_hz         = PWM_TIMER_FREQ_HZ,
-		.clk_cfg         = PWM_TIMER_BASE_CLK,
-	};
-	ESP_ERROR_CHECK(ledc_timer_config(&timer_conf));
-}
-
-static void why_configure_pwm(int gpio_num, ledc_channel_t channel, ledc_timer_t timer_num)
-{
-	ledc_channel_config_t channel_conf = {
-		.gpio_num   = gpio_num,
-		.speed_mode = LEDC_LOW_SPEED_MODE,
-		.channel    = channel,
-		.intr_type  = LEDC_INTR_DISABLE,
-		.timer_sel  = timer_num,
-		.duty       = 0,
-		.hpoint     = 0,
-	};
-	ESP_ERROR_CHECK(ledc_channel_config(&channel_conf));
-}
-
-/* Set PWM duty %, clamped to {0} ∪ [10..80]. */
-static void why_set_pwm_duty_cycle(ledc_channel_t channel, int duty_percentage)
-{
-	uint32_t duty = (uint32_t)((1U << PWM_TIMER_RESOLUTION) * duty_percentage / 100);
-	if (duty < 10 && duty != 0) {
-		duty = 10;
-	}
-	if (duty > 80) {
-		duty = 80;
-	}
-	ESP_ERROR_CHECK(ledc_set_duty(LEDC_LOW_SPEED_MODE, channel, duty));
-	ESP_ERROR_CHECK(ledc_update_duty(LEDC_LOW_SPEED_MODE, channel));
-}
-
 void app_main(void)
 {
 	/* Initialize NVS */
@@ -1326,13 +1278,6 @@ void app_main(void)
 		ret = nvs_flash_init();
 	}
 	ESP_ERROR_CHECK( ret );
-
-	/* WHY badge backlight PWM init — display GPIO15 ch0, keyboard GPIO10 ch1, both at 10% duty. */
-	why_configure_pwm_timer(LEDC_TIMER_0);
-	why_configure_pwm(15, LEDC_CHANNEL_0, LEDC_TIMER_0);
-	why_set_pwm_duty_cycle(LEDC_CHANNEL_0, 10);
-	why_configure_pwm(10, LEDC_CHANNEL_1, LEDC_TIMER_0);
-	why_set_pwm_duty_cycle(LEDC_CHANNEL_1, 10);
 
 	esp_hosted_coprocessor_init();
 

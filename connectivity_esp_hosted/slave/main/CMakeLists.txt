@@ -19,6 +19,11 @@ set(COMPONENT_SRCS
 	"slave_gpio_expander.c"
 	"slave_ext_coex.c"
 	"slave_control.c"
+	# Tanmatsu LoRa/IR protocol server ported for WHY2025 badge
+	"tanmatsu/tanmatsu_main.c"
+	"tanmatsu/lora/lora_protocol_server.c"
+	"tanmatsu/infrared/ir_protocol_server.c"
+	"tanmatsu/infrared/ir_nec_encoder.c"
 )
 
 if(CONFIG_SOC_BT_SUPPORTED)
@@ -44,6 +49,10 @@ set(COMPONENT_ADD_INCLUDEDIRS
 	"${common_dir}/proto"
 	"${common_dir}/rpc"
 	"${common_dir}/transport"
+	# Tanmatsu LoRa/IR headers
+	"tanmatsu"
+	"tanmatsu/lora"
+	"tanmatsu/infrared"
 )
 
 if(CONFIG_SOC_BT_SUPPORTED)
