@@ -15,6 +15,7 @@
  */
 
 #include "esp-serial-flasher/slave_c6_flasher.h"
+#include "lora_proto_client.h"
 #include "esp_attr.h"
 #include "esp_event.h"
 #include "esp_log.h"
@@ -657,6 +658,8 @@ device_t *wifi_create() {
     hermes_queue = xQueueCreate(5, sizeof(wifi_command_message_t *));
 #if CJ_BADGEVMS_ENABLE_WIFI
     create_kernel_task(hermes, "Hermes", 4096, NULL, 5, &hermes_handle, 0);
+    lora_proto_client_init();
+    lora_proto_start_echo_test_task();
 #endif
     return (device_t *)dev;
 }
