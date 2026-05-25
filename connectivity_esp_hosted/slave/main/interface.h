@@ -1,21 +1,16 @@
-// SPDX-License-Identifier: Apache-2.0
-// Copyright 2015-2021 Espressif Systems (Shanghai) PTE LTD
-//
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
-//
+/*
+ * SPDX-FileCopyrightText: 2015-2025 Espressif Systems (Shanghai) CO LTD
+ *
+ * SPDX-License-Identifier: Apache-2.0
+ */
 
 #ifndef __TRANSPORT_LAYER_INTERFACE_H
 #define __TRANSPORT_LAYER_INTERFACE_H
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #include "esp_err.h"
 #include "esp_hosted_log.h"
 #include "esp_hosted_transport.h"
@@ -52,9 +47,8 @@ typedef enum {
 
 typedef enum {
 	DEINIT,
-	INIT,
-	ACTIVE,
 	DEACTIVE,
+	ACTIVE,
 } INTERFACE_STATE;
 
 typedef struct {
@@ -74,7 +68,7 @@ typedef struct {
 	uint8_t flag;
 	uint16_t payload_len;
 	uint16_t seq_num;
-#if CONFIG_ESP_SPI_HD_HOST_INTERFACE || CONFIG_ESP_UART_HOST_INTERFACE
+#if CONFIG_ESP_SPI_HD_HOST_INTERFACE || CONFIG_ESP_UART_HOST_INTERFACE || CONFIG_ESP_SPI_HOST_INTERFACE
 	uint8_t wifi_flow_ctrl_en;
 #endif
 
@@ -126,9 +120,10 @@ typedef struct {
 } slave_state_t;
 
 interface_context_t * interface_insert_driver(int (*callback)(uint8_t val));
-int interface_remove_driver();
+int interface_remove_driver(void);
 void generate_startup_event(uint8_t cap, uint32_t ext_cap);
 int send_to_host_queue(interface_buffer_handle_t *buf_handle, uint8_t queue_type);
+void send_dhcp_dns_info_to_host(uint8_t network_up, uint8_t send_wifi_connected);
 
 #ifndef min
 #define min(a, b) ((a) < (b) ? (a) : (b))
@@ -136,4 +131,8 @@ int send_to_host_queue(interface_buffer_handle_t *buf_handle, uint8_t queue_type
 
 extern slave_config_t slv_cfg_g;
 extern slave_state_t  slv_state_g;
+
+#ifdef __cplusplus
+}
+#endif
 #endif

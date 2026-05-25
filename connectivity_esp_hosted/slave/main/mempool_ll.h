@@ -1,21 +1,7 @@
-// SPDX-License-Identifier: Apache-2.0
 /*
- * Licensed to the Apache Software Foundation (ASF) under one
- * or more contributor license agreements.  See the NOTICE file
- * distributed with this work for additional information
- * regarding copyright ownership.  The ASF licenses this file
- * to you under the Apache License, Version 2.0 (the
- * "License"); you may not use this file except in compliance
- * with the License.  You may obtain a copy of the License at
+ * SPDX-FileCopyrightText: 2025 Espressif Systems (Shanghai) CO LTD
  *
- *  http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
+ * SPDX-License-Identifier: Apache-2.0
  */
 
 /**
@@ -268,16 +254,25 @@ os_error_t os_mempool_ext_init(struct os_mempool_ext *mpe, uint16_t blocks,
                                uint32_t block_size, void *membuf, const char *name);
 
 /**
- * Clears a memory pool.
+ * Clear a memory pool.
  *
- * @param mp            The mempool to clear.
+ * @param mp                    The mempool to clear.
  *
- * @return os_error_t
+ * @return                      0 on success, error code on failure.
  */
 os_error_t os_mempool_clear(struct os_mempool *mp);
 
 /**
- * Clears an extended memory pool.
+ * Unregister a memory pool.
+ *
+ * @param mp                    The mempool to unregister.
+ *
+ * @return                      0 on success, error code on failure.
+ */
+void os_mempool_unregister(struct os_mempool *mp);
+
+/**
+ * Clear an extended memory pool.
  *
  * @param mpe            The extended memory pool to clear.
  *

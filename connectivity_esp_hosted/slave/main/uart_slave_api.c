@@ -1,17 +1,8 @@
-// SPDX-License-Identifier: Apache-2.0
-// Copyright 2015-2024 Espressif Systems (Shanghai) PTE LTD
-//
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
+/*
+ * SPDX-FileCopyrightText: 2015-2026 Espressif Systems (Shanghai) CO LTD
+ *
+ * SPDX-License-Identifier: Apache-2.0
+ */
 
 #include "sdkconfig.h"
 
@@ -28,10 +19,12 @@
 #include "interface.h"
 #include "mempool.h"
 #include "stats.h"
+#include "esp_idf_version.h"
 #include "esp_hosted_interface.h"
 #include "esp_hosted_transport.h"
 #include "esp_hosted_transport_init.h"
 #include "esp_hosted_header.h"
+#include "esp_hosted_coprocessor_fw_ver.h"
 
 #define HOSTED_UART                CONFIG_ESP_UART_PORT
 #define HOSTED_UART_GPIO_TX        CONFIG_ESP_UART_PIN_TX
@@ -45,6 +38,20 @@
 #define HOSTED_UART_CHECKSUM       CONFIG_ESP_UART_CHECKSUM
 
 #define BUFFER_SIZE                MAX_TRANSPORT_BUF_SIZE
+
+#if (ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(5, 0, 0)) && (ESP_IDF_VERSION < ESP_IDF_VERSION_VAL(6, 0, 0))
+/**
+ * For ESP-IDF v5.5, Building ESP32 with UART Transport can fail due to
+ * lack of IRAM space.
+ * To reduce IRAM usage, `CONFIG_RINGBUF_PLACE_FUNCTIONS_INTO_FLASH=y`
+ * should be enabled
+ */
+#if CONFIG_IDF_TARGET_ESP32 && !CONFIG_RINGBUF_PLACE_FUNCTIONS_INTO_FLASH
+#error Building for UART transport can fail due to lack of IRAM space
+#error To free up IRAM, enable Component config --> ESP Ringbuf ---> Place non-ISR ringbuf functions into flash
+#error or uncomment CONFIG_RINGBUF_PLACE_FUNCTIONS_INTO_FLASH=y in sdkconfig.defaults.esp32 and regenerate sdkconfig
+#endif
+#endif
 
 static const char TAG[] = "UART_DRIVER";
 
@@ -103,7 +110,7 @@ static QueueHandle_t uart_rx_queue[MAX_PRIORITY_QUEUES];
 
 static void uart_rx_task(void* pvParameters);
 
-static inline void h_uart_mempool_create()
+static inline void h_uart_mempool_create(void)
 {
 	buf_mp_tx_g = hosted_mempool_create(NULL, 0,
 			HOSTED_UART_TX_QUEUE_SIZE, BUFFER_SIZE);
@@ -115,7 +122,7 @@ static inline void h_uart_mempool_create()
 #endif
 }
 
-static inline void h_uart_mempool_destroy()
+static inline void h_uart_mempool_destroy(void)
 {
 	hosted_mempool_destroy(buf_mp_tx_g);
 	hosted_mempool_destroy(buf_mp_rx_g);
@@ -174,14 +181,15 @@ static void start_rx_data_throttling_if_needed(void)
 			return;
 
 		queue_load = uxQueueMessagesWaiting(uart_rx_queue[PRIO_Q_OTHERS]);
-#if ESP_PKT_STATS
-		pkt_stats.slave_wifi_rx_msg_loaded = queue_load;
-#endif
+
 
 		load_percent = (queue_load*100/HOSTED_UART_RX_QUEUE_SIZE);
 		if (load_percent > slv_cfg_g.throttle_high_threshold) {
 			slv_state_g.current_throttling = 1;
 			wifi_flow_ctrl = 1;
+#if ESP_PKT_STATS
+		pkt_stats.sta_flowctrl_on++;
+#endif
 			TRIGGER_FLOW_CTRL();
 		}
 	}
@@ -195,14 +203,15 @@ static void stop_rx_data_throttling_if_needed(void)
 	if (slv_state_g.current_throttling) {
 
 		queue_load = uxQueueMessagesWaiting(uart_rx_queue[PRIO_Q_OTHERS]);
-#if ESP_PKT_STATS
-		pkt_stats.slave_wifi_rx_msg_loaded = queue_load;
-#endif
+
 
 		load_percent = (queue_load*100/HOSTED_UART_RX_QUEUE_SIZE);
 		if (load_percent < slv_cfg_g.throttle_low_threshold) {
 			slv_state_g.current_throttling = 0;
 			wifi_flow_ctrl = 0;
+#if ESP_PKT_STATS
+		pkt_stats.sta_flowctrl_off++;
+#endif
 			TRIGGER_FLOW_CTRL();
 		}
 	}
@@ -229,6 +238,7 @@ static void uart_rx_task(void* pvParameters)
 #endif
 	int bytes_read;
 	int total_len;
+	uint8_t flags = 0;
 
 	// delay for a while to let app main threads start and become ready
 	vTaskDelay(100 / portTICK_PERIOD_MS);
@@ -258,18 +268,39 @@ static void uart_rx_task(void* pvParameters)
 
 		len = le16toh(header->len);
 		offset = le16toh(header->offset);
+		if (offset != sizeof(struct esp_payload_header)) {
+			ESP_LOGE(TAG, "invalid offset in header");
+			continue;
+		}
 		total_len = len + sizeof(struct esp_payload_header);
 		if (total_len > BUFFER_SIZE) {
 			ESP_LOGE(TAG, "incoming data too big: %d", total_len);
 			continue;
 		}
-		// get the data
-		bytes_read = uart_read_bytes(HOSTED_UART, &uart_scratch_buf[offset],
-				len, portMAX_DELAY);
-		ESP_LOGD(TAG, "Read %d bytes (payload)", bytes_read);
-		if (bytes_read < len) {
-			ESP_LOGE(TAG, "Failed to read payload");
-			continue;
+
+		// get the data, if any
+		if (len) {
+			bytes_read = uart_read_bytes(HOSTED_UART, &uart_scratch_buf[offset],
+					len, portMAX_DELAY);
+			ESP_LOGD(TAG, "Read %d bytes (payload)", bytes_read);
+			if (bytes_read < len) {
+				ESP_LOGE(TAG, "Failed to read payload");
+				continue;
+			}
+		}
+
+		// process flags
+		flags = header->flags;
+		if (flags & FLAG_POWER_SAVE_STARTED) {
+			ESP_LOGI(TAG, "Host informed starting to power sleep");
+			if (context.event_handler) {
+				context.event_handler(ESP_POWER_SAVE_ON);
+			}
+		} else if (flags & FLAG_POWER_SAVE_STOPPED) {
+			ESP_LOGI(TAG, "Host informed that it waken up");
+			if (context.event_handler) {
+				context.event_handler(ESP_POWER_SAVE_OFF);
+			}
 		}
 
 #if HOSTED_UART_CHECKSUM
@@ -346,7 +377,7 @@ static int h_uart_read(interface_handle_t *if_handle, interface_buffer_handle_t 
 
 static int32_t h_uart_write(interface_handle_t *handle, interface_buffer_handle_t *buf_handle)
 {
-	int32_t total_len = 0;
+	uint32_t total_len = 0;
 	uint8_t* sendbuf = NULL;
 	uint16_t offset = sizeof(struct esp_payload_header);
 	struct esp_payload_header *header = NULL;
@@ -397,7 +428,7 @@ static int32_t h_uart_write(interface_handle_t *handle, interface_buffer_handle_
 #endif
 
 	ESP_LOGD(TAG, "sending %"PRIu32 " bytes", total_len);
-	ESP_HEXLOGD("spi_hd_tx", sendbuf, total_len);
+	ESP_HEXLOGD("uart_tx", sendbuf, total_len, 32);
 
 	tx_len = uart_write_bytes(HOSTED_UART, (const char*)sendbuf, total_len);
 
@@ -424,6 +455,10 @@ static int32_t h_uart_write(interface_handle_t *handle, interface_buffer_handle_
 
 static interface_handle_t * h_uart_init(void)
 {
+	if (if_handle_g.state >= DEACTIVE) {
+		return &if_handle_g;
+	}
+
 	uint16_t prio_q_idx = 0;
 	uart_word_length_t uart_word_length;
 	uart_parity_t parity;
@@ -506,23 +541,29 @@ static interface_handle_t * h_uart_init(void)
 
 	// start up tasks
 	assert(xTaskCreate(uart_rx_task, "uart_rx_task" ,
-			CONFIG_ESP_DEFAULT_TASK_STACK_SIZE, NULL,
-			CONFIG_ESP_DEFAULT_TASK_PRIO, NULL) == pdTRUE);
+			CONFIG_ESP_HOSTED_DEFAULT_TASK_STACK_SIZE, NULL,
+			CONFIG_ESP_HOSTED_DEFAULT_TASK_PRIORITY, NULL) == pdTRUE);
 
 	assert(xTaskCreate(flow_ctrl_task, "flow_ctrl_task" ,
-			CONFIG_ESP_DEFAULT_TASK_STACK_SIZE, NULL ,
-			CONFIG_ESP_DEFAULT_TASK_PRIO, NULL) == pdTRUE);
+			CONFIG_ESP_HOSTED_DEFAULT_TASK_STACK_SIZE, NULL ,
+			CONFIG_ESP_HOSTED_DEFAULT_TASK_PRIORITY, NULL) == pdTRUE);
 
 	// data path opened
 	memset(&if_handle_g, 0, sizeof(if_handle_g));
-	if_handle_g.state = INIT;
+	if_handle_g.state = ACTIVE;
 
 	return &if_handle_g;
 }
 
 static void h_uart_deinit(interface_handle_t * handle)
 {
+#if H_HOST_PS_ALLOWED && H_PS_UNLOAD_BUS_WHILE_PS
 	esp_err_t ret;
+	if (if_handle_g.state == DEINIT) {
+		ESP_LOGW(TAG, "UART already deinitialized");
+		return;
+	}
+	if_handle_g.state = DEINIT;
 
 	h_uart_mempool_destroy();
 
@@ -538,6 +579,7 @@ static void h_uart_deinit(interface_handle_t * handle)
 	if (ret != ESP_OK)
 		ESP_LOGE(TAG, "%s: Failed to flush uart Tx", __func__);
 	uart_driver_delete(HOSTED_UART);
+#endif
 }
 
 static esp_err_t h_uart_reset(interface_handle_t *handle)
@@ -635,6 +677,20 @@ void generate_startup_event(uint8_t cap, uint32_t ext_cap)
 	*pos = ESP_PRIV_TX_Q_SIZE;          pos++;len++;
 	*pos = LENGTH_1_BYTE;               pos++;len++;
 	*pos = HOSTED_UART_TX_QUEUE_SIZE;   pos++;len++;
+
+	// convert fw version into a uint32_t
+	uint32_t fw_version = ESP_HOSTED_VERSION_VAL(PROJECT_VERSION_MAJOR_1,
+			PROJECT_VERSION_MINOR_1,
+			PROJECT_VERSION_PATCH_1);
+
+	// send fw version as a little-endian uint32_t
+	*pos = ESP_PRIV_FIRMWARE_VERSION;   pos++;len++;
+	*pos = LENGTH_4_BYTE;               pos++;len++;
+	// send fw_version as a little endian 32bit value
+	*pos = (fw_version & 0xff);         pos++;len++;
+	*pos = (fw_version >> 8) & 0xff;    pos++;len++;
+	*pos = (fw_version >> 16) & 0xff;   pos++;len++;
+	*pos = (fw_version >> 24) & 0xff;   pos++;len++;
 
 	/* TLVs end */
 
