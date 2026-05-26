@@ -70,4 +70,12 @@ bool lora_set_mode(lora_mode_t mode);
 bool lora_get_config(lora_config_t *out_config);
 bool lora_set_config(lora_config_t const *config);
 bool lora_send_packet(uint8_t const *data, uint8_t length);
+
+/* Pull next received packet from the SDK ring buffer.
+ * Returns true if a packet was returned in *out, false if no packets queued.
+ * Apps should call this regularly (e.g. once per UI frame). */
+bool lora_poll_packet(lora_packet_t *out);
+
+/* DEPRECATED — callback is no-op in BadgeVMS. Use lora_poll_packet() instead.
+ * Cross-task calls from the esp-hosted task into PIE ELF code crash the app. */
 void lora_set_rx_callback(lora_rx_callback_t callback);

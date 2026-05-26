@@ -35,7 +35,10 @@ typedef struct {
 } __attribute__((packed)) lora_protocol_header_t;
 
 typedef struct {
-    uint8_t mode;
+    /* uint32_t to match slave's enum-as-int wire format (4 bytes).
+     * Master previously used uint8_t which sent 1 byte and failed slave's
+     * sizeof(struct) length-check, returning NACK on every SET_MODE. */
+    uint32_t mode;
 } __attribute__((packed)) lora_protocol_mode_params_t;
 
 typedef struct {
@@ -77,21 +80,31 @@ static uint32_t          seq_ctr     = 1;
 
 static lora_rx_callback_t rx_cb = NULL;
 
+/* RX ring buffer — fills from esp-hosted task, drained by app via lora_poll_packet.
+ * Storage lives in firmware static memory; safe to share across tasks.
+ * Callback-based delivery (rx_cb) is unsafe in BadgeVMS because cross-task
+ * calls into PIE ELF code crash the app — use polling instead. */
+#define LORA_RX_RING_SLOTS 8
+static lora_packet_t  rx_ring[LORA_RX_RING_SLOTS];
+static volatile uint32_t rx_ring_head = 0;  /* write index (producer: dispatch) */
+static volatile uint32_t rx_ring_tail = 0;  /* read  index (consumer: poll)     */
+
+/* PACKET_RX payload from slave is the raw LoRa packet bytes (NO length-prefix).
+ * Slave sends sizeof(header) + N total; master computes N = data_len - sizeof(header)
+ * and passes that as payload_len. Use it directly. */
 static void dispatch_rx_packet(uint8_t const *payload, size_t payload_len) {
-    if (!rx_cb || payload_len < sizeof(lora_protocol_lora_packet_t)) {
+    if (payload_len == 0 || payload_len > LORA_MAX_PACKET_LEN) {
         return;
     }
-    lora_protocol_lora_packet_t const *pkt = (lora_protocol_lora_packet_t const *)payload;
-    if (pkt->length > LORA_MAX_PACKET_LEN ||
-        payload_len < sizeof(lora_protocol_lora_packet_t) + pkt->length) {
-        ESP_LOGW(TAG, "PACKET_RX length mismatch (len=%u payload=%u)",
-                 (unsigned)pkt->length, (unsigned)payload_len);
-        return;
+
+    uint32_t head = rx_ring_head;
+    uint32_t next = (head + 1) % LORA_RX_RING_SLOTS;
+    if (next == rx_ring_tail) {
+        rx_ring_tail = (rx_ring_tail + 1) % LORA_RX_RING_SLOTS;
     }
-    lora_packet_t out = {0};
-    out.length        = pkt->length;
-    memcpy(out.data, pkt->data, pkt->length);
-    rx_cb(&out);
+    rx_ring[head].length = (uint8_t)payload_len;
+    memcpy(rx_ring[head].data, payload, payload_len);
+    rx_ring_head = next;
 }
 
 static void lora_callback(uint32_t msg_id, uint8_t const *data, size_t data_len) {
@@ -213,7 +226,7 @@ bool lora_get_mode(lora_mode_t *out_mode) {
 
 bool lora_set_mode(lora_mode_t mode) {
     if (!mutex) return false;
-    lora_protocol_mode_params_t mp = { .mode = (uint8_t)mode };
+    lora_protocol_mode_params_t mp = { .mode = (uint32_t)mode };
     xSemaphoreTake(mutex, portMAX_DELAY);
     bool ok = request_reply(LORA_PROTOCOL_TYPE_SET_MODE, &mp, sizeof(mp)) == ESP_OK;
     xSemaphoreGive(mutex);
@@ -278,7 +291,23 @@ bool lora_send_packet(uint8_t const *data, uint8_t length) {
 }
 
 void lora_set_rx_callback(lora_rx_callback_t callback) {
-    rx_cb = callback;
+    /* No-op for ELF-app safety. Callback would be invoked from esp-hosted task
+     * context, which cannot safely call into PIE ELF code (crash). Use
+     * lora_poll_packet() from the app's main loop instead. */
+    (void)callback;
+    rx_cb = NULL;
+}
+
+bool lora_poll_packet(lora_packet_t *out) {
+    if (!out) return false;
+    uint32_t tail = rx_ring_tail;
+    if (tail == rx_ring_head) {
+        return false;  /* empty */
+    }
+    out->length = rx_ring[tail].length;
+    memcpy(out->data, rx_ring[tail].data, out->length);
+    rx_ring_tail = (tail + 1) % LORA_RX_RING_SLOTS;
+    return true;
 }
 
 /* ===== Init ===== */

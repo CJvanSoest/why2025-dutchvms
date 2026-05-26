@@ -913,6 +913,7 @@ simple_function:
   - lora_get_config
   - lora_get_mode
   - lora_get_status
+  - lora_poll_packet
   - lora_send_packet
   - lora_set_config
   - lora_set_mode
