@@ -507,13 +507,13 @@ static void ws2812_task(void *arg) {
         vTaskDelete(NULL);
         return;
     }
-    ESP_LOGW(TAG, "=== WS2812 (4x on GPIO%d) START ===", WS_GPIO);
+    ESP_LOGW(TAG, "=== WS2812 (4x on GPIO%d) START (30%% rainbow) ===", WS_GPIO);
     uint8_t base = 0;
     for (;;) {
         for (int i = 0; i < WS_COUNT; i++) {
             uint8_t r, g, b;
             ws_wheel((uint8_t)(base + i * 64), &r, &g, &b);
-            ws2812_set(i, r / 16, g / 16, b / 16);  /* dimmed (lower = softer) */
+            ws2812_set(i, (r * 30) / 100, (g * 30) / 100, (b * 30) / 100);  /* ~30% */
         }
         ws2812_show();
         base += 2;
