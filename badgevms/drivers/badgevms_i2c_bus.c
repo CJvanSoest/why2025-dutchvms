@@ -210,6 +210,45 @@ i2c_device_t *badgevms_i2c_device_create(badgevms_i2c_bus_device_t *bus, uint8_t
     return i2c_dev;
 }
 
+/* One-shot PCA9698 (LED-matrix add-on) detection, run at bus-init time —
+ * BEFORE the BMI270 driver starts polling, so the bus is contention-free.
+ * Address-ACK alone is unreliable on this badge (bus noise ACKs half the
+ * address space), so we do a write-readback of the output-port-0 register
+ * (0x08): a real PCA9698 echoes the written latch value, phantom ACKs never
+ * do. Probes the full 0x20-0x27 AD0..AD2 strap range. */
+static void probe_pca9698(i2c_bus_handle_t bus_handle) {
+    static uint8_t const patterns[] = {0x55, 0xAA, 0x3C};
+    ESP_LOGW(TAG, "=== PCA9698 readback probe 0x20-0x27 (boot, pre-BMI270) ===");
+    for (uint8_t addr = 0x20; addr <= 0x27; addr++) {
+        i2c_bus_device_handle_t h = i2c_bus_device_create(bus_handle, addr, 0);
+        if (!h) {
+            ESP_LOGW(TAG, "  0x%02x: device_create failed", addr);
+            continue;
+        }
+        int match    = 0;
+        int attempts = 0;
+        for (int rep = 0; rep < 3; rep++) {
+            for (size_t i = 0; i < sizeof(patterns); i++) {
+                attempts++;
+                uint8_t   w  = patterns[i];
+                uint8_t   r  = (uint8_t)~w;  /* poison so a no-op read can't pass */
+                esp_err_t we = i2c_bus_write_byte(h, 0x08, w);
+                esp_err_t re = i2c_bus_read_byte(h, 0x08, &r);
+                if (we == ESP_OK && re == ESP_OK && r == w) match++;
+            }
+        }
+        i2c_bus_device_delete(&h);
+        if (match == attempts) {
+            ESP_LOGW(TAG, "  0x%02x: CONFIRMED PCA9698 (%d/%d echo)", addr, match, attempts);
+        } else if (match > 0) {
+            ESP_LOGW(TAG, "  0x%02x: PARTIAL %d/%d (flaky/contention)", addr, match, attempts);
+        } else {
+            ESP_LOGW(TAG, "  0x%02x: absent %d/%d", addr, match, attempts);
+        }
+    }
+    ESP_LOGW(TAG, "=== PCA9698 probe done ===");
+}
+
 device_t *badgevms_i2c_bus_create(char const *name, uint8_t port, uint32_t clk_speed) {
     ESP_LOGI(TAG, "Initializing");
     badgevms_i2c_bus_device_t *dev      = calloc(1, sizeof(badgevms_i2c_bus_device_t));
@@ -243,6 +282,11 @@ device_t *badgevms_i2c_bus_create(char const *name, uint8_t port, uint32_t clk_s
         ESP_LOGE(TAG, "Failed to initialize bus");
         free(dev);
         return NULL;
+    }
+
+    /* Detect the LED-matrix add-on on the main bus before other drivers run. */
+    if (port == 0) {
+        probe_pca9698(dev->handle);
     }
 
     return (device_t *)dev;
