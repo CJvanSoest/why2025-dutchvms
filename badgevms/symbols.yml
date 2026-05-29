@@ -42,6 +42,9 @@ include:
   - curl/curl.h
   - wrapped_funcs.h
 
+  # Crypto wrapper (mbedtls-backed)
+  - badgevms/crypto.h
+
   # Networking
   - netdb.h
 
@@ -991,6 +994,12 @@ simple_function:
   - inet_ntoa
   - inet_aton
   - getaddrinfo
+
+# Crypto wrapper (mbedtls-backed)
+  - bv_aes128_ecb_decrypt_block
+  - bv_aes128_ecb_encrypt_block
+  - bv_sha256
+  - bv_hmac_sha256
 
 simple_function_extern:
   - __adddf3
