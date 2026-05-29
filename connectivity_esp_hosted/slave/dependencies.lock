@@ -62,7 +62,7 @@ dependencies:
   idf:
     source:
       type: idf
-    version: 5.5.0
+    version: 5.5.1
   nicolaielectronics/sx126x:
     component_hash: bcd14ddf5981071ce4734eced3082f425098826bcce514a8f467d41d18f1d291
     dependencies: []
