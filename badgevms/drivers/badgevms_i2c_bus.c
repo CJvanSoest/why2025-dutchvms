@@ -477,7 +477,7 @@ static bool ws2812_init(void) {
         return false;
     rmt_bytes_encoder_config_t bc = {
         .bit0 = {.level0 = 1, .duration0 = 3, .level1 = 0, .duration1 = 9},  /* 0.3us / 0.9us */
-        .bit1 = {.level0 = 1, .duration0 = 9, .level1 = 0, .duration1 = 3},  /* 0.9us / 0.3us */
+        .bit1 = {.level0 = 1, .duration0 = 9, .level1 = 0, .duration1 = 5},  /* 0.9us / 0.5us (closer to typ 0.45us) */
         .flags.msb_first = 1,
     };
     if (rmt_new_bytes_encoder(&bc, &ws_enc) != ESP_OK)
