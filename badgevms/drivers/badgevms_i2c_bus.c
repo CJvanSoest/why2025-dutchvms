@@ -457,13 +457,14 @@ static void mtx_demo_task(void *arg) {
     }
 }
 
-/* ---- 4x WS2812B status LEDs on WS-DATA = GPIO7 (on the LED-matrix add-on,
- * separate from the PCA9698). Driven via the RMT peripheral. ---- */
+/* ---- 4x RGBW status LEDs (SK6812-style) on WS-DATA = GPIO7. RGBW means 4
+ * bytes per LED (G,R,B,W) — sending only 3 bytes per LED would desync the
+ * chain. Driven via the RMT peripheral. ---- */
 #define WS_GPIO  7
 #define WS_COUNT 4
 static rmt_channel_handle_t ws_chan = NULL;
 static rmt_encoder_handle_t ws_enc  = NULL;
-static uint8_t              ws_grb[WS_COUNT * 3];  /* per LED: G, R, B */
+static uint8_t              ws_grbw[WS_COUNT * 4];  /* per LED: G, R, B, W */
 
 static bool ws2812_init(void) {
     rmt_tx_channel_config_t txc = {
@@ -484,15 +485,16 @@ static bool ws2812_init(void) {
         return false;
     return rmt_enable(ws_chan) == ESP_OK;
 }
-static void ws2812_set(int i, uint8_t r, uint8_t g, uint8_t b) {
+static void ws2812_set(int i, uint8_t r, uint8_t g, uint8_t b, uint8_t w) {
     if ((unsigned)i >= WS_COUNT) return;
-    ws_grb[i * 3 + 0] = g;
-    ws_grb[i * 3 + 1] = r;
-    ws_grb[i * 3 + 2] = b;
+    ws_grbw[i * 4 + 0] = g;
+    ws_grbw[i * 4 + 1] = r;
+    ws_grbw[i * 4 + 2] = b;
+    ws_grbw[i * 4 + 3] = w;
 }
 static void ws2812_show(void) {
     rmt_transmit_config_t tc = {.loop_count = 0};
-    rmt_transmit(ws_chan, ws_enc, ws_grb, sizeof(ws_grb), &tc);
+    rmt_transmit(ws_chan, ws_enc, ws_grbw, sizeof(ws_grbw), &tc);
     rmt_tx_wait_all_done(ws_chan, 100);
 }
 static void ws_wheel(uint8_t pos, uint8_t *r, uint8_t *g, uint8_t *b) {
@@ -507,13 +509,13 @@ static void ws2812_task(void *arg) {
         vTaskDelete(NULL);
         return;
     }
-    ESP_LOGW(TAG, "=== WS2812 (4x on GPIO%d) START (30%% rainbow) ===", WS_GPIO);
+    ESP_LOGW(TAG, "=== RGBW LEDs (4x on GPIO%d) START (15%% rainbow, W=0) ===", WS_GPIO);
     uint8_t base = 0;
     for (;;) {
         for (int i = 0; i < WS_COUNT; i++) {
             uint8_t r, g, b;
             ws_wheel((uint8_t)(base + i * 64), &r, &g, &b);
-            ws2812_set(i, (r * 30) / 100, (g * 30) / 100, (b * 30) / 100);  /* ~30% */
+            ws2812_set(i, (r * 15) / 100, (g * 15) / 100, (b * 15) / 100, 0);  /* W=0 voor pure RGB rainbow */
         }
         ws2812_show();
         base += 2;
