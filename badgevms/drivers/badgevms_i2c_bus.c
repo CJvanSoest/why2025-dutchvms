@@ -31,6 +31,9 @@
 #include <stdbool.h>
 #include <stdio.h>
 
+#include "badgevms/lora.h"
+#include "badgevms/wifi.h"
+
 #define SDA_PIN 18
 #define SCL_PIN 20
 
@@ -497,11 +500,20 @@ static void ws2812_show(void) {
     rmt_transmit(ws_chan, ws_enc, ws_grbw, sizeof(ws_grbw), &tc);
     rmt_tx_wait_all_done(ws_chan, 100);
 }
-static void ws_wheel(uint8_t pos, uint8_t *r, uint8_t *g, uint8_t *b) {
-    if (pos < 85)        { *r = 255 - pos * 3; *g = pos * 3;       *b = 0; }
-    else if (pos < 170)  { pos -= 85;  *r = 0; *g = 255 - pos * 3; *b = pos * 3; }
-    else                 { pos -= 170; *r = pos * 3; *g = 0;       *b = 255 - pos * 3; }
+/* Scale an RGB triple to ~LED_BRIGHTNESS% and push to one LED (W=0). */
+#define LED_BRIGHTNESS 15
+static void ws2812_set_scaled(int i, uint8_t r, uint8_t g, uint8_t b) {
+    ws2812_set(i, (r * LED_BRIGHTNESS) / 100, (g * LED_BRIGHTNESS) / 100,
+               (b * LED_BRIGHTNESS) / 100, 0);
 }
+
+/* Status indicator on the 4 RGBW LEDs (GPIO7):
+ *   LED0 = LoRa radio : green = up/active, blue = starting up, red = offline
+ *   LED1 = WiFi       : green = connected, blue = enabled/connecting, off = disabled
+ *   LED2, LED3        = reserved (off) for future DM/channel message-notify,
+ *                       which needs an app->LED channel that does not exist yet.
+ * State comes from the firmware-internal LoRa/WiFi query APIs. */
+#define LORA_STARTUP_GRACE_S 15
 static void ws2812_task(void *arg) {
     (void)arg;
     if (!ws2812_init()) {
@@ -509,17 +521,38 @@ static void ws2812_task(void *arg) {
         vTaskDelete(NULL);
         return;
     }
-    ESP_LOGW(TAG, "=== RGBW LEDs (4x on GPIO%d) START (15%% rainbow, W=0) ===", WS_GPIO);
-    uint8_t base = 0;
+    ESP_LOGW(TAG, "=== RGBW status LEDs (4x on GPIO%d) START: LED0=radio LED1=wifi ===", WS_GPIO);
+    uint32_t secs = 0;
     for (;;) {
-        for (int i = 0; i < WS_COUNT; i++) {
-            uint8_t r, g, b;
-            ws_wheel((uint8_t)(base + i * 64), &r, &g, &b);
-            ws2812_set(i, (r * 15) / 100, (g * 15) / 100, (b * 15) / 100, 0);  /* W=0 voor pure RGB rainbow */
+        /* LED0: LoRa radio status */
+        lora_mode_t   mode;
+        lora_status_t lst;
+        if (lora_get_mode(&mode) && mode != LORA_MODE_UNKNOWN) {
+            ws2812_set_scaled(0, 0, 255, 0);            /* green: up/active */
+        } else if (lora_get_status(&lst) && lst.chip_type != LORA_CHIP_UNKNOWN) {
+            ws2812_set_scaled(0, 0, 255, 0);            /* green: radio responding */
+        } else if (secs < LORA_STARTUP_GRACE_S) {
+            ws2812_set_scaled(0, 0, 0, 255);            /* blue: still starting up */
+        } else {
+            ws2812_set_scaled(0, 255, 0, 0);            /* red: offline / no response */
         }
+
+        /* LED1: WiFi status (Bluetooth has no status API yet) */
+        if (wifi_get_status() == WIFI_DISABLED) {
+            ws2812_set_scaled(1, 0, 0, 0);              /* off: disabled */
+        } else if (wifi_get_connection_status() == WIFI_CONNECTED) {
+            ws2812_set_scaled(1, 0, 255, 0);            /* green: connected */
+        } else {
+            ws2812_set_scaled(1, 0, 0, 255);            /* blue: enabled / connecting */
+        }
+
+        /* LED2, LED3: reserved for message-notify (app->LED channel TBD) */
+        ws2812_set_scaled(2, 0, 0, 0);
+        ws2812_set_scaled(3, 0, 0, 0);
+
         ws2812_show();
-        base += 2;
-        vTaskDelay(pdMS_TO_TICKS(40));
+        vTaskDelay(pdMS_TO_TICKS(1000));
+        secs += 1;
     }
 }
 
