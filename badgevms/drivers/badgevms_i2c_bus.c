@@ -583,7 +583,7 @@ static void i2c2_verify_task(void *arg) {
      * the actual probing and hardcode the already-confirmed pinout
      * (SDA=22 SCL=9 addr7=0x20) to test whether skipping this busy-wait
      * loop keeps core 0's scheduler alive. */
-#define DIAG_SKIP_BB_PROBE 1
+#define DIAG_SKIP_BB_PROBE 0
 #if DIAG_SKIP_BB_PROBE
     ESP_LOGW(TAG, "  DIAG: skipping bit-bang probe loop, using hardcoded SDA=22 SCL=9");
     int found = 1;

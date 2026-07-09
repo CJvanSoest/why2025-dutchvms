@@ -2,7 +2,7 @@ dependencies:
   cmd_system:
     dependencies: []
     source:
-      path: /Users/cjvs/esp/esp-idf/examples/system/console/advanced/components/cmd_system
+      path: /opt/esp/idf/examples/system/console/advanced/components/cmd_system
       type: local
     version: '*'
   esp-qa/ping-cmd:

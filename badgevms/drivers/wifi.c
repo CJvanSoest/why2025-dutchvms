@@ -441,7 +441,11 @@ static void core0_diag_task(void *ignored) {
     (void)ignored;
     uint32_t tick = 0;
     for (;;) {
-        vTaskDelay(pdMS_TO_TICKS(1000));
+        /* DIAG (temporary): 100ms resolution (down from 1000ms) to pinpoint
+         * which boot log line immediately precedes core 0's death - it's
+         * been narrowed to a ~1s window (BMI270 init / compositor framebuffer
+         * cache-sync / deploy listener creation all happen in that window). */
+        vTaskDelay(pdMS_TO_TICKS(100));
         ESP_LOGW("CORE0-DIAG", "core0 alive tick=%u", (unsigned)tick++);
     }
 }
