@@ -573,6 +573,14 @@ static void vib_test_task(void *ignored) {
     (void)ignored;
     esp_rom_printf("[vib-test] task started\n");
 
+    /* DIAG: task now runs and gpio_config() reports success, but readback
+     * showed level=0 right after setting the pin HIGH - the pin isn't
+     * actually being driven. gpio_reset_pin() first detaches the pad from
+     * whatever IOMUX/peripheral function it defaults to (a common ESP-IDF
+     * gotcha for pins with an alternate default function) before
+     * gpio_config() claims it as a plain GPIO. */
+    gpio_reset_pin(VIB_TEST_GPIO);
+
     gpio_config_t cfg = {
         .pin_bit_mask = 1ULL << VIB_TEST_GPIO,
         .mode         = GPIO_MODE_OUTPUT,
@@ -583,6 +591,7 @@ static void vib_test_task(void *ignored) {
     esp_err_t cfg_err = gpio_config(&cfg);
     esp_rom_printf("[vib-test] gpio_config returned %d\n", (int)cfg_err);
     gpio_set_level(VIB_TEST_GPIO, 0);
+    esp_rom_printf("[vib-test] readback after set_level(0): %d\n", gpio_get_level(VIB_TEST_GPIO));
 
     vTaskDelay(pdMS_TO_TICKS(3000));
 
