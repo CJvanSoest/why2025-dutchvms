@@ -28,6 +28,7 @@
 #include "compositor/compositor_private.h"
 #include "deploy_protocol.h"
 #include "device_private.h"
+#include "driver/gpio.h"
 #include "drivers/badgevms_i2c_bus.h"
 #include "drivers/bosch_bmi270.h"
 #include "drivers/bosch_bme690.h"
@@ -78,6 +79,44 @@ void IRAM_ATTR __wrap_esp_panic_handler(panic_info_t *info) {
     }
 
     __real_esp_panic_handler(info);
+}
+
+/* CJ-PATCH: one-shot vibration-motor hardware test. Signal path traced via
+ * the carrier board's PCB netlist (not the schematic - its multi-sheet
+ * hierarchy isn't reliably greppable without kicad-cli): ESP32-P4 pin 3
+ * (pinfunction "GPIO3") -> board-to-board connector -> carrier net /GPIO3 ->
+ * R49 (0R link) -> /Vibrator/PWM_VIB -> BC847 driver transistor -> motor
+ * (src/hardware/Carrier/Vibrator.kicad_sch). Three short buzzes a few
+ * seconds after boot, then this task deletes itself - purely to confirm on
+ * real hardware that GPIO3 is the right pin before any permanent motor API
+ * gets built. Remove once confirmed. */
+#define VIB_TEST_GPIO GPIO_NUM_3
+
+static void vib_test_task(void *ignored) {
+    (void)ignored;
+
+    gpio_config_t cfg = {
+        .pin_bit_mask = 1ULL << VIB_TEST_GPIO,
+        .mode         = GPIO_MODE_OUTPUT,
+        .pull_up_en   = GPIO_PULLUP_DISABLE,
+        .pull_down_en = GPIO_PULLDOWN_ENABLE,
+        .intr_type    = GPIO_INTR_DISABLE,
+    };
+    gpio_config(&cfg);
+    gpio_set_level(VIB_TEST_GPIO, 0);
+
+    vTaskDelay(pdMS_TO_TICKS(3000));
+
+    ESP_LOGW("VIB-TEST", "Pulsing GPIO3 (PWM_VIB) x3 to test the vibration motor");
+    for (int i = 0; i < 3; i++) {
+        gpio_set_level(VIB_TEST_GPIO, 1);
+        vTaskDelay(pdMS_TO_TICKS(300));
+        gpio_set_level(VIB_TEST_GPIO, 0);
+        vTaskDelay(pdMS_TO_TICKS(200));
+    }
+    ESP_LOGW("VIB-TEST", "Done");
+
+    vTaskDelete(NULL);
 }
 
 int app_main(void) {
@@ -180,20 +219,13 @@ int app_main(void) {
 
     /* CJ-PATCH: start UART deploy protocol listener (Phase A: echo stub).
      * Allowed to fail — non-critical for boot. */
-    /* DIAG (temporary, wifi-hang investigation): core 0 permanently stops
-     * scheduling ready tasks right after this call in every boot log we've
-     * captured. deploy_listener_task runs at priority 6 (higher than hermes'
-     * 5) pinned to core 0. Skipping this call to test whether core 0 stays
-     * alive without it - the cleanest causal test after several disproven
-     * hypotheses (compositor priority, bit-bang I2C probe). */
-#define DIAG_SKIP_DEPLOY_INIT 1
-#if !DIAG_SKIP_DEPLOY_INIT
     if (!deploy_protocol_init()) {
         ESP_LOGW(TAG, "deploy_protocol_init failed (non-fatal)");
     }
-#else
-    ESP_LOGW(TAG, "DIAG: skipping deploy_protocol_init()");
-#endif
+
+    /* CJ-PATCH: see vib_test_task() above. Low priority, unpinned - purely
+     * a one-shot hardware verification test. */
+    xTaskCreate(vib_test_task, "vib_test", 2048, NULL, 2, NULL);
 
     printf("BadgeVMS is ready\n");
     free_ram = heap_caps_get_free_size(MALLOC_CAP_DEFAULT);
