@@ -581,9 +581,14 @@ static void vib_test_task(void *ignored) {
      * gpio_config() claims it as a plain GPIO. */
     gpio_reset_pin(VIB_TEST_GPIO);
 
+    /* DIAG: GPIO5 sanity check also read back 0 despite being driven HIGH
+     * elsewhere in this same task chain - plain GPIO_MODE_OUTPUT doesn't
+     * enable the input buffer on this chip/IDF combo, so gpio_get_level()
+     * on such a pin isn't meaningful. GPIO_MODE_INPUT_OUTPUT enables both,
+     * making the readback trustworthy (doesn't change how the pin drives). */
     gpio_config_t cfg = {
         .pin_bit_mask = 1ULL << VIB_TEST_GPIO,
-        .mode         = GPIO_MODE_OUTPUT,
+        .mode         = GPIO_MODE_INPUT_OUTPUT,
         .pull_up_en   = GPIO_PULLUP_DISABLE,
         .pull_down_en = GPIO_PULLDOWN_DISABLE,
         .intr_type    = GPIO_INTR_DISABLE,
