@@ -449,11 +449,19 @@ application_list_handle application_list(application_t **out) {
     if (!applications_base_dir[0])
         return NULL;
 
+    /* DIAG (temporary): CJ reported the launcher and cj_storage returning
+     * different app counts within the same boot session (cj_launcher: 0 SD
+     * apps repeatedly; cj_storage, called later, 7 SD apps) - both call this
+     * exact function. Logging the opendir path/result and every dirent seen
+     * to find where the two calls actually diverge instead of continuing to
+     * guess. */
+    ESP_LOGW(TAG, "[applist-diag] opendir(%s)", applications_base_dir);
     DIR *dir = why_opendir(applications_base_dir);
     if (!dir) {
         ESP_LOGW(TAG, "Unable to opendir(%s)", applications_base_dir);
         return NULL;
     }
+    ESP_LOGW(TAG, "[applist-diag] opendir succeeded");
 
     application_list_t *list = why_calloc(1, sizeof(application_list_t));
     if (!list) {
@@ -463,14 +471,21 @@ application_list_handle application_list(application_t **out) {
 
     // Count .json files first
     struct dirent *entry;
-    size_t         json_count = 0;
+    size_t         json_count  = 0;
+    size_t         entry_count = 0;
 
     while ((entry = why_readdir(dir)) != NULL) {
+        entry_count++;
         size_t len = strlen(entry->d_name);
-        if (len > 5 && strcmp(entry->d_name + len - 5, ".json") == 0) {
+        bool   is_json = len > 5 && strcmp(entry->d_name + len - 5, ".json") == 0;
+        ESP_LOGW(TAG, "[applist-diag] entry #%u: '%s' (json=%d)",
+                 (unsigned)entry_count, entry->d_name, (int)is_json);
+        if (is_json) {
             json_count++;
         }
     }
+    ESP_LOGW(TAG, "[applist-diag] first pass: %u entries total, %u .json",
+             (unsigned)entry_count, (unsigned)json_count);
 
     if (json_count == 0) {
         why_closedir(dir);
@@ -496,6 +511,8 @@ application_list_handle application_list(application_t **out) {
                 unique_id[len - 5] = '\0';
 
                 application_t *app = load_application_metadata(unique_id);
+                ESP_LOGW(TAG, "[applist-diag] load_application_metadata('%s') -> %s",
+                         unique_id, app ? "OK" : "NULL");
                 if (app) {
                     list->applications[list->count++] = app;
                 }
@@ -503,6 +520,7 @@ application_list_handle application_list(application_t **out) {
             }
         }
     }
+    ESP_LOGW(TAG, "[applist-diag] final list->count=%u", (unsigned)list->count);
 
     why_closedir(dir);
 
