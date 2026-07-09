@@ -645,17 +645,8 @@ static void i2c2_verify_task(void *arg) {
         .pull_down_en = GPIO_PULLDOWN_DISABLE,
         .intr_type    = GPIO_INTR_DISABLE,
     };
-    esp_err_t vib_cfg_err = gpio_config(&vib_ctl);
+    gpio_config(&vib_ctl);
     gpio_set_level(3, 0);
-    /* DIAG (temporary): motor kept spinning through two attempts already
-     * using this exact proven-working configuration. Confirming the code
-     * actually runs and what it reads back before concluding this is a
-     * hardware short from the hand-soldered R49 bridge rather than firmware. */
-    esp_rom_printf(
-        "[vib-off] gpio_config=%d level after set_level(0)=%d\n",
-        (int)vib_cfg_err,
-        gpio_get_level(GPIO_NUM_3)
-    );
 
     vTaskDelay(pdMS_TO_TICKS(3000));
     // Module/LED-matrix pinout: I2C2.SDA=GPIO22, I2C2.SCL=GPIO9.
