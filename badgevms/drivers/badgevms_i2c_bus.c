@@ -569,9 +569,15 @@ static void i2c2_verify_task(void *arg) {
      * before the 3s delay below, to minimize how long it runs unwanted at
      * boot. No app-level motor control exists yet (backlog item); this is
      * just "default off". */
+    /* gpio_reset_pin() first: plain gpio_config() alone was proven
+     * insufficient during the vib-test investigation (motor stayed
+     * unresponsive to gpio_set_level() until this was added) - GPIO3
+     * apparently needs to be explicitly detached from its default IOMUX
+     * function before a plain GPIO config actually takes hold of the pad. */
+    gpio_reset_pin(GPIO_NUM_3);
     gpio_config_t vib_ctl = {
         .pin_bit_mask = 1ULL << 3,
-        .mode         = GPIO_MODE_OUTPUT,
+        .mode         = GPIO_MODE_INPUT_OUTPUT,
         .pull_up_en   = GPIO_PULLUP_DISABLE,
         .pull_down_en = GPIO_PULLDOWN_DISABLE,
         .intr_type    = GPIO_INTR_DISABLE,
