@@ -95,26 +95,37 @@ void IRAM_ATTR __wrap_esp_panic_handler(panic_info_t *info) {
 static void vib_test_task(void *ignored) {
     (void)ignored;
 
+    /* DIAG: esp_rom_printf (used by deploy_protocol.c, which has printed
+     * reliably in every capture so far) instead of ESP_LOGW - the previous
+     * attempt logged nothing at all here, not even the unconditional,
+     * synchronous confirmation line in app_main() right before this task's
+     * creation, while adjacent ESP_LOGW calls elsewhere in the same boot did
+     * print. Ruling out an ESP_LOG-stack-specific issue at this point in
+     * boot before looking at the GPIO/circuit side. */
+    esp_rom_printf("[vib-test] task started\n");
+
     gpio_config_t cfg = {
         .pin_bit_mask = 1ULL << VIB_TEST_GPIO,
         .mode         = GPIO_MODE_OUTPUT,
         .pull_up_en   = GPIO_PULLUP_DISABLE,
-        .pull_down_en = GPIO_PULLDOWN_ENABLE,
+        .pull_down_en = GPIO_PULLDOWN_DISABLE,
         .intr_type    = GPIO_INTR_DISABLE,
     };
-    gpio_config(&cfg);
+    esp_err_t cfg_err = gpio_config(&cfg);
+    esp_rom_printf("[vib-test] gpio_config returned %d\n", (int)cfg_err);
     gpio_set_level(VIB_TEST_GPIO, 0);
 
     vTaskDelay(pdMS_TO_TICKS(3000));
 
-    ESP_LOGW("VIB-TEST", "Pulsing GPIO3 (PWM_VIB) x3 to test the vibration motor");
-    for (int i = 0; i < 3; i++) {
+    esp_rom_printf("[vib-test] pulsing GPIO3 (PWM_VIB) x5\n");
+    for (int i = 0; i < 5; i++) {
         gpio_set_level(VIB_TEST_GPIO, 1);
-        vTaskDelay(pdMS_TO_TICKS(300));
+        esp_rom_printf("[vib-test] pulse %d: level=%d\n", i, gpio_get_level(VIB_TEST_GPIO));
+        vTaskDelay(pdMS_TO_TICKS(500));
         gpio_set_level(VIB_TEST_GPIO, 0);
-        vTaskDelay(pdMS_TO_TICKS(200));
+        vTaskDelay(pdMS_TO_TICKS(300));
     }
-    ESP_LOGW("VIB-TEST", "Done");
+    esp_rom_printf("[vib-test] done\n");
 
     vTaskDelete(NULL);
 }
@@ -231,7 +242,7 @@ int app_main(void) {
      * during the heavy boot-time allocation window) is the leading
      * suspect, and this will confirm or rule it out. */
     BaseType_t vib_test_r = xTaskCreate(vib_test_task, "vib_test", 3072, NULL, 2, NULL);
-    ESP_LOGW(TAG, "vib_test_task create: %s", vib_test_r == pdPASS ? "OK" : "FAILED");
+    esp_rom_printf("[vib-test] xTaskCreate returned %d (pdPASS=%d)\n", (int)vib_test_r, (int)pdPASS);
 
     printf("BadgeVMS is ready\n");
     free_ram = heap_caps_get_free_size(MALLOC_CAP_DEFAULT);
