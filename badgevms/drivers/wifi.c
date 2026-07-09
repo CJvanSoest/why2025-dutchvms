@@ -262,7 +262,9 @@ static void hermes_do_disconnect() {
     status.connection_status = WIFI_DISCONNECTED;
     int retries              = 5;
 again:
+    ESP_LOGW("HERMES-DIAG", "hermes_do_disconnect: calling esp_wifi_disconnect() (retries=%d)", retries);
     ESP_ERROR_CHECK(esp_wifi_disconnect());
+    ESP_LOGW("HERMES-DIAG", "hermes_do_disconnect: esp_wifi_disconnect() returned, waiting on event bits");
     EventBits_t bits = xEventGroupWaitBits(
         wifi_event_group,
         WIFI_CONNECTED_BIT | WIFI_DISCONNECTED_BIT | WIFI_FAIL_BIT,
@@ -270,6 +272,7 @@ again:
         pdFALSE,
         5000 / portTICK_PERIOD_MS
     );
+    ESP_LOGW("HERMES-DIAG", "hermes_do_disconnect: wait returned bits=0x%02x", (unsigned)bits);
     if ((!(bits & WIFI_DISCONNECTED_BIT)) && retries) {
         --retries;
         goto again;
@@ -365,15 +368,20 @@ static void hermes_do_scan() {
 
     status.last_scan_time = cur_time;
 
-    esp_wifi_scan_start(NULL, true);
+    ESP_LOGW("HERMES-DIAG", "hermes_do_scan: calling esp_wifi_scan_start(NULL, true)");
+    esp_err_t scan_err = esp_wifi_scan_start(NULL, true);
+    ESP_LOGW("HERMES-DIAG", "hermes_do_scan: esp_wifi_scan_start() returned err=%d", (int)scan_err);
 
     uint16_t         number = DEFAULT_SCAN_LIST_SIZE;
     wifi_ap_record_t ap_info[DEFAULT_SCAN_LIST_SIZE];
     uint16_t         ap_count = 0;
     memset(ap_info, 0, sizeof(ap_info));
 
+    ESP_LOGW("HERMES-DIAG", "hermes_do_scan: calling esp_wifi_scan_get_ap_num()");
     ESP_ERROR_CHECK(esp_wifi_scan_get_ap_num(&ap_count));
+    ESP_LOGW("HERMES-DIAG", "hermes_do_scan: ap_count=%u, calling esp_wifi_scan_get_ap_records()", ap_count);
     ESP_ERROR_CHECK(esp_wifi_scan_get_ap_records(&number, ap_info));
+    ESP_LOGW("HERMES-DIAG", "hermes_do_scan: got %u records", number);
 
     ESP_LOGW("HERMES", "Total APs scanned = %u, actual AP number ap_info holds = %u", ap_count, number);
     ap_count = MIN(ap_count, number);
@@ -424,8 +432,13 @@ static badgevms_wifi_connection_status_t send_command(wifi_command_t command) {
     c->caller  = xTaskGetCurrentTaskHandle();
     c->command = command;
 
+    /* DIAG (temporary): pinpoint whether a hang is before hermes ever sees
+     * the command, inside hermes' handling of it, or in the notify-wait. */
+    ESP_LOGW("HERMES-DIAG", "send_command: enqueueing cmd=%u", (unsigned)command);
     xQueueSend(hermes_queue, &c, portMAX_DELAY);
+    ESP_LOGW("HERMES-DIAG", "send_command: enqueued cmd=%u, waiting for notify", (unsigned)command);
     badgevms_wifi_connection_status_t status = ulTaskNotifyTakeIndexed(0, pdTRUE, portMAX_DELAY);
+    ESP_LOGW("HERMES-DIAG", "send_command: notified, cmd=%u done, status=%d", (unsigned)command, (int)status);
     return status;
 }
 
