@@ -153,7 +153,19 @@ void vTaskPreDeletionHook(TaskHandle_t handle) {
     task_info_t *task_info = pvTaskGetThreadLocalStoragePointer(handle, 1);
 
     if (!task_info) {
-        ESP_DRAM_LOGW(DRAM_STR("vTaskPreDeletionHook"), "Called for a kernel task");
+        /* DIAG (temporary, wifi-hang investigation): core 0 has been observed
+         * to permanently stop scheduling ready tasks a few seconds after
+         * boot, right around when this branch logs. Naming the task and the
+         * core running the hook tells us which task's self-deletion this is
+         * (e.g. the ESP-IDF main task) and whether the cleanup runs on core 0
+         * (its own IDLE task) - a hint at whether that cleanup is somehow
+         * wedging core 0's scheduler. */
+        ESP_DRAM_LOGW(
+            DRAM_STR("vTaskPreDeletionHook"),
+            "Called for a kernel task: name=%s core=%d",
+            pcTaskGetName(handle),
+            (int)xPortGetCoreID()
+        );
         return;
     }
 
@@ -166,7 +178,19 @@ void vTaskPreDeletionHook(TaskHandle_t handle) {
         }
 
     } else {
+        /* DIAG (temporary, wifi-hang investigation): see the kernel-task
+         * branch above for context. This is the process-tracked-task path;
+         * bracketing it tells us if this specific send is ever the one that
+         * blocks (queue full or otherwise) during the core-0 wedge. */
+        ESP_DRAM_LOGW(
+            DRAM_STR("vTaskPreDeletionHook"),
+            "pid=%d pre-send core=%d waiting=%u",
+            (int)pid,
+            (int)xPortGetCoreID(),
+            (unsigned)uxQueueMessagesWaiting(hades_queue)
+        );
         xQueueSend(hades_queue, &pid, portMAX_DELAY);
+        ESP_DRAM_LOGW(DRAM_STR("vTaskPreDeletionHook"), "pid=%d post-send core=%d", (int)pid, (int)xPortGetCoreID());
     }
 }
 
