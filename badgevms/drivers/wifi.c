@@ -429,6 +429,23 @@ static void wifi_diag_task(void *ignored) {
     }
 }
 
+/* DIAG (temporary): hermes (core 0, prio 5) has been observed stuck in
+ * eReady - runnable, never actually scheduled - while nothing else visibly
+ * occupies core 0 (compositor, also core 0, confirmed eBlocked throughout).
+ * This task is explicitly pinned to core 0 (unlike wifi_diag_task, which has
+ * no affinity) purely to prove whether core 0's scheduler is alive at all
+ * during the hang, or whether it's specifically hermes's own scheduling
+ * state that's wedged/corrupted while core 0 keeps running everything else
+ * fine. */
+static void core0_diag_task(void *ignored) {
+    (void)ignored;
+    uint32_t tick = 0;
+    for (;;) {
+        vTaskDelay(pdMS_TO_TICKS(1000));
+        ESP_LOGW("CORE0-DIAG", "core0 alive tick=%u", (unsigned)tick++);
+    }
+}
+
 static void hermes(void *ignored) {
     ESP_LOGW("HERMES", "Starting");
     wifi_command_message_t *command;
@@ -709,6 +726,9 @@ device_t *wifi_create() {
     /* DIAG (temporary): see wifi_diag_task comment above. Low priority (1),
      * no core affinity - purely observational. */
     xTaskCreate(wifi_diag_task, "wifi_diag", 3072, NULL, 1, NULL);
+    /* DIAG (temporary): see core0_diag_task comment above. Pinned to core 0
+     * on purpose. */
+    xTaskCreatePinnedToCore(core0_diag_task, "core0_diag", 3072, NULL, 1, NULL, 0);
 #endif
     return (device_t *)dev;
 }
