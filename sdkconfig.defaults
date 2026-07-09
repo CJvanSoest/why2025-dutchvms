@@ -86,3 +86,24 @@ CONFIG_WIFI_RMT_STATIC_TX_BUFFER=y
 CONFIG_WIFI_RMT_WAPI_PSK=y
 CONFIG_WIFI_RMT_ENT_FREE_DYNAMIC_BUFFER=y
 CONFIG_IDF_EXPERIMENTAL_FEATURES=y
+
+# BLE (badgevms/ble.h, see docs/PROJECT_SETUP.md §13.7) — NimBLE host runs on
+# the P4, the BT/BLE controller itself lives on the C6 co-processor and is
+# reached over the existing esp_hosted SDIO transport, same pattern as WiFi.
+# CONFIG_BT_CONTROLLER_DISABLED (not CONFIG_BT_CONTROLLER_ENABLED): the P4 has
+# no local BT radio at all, exactly like the vendored
+# host_nimble_bleprph_host_only_vhci esp_hosted example this follows.
+CONFIG_BT_ENABLED=y
+CONFIG_BT_CONTROLLER_DISABLED=y
+CONFIG_BT_BLUEDROID_ENABLED=n
+CONFIG_BT_NIMBLE_ENABLED=y
+CONFIG_BT_NIMBLE_TRANSPORT_UART=n
+# NimBLE's own host task runs at (configMAX_PRIORITIES - 4), fixed by the
+# vendored nimble port and not something we author ourselves — but pinned to
+# core 1 (not the Kconfig default of core 0) so it can never compete with the
+# WiFi "hermes" task (prio 5, core 0) or the deploy-listener (prio 3, core 0):
+# a prio-6 task on core 0 already starved hermes once this session (see §8c).
+CONFIG_BT_NIMBLE_PINNED_TO_CORE_1=y
+CONFIG_BT_NIMBLE_NVS_PERSIST=y
+CONFIG_ESP_HOSTED_ENABLE_BT_NIMBLE=y
+CONFIG_ESP_HOSTED_NIMBLE_HCI_VHCI=y

@@ -40,6 +40,7 @@ include:
   - badgevms/process.h
   - badgevms/wifi.h
   - badgevms/lora.h
+  - badgevms/ble.h
   - curl/curl.h
   - wrapped_funcs.h
 
@@ -910,6 +911,17 @@ simple_function:
   - application_set_metadata
   - application_set_name
   - application_set_version
+  - ble_advertise_start
+  - ble_advertise_stop
+  - ble_characteristic_notify
+  - ble_characteristic_set_value
+  - ble_clear_bonds
+  - ble_disconnect
+  - ble_gatt_server_init
+  - ble_get_status
+  - ble_pairing_set_passkey
+  - ble_poll_event
+  - ble_service_register
   - device_get
   - get_mac_address
   - get_num_tasks
