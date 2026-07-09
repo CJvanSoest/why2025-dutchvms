@@ -556,70 +556,6 @@ static void ws2812_task(void *arg) {
     }
 }
 
-/* CJ-PATCH: one-shot vibration-motor hardware test. Signal path traced via
- * the carrier board's PCB netlist: ESP32-P4 pin 3 (pinfunction "GPIO3") ->
- * board-to-board connector -> carrier net /GPIO3 -> R49 (0R link) ->
- * /Vibrator/PWM_VIB -> BC847 driver transistor -> motor
- * (src/hardware/Carrier/Vibrator.kicad_sch). Relocated here (spawned from
- * i2c2_verify_task, same call site as mtx_demo_task/ws2812_task below) after
- * an identical task spawned directly from app_main() in why2025_firmware.c
- * produced literally zero output - not even esp_rom_printf, which prints
- * reliably everywhere else - while this exact xTaskCreate pattern at this
- * exact call site is proven working (mtx_demo_task/ws2812_task both run
- * fine). Remove once GPIO3 is confirmed. */
-#define VIB_TEST_GPIO GPIO_NUM_3
-
-static void vib_test_task(void *ignored) {
-    (void)ignored;
-    esp_rom_printf("[vib-test] task started\n");
-
-    /* DIAG: task now runs and gpio_config() reports success, but readback
-     * showed level=0 right after setting the pin HIGH - the pin isn't
-     * actually being driven. gpio_reset_pin() first detaches the pad from
-     * whatever IOMUX/peripheral function it defaults to (a common ESP-IDF
-     * gotcha for pins with an alternate default function) before
-     * gpio_config() claims it as a plain GPIO. */
-    gpio_reset_pin(VIB_TEST_GPIO);
-
-    /* DIAG: GPIO5 sanity check also read back 0 despite being driven HIGH
-     * elsewhere in this same task chain - plain GPIO_MODE_OUTPUT doesn't
-     * enable the input buffer on this chip/IDF combo, so gpio_get_level()
-     * on such a pin isn't meaningful. GPIO_MODE_INPUT_OUTPUT enables both,
-     * making the readback trustworthy (doesn't change how the pin drives). */
-    gpio_config_t cfg = {
-        .pin_bit_mask = 1ULL << VIB_TEST_GPIO,
-        .mode         = GPIO_MODE_INPUT_OUTPUT,
-        .pull_up_en   = GPIO_PULLUP_DISABLE,
-        .pull_down_en = GPIO_PULLDOWN_DISABLE,
-        .intr_type    = GPIO_INTR_DISABLE,
-    };
-    esp_err_t cfg_err = gpio_config(&cfg);
-    esp_rom_printf("[vib-test] gpio_config returned %d\n", (int)cfg_err);
-    gpio_set_level(VIB_TEST_GPIO, 0);
-    esp_rom_printf("[vib-test] readback after set_level(0): %d\n", gpio_get_level(VIB_TEST_GPIO));
-
-    /* DIAG: sanity check - GPIO5 (RESET line, above in this same file) was
-     * already configured as output and set HIGH earlier in this exact task
-     * chain. Read-only, doesn't touch it. If this also reads back wrong,
-     * the problem is the readback/task mechanism itself, not something
-     * GPIO3-specific. */
-    esp_rom_printf("[vib-test] sanity: GPIO5 (known-good, should read 1) = %d\n", gpio_get_level(GPIO_NUM_5));
-
-    vTaskDelay(pdMS_TO_TICKS(3000));
-
-    esp_rom_printf("[vib-test] pulsing GPIO3 (PWM_VIB) x5\n");
-    for (int i = 0; i < 5; i++) {
-        gpio_set_level(VIB_TEST_GPIO, 1);
-        esp_rom_printf("[vib-test] pulse %d: level=%d\n", i, gpio_get_level(VIB_TEST_GPIO));
-        vTaskDelay(pdMS_TO_TICKS(500));
-        gpio_set_level(VIB_TEST_GPIO, 0);
-        vTaskDelay(pdMS_TO_TICKS(300));
-    }
-    esp_rom_printf("[vib-test] done\n");
-
-    vTaskDelete(NULL);
-}
-
 static void i2c2_verify_task(void *arg) {
     (void)arg;
     vTaskDelay(pdMS_TO_TICKS(3000));
@@ -668,7 +604,6 @@ static void i2c2_verify_task(void *arg) {
         }
         xTaskCreate(mtx_demo_task, "mtxdemo", 4096, NULL, 2, NULL);
         xTaskCreate(ws2812_task, "ws2812", 4096, NULL, 2, NULL);  /* 4 side LEDs */
-        xTaskCreate(vib_test_task, "vib_test", 3072, NULL, 2, NULL);
     }
     vTaskDelete(NULL);
 }
