@@ -395,6 +395,40 @@ static void hermes_do_scan() {
     xSemaphoreGive(status.mutex);
 }
 
+/* DIAG (temporary): a successful xQueueSend() to hermes_queue was observed
+ * to never wake the hermes task blocked in xQueueReceive(). This task logs
+ * hermes' actual FreeRTOS task state + queue depth every 2s so we can see,
+ * live during a hang, whether hermes is eBlocked/eReady/eSuspended/eDeleted
+ * and whether the sent item is still sitting unconsumed in the queue - to
+ * distinguish "task genuinely blocked deeper than expected" from "task/queue
+ * state corrupted" from "task no longer exists". */
+static char const *task_state_name(eTaskState s) {
+    switch (s) {
+        case eRunning:   return "eRunning";
+        case eReady:     return "eReady";
+        case eBlocked:   return "eBlocked";
+        case eSuspended: return "eSuspended";
+        case eDeleted:   return "eDeleted";
+        case eInvalid:   return "eInvalid";
+        default:         return "?";
+    }
+}
+static void wifi_diag_task(void *ignored) {
+    (void)ignored;
+    for (;;) {
+        vTaskDelay(pdMS_TO_TICKS(2000));
+        if (hermes_handle == NULL) {
+            ESP_LOGW("WIFI-DIAG", "hermes_handle is NULL");
+            continue;
+        }
+        eTaskState state    = eTaskGetState(hermes_handle);
+        UBaseType_t waiting = hermes_queue ? uxQueueMessagesWaiting(hermes_queue) : 0;
+        UBaseType_t spaces  = hermes_queue ? uxQueueSpacesAvailable(hermes_queue) : 0;
+        ESP_LOGW("WIFI-DIAG", "hermes state=%s  queue: waiting=%u spaces=%u",
+                 task_state_name(state), (unsigned)waiting, (unsigned)spaces);
+    }
+}
+
 static void hermes(void *ignored) {
     ESP_LOGW("HERMES", "Starting");
     wifi_command_message_t *command;
@@ -672,6 +706,9 @@ device_t *wifi_create() {
 #if CJ_BADGEVMS_ENABLE_WIFI
     create_kernel_task(hermes, "Hermes", 4096, NULL, 5, &hermes_handle, 0);
     lora_proto_client_init();
+    /* DIAG (temporary): see wifi_diag_task comment above. Low priority (1),
+     * no core affinity - purely observational. */
+    xTaskCreate(wifi_diag_task, "wifi_diag", 3072, NULL, 1, NULL);
 #endif
     return (device_t *)dev;
 }
