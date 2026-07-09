@@ -39,6 +39,12 @@ void notify_system_init(void) {
 }
 
 static notify_entry_t *notify_find(char const *unique_identifier) {
+    /* Some app entries legitimately have a NULL unique_identifier (see the
+     * same guard in application.c) - a caller iterating application_list()
+     * and calling this for every entry without checking would otherwise
+     * crash strncmp() on a NULL pointer. */
+    if (!unique_identifier)
+        return NULL;
     for (int i = 0; i < NOTIFY_MAX_APPS; i++) {
         if (notify_table[i].used && strncmp(notify_table[i].uid, unique_identifier, NOTIFY_UID_MAX) == 0)
             return &notify_table[i];
@@ -47,6 +53,8 @@ static notify_entry_t *notify_find(char const *unique_identifier) {
 }
 
 static notify_entry_t *notify_find_or_create(char const *unique_identifier) {
+    if (!unique_identifier)
+        return NULL;
     notify_entry_t *e = notify_find(unique_identifier);
     if (e)
         return e;
