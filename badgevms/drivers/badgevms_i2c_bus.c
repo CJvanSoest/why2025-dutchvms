@@ -576,6 +576,18 @@ static void i2c2_verify_task(void *arg) {
     gpio_set_level(8, 0);             // OE low = outputs enabled (harmless for i2c)
     vTaskDelay(pdMS_TO_TICKS(20));    // let the PCA9698 come out of reset
     ESP_LOGW(TAG, "=== I2C2 VERIFY (RESET=GPIO5 HIGH, OE=GPIO8 LOW): SDA=GPIO22 SCL=GPIO9 ===");
+    /* DIAG (temporary, wifi-hang investigation): core 0 dies right in this
+     * window, right before the "kernel task" (ledmtx) self-deletion that
+     * coincides with it. bb_pca_readback() is a bit-banged, busy-waiting
+     * (esp_rom_delay_us, no yields) I2C probe called up to 4x here. Bypass
+     * the actual probing and hardcode the already-confirmed pinout
+     * (SDA=22 SCL=9 addr7=0x20) to test whether skipping this busy-wait
+     * loop keeps core 0's scheduler alive. */
+#define DIAG_SKIP_BB_PROBE 1
+#if DIAG_SKIP_BB_PROBE
+    ESP_LOGW(TAG, "  DIAG: skipping bit-bang probe loop, using hardcoded SDA=22 SCL=9");
+    int found = 1;
+#else
     int const pairs[][2] = {{22, 9}, {9, 22}};
     uint8_t const addrs[] = {0x40, 0x20};
     int found = 0;
@@ -593,6 +605,7 @@ static void i2c2_verify_task(void *arg) {
             }
         }
     }
+#endif
     if (!found) ESP_LOGW(TAG, "  still no echo (RESET=GPIO5 high) -> chip solder or OTHER");
     ESP_LOGW(TAG, "=== I2C2 VERIFY done ===");
     if (found) {
