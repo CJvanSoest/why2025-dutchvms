@@ -558,6 +558,27 @@ static void ws2812_task(void *arg) {
 
 static void i2c2_verify_task(void *arg) {
     (void)arg;
+
+    /* Vibration motor (GPIO3 -> R49 -> PWM_VIB -> BC847 -> motor, see
+     * src/hardware/Carrier/Vibrator.kicad_sch): R49 is now a permanent wire
+     * bridge on the physical board (CJ's hardware rework), so this net is no
+     * longer floating/unpopulated - firmware must actively hold it LOW or
+     * the pin's default/idle state (this GPIO doubles as the LED-matrix
+     * add-on's INT line below, which idles pulled up) leaves the driver
+     * transistor biased on and the motor spinning continuously. Done first,
+     * before the 3s delay below, to minimize how long it runs unwanted at
+     * boot. No app-level motor control exists yet (backlog item); this is
+     * just "default off". */
+    gpio_config_t vib_ctl = {
+        .pin_bit_mask = 1ULL << 3,
+        .mode         = GPIO_MODE_OUTPUT,
+        .pull_up_en   = GPIO_PULLUP_DISABLE,
+        .pull_down_en = GPIO_PULLDOWN_DISABLE,
+        .intr_type    = GPIO_INTR_DISABLE,
+    };
+    gpio_config(&vib_ctl);
+    gpio_set_level(3, 0);
+
     vTaskDelay(pdMS_TO_TICKS(3000));
     // Module/LED-matrix pinout: I2C2.SDA=GPIO22, I2C2.SCL=GPIO9.
     // PCA9698 control (LED_MATRIX J2 blue annotations): RESET=GPIO5 (active-low),
