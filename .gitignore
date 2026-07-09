@@ -1,6 +1,7 @@
 sdkconfig
 sdkconfig.old
 build/
+build-nas/
 managed_components/
 sdk_dist/
 
