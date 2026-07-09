@@ -28,7 +28,6 @@
 #include "compositor/compositor_private.h"
 #include "deploy_protocol.h"
 #include "device_private.h"
-#include "driver/gpio.h"
 #include "drivers/badgevms_i2c_bus.h"
 #include "drivers/bosch_bmi270.h"
 #include "drivers/bosch_bme690.h"
@@ -79,55 +78,6 @@ void IRAM_ATTR __wrap_esp_panic_handler(panic_info_t *info) {
     }
 
     __real_esp_panic_handler(info);
-}
-
-/* CJ-PATCH: one-shot vibration-motor hardware test. Signal path traced via
- * the carrier board's PCB netlist (not the schematic - its multi-sheet
- * hierarchy isn't reliably greppable without kicad-cli): ESP32-P4 pin 3
- * (pinfunction "GPIO3") -> board-to-board connector -> carrier net /GPIO3 ->
- * R49 (0R link) -> /Vibrator/PWM_VIB -> BC847 driver transistor -> motor
- * (src/hardware/Carrier/Vibrator.kicad_sch). Three short buzzes a few
- * seconds after boot, then this task deletes itself - purely to confirm on
- * real hardware that GPIO3 is the right pin before any permanent motor API
- * gets built. Remove once confirmed. */
-#define VIB_TEST_GPIO GPIO_NUM_3
-
-static void vib_test_task(void *ignored) {
-    (void)ignored;
-
-    /* DIAG: esp_rom_printf (used by deploy_protocol.c, which has printed
-     * reliably in every capture so far) instead of ESP_LOGW - the previous
-     * attempt logged nothing at all here, not even the unconditional,
-     * synchronous confirmation line in app_main() right before this task's
-     * creation, while adjacent ESP_LOGW calls elsewhere in the same boot did
-     * print. Ruling out an ESP_LOG-stack-specific issue at this point in
-     * boot before looking at the GPIO/circuit side. */
-    esp_rom_printf("[vib-test] task started\n");
-
-    gpio_config_t cfg = {
-        .pin_bit_mask = 1ULL << VIB_TEST_GPIO,
-        .mode         = GPIO_MODE_OUTPUT,
-        .pull_up_en   = GPIO_PULLUP_DISABLE,
-        .pull_down_en = GPIO_PULLDOWN_DISABLE,
-        .intr_type    = GPIO_INTR_DISABLE,
-    };
-    esp_err_t cfg_err = gpio_config(&cfg);
-    esp_rom_printf("[vib-test] gpio_config returned %d\n", (int)cfg_err);
-    gpio_set_level(VIB_TEST_GPIO, 0);
-
-    vTaskDelay(pdMS_TO_TICKS(3000));
-
-    esp_rom_printf("[vib-test] pulsing GPIO3 (PWM_VIB) x5\n");
-    for (int i = 0; i < 5; i++) {
-        gpio_set_level(VIB_TEST_GPIO, 1);
-        esp_rom_printf("[vib-test] pulse %d: level=%d\n", i, gpio_get_level(VIB_TEST_GPIO));
-        vTaskDelay(pdMS_TO_TICKS(500));
-        gpio_set_level(VIB_TEST_GPIO, 0);
-        vTaskDelay(pdMS_TO_TICKS(300));
-    }
-    esp_rom_printf("[vib-test] done\n");
-
-    vTaskDelete(NULL);
 }
 
 int app_main(void) {
@@ -233,16 +183,6 @@ int app_main(void) {
     if (!deploy_protocol_init()) {
         ESP_LOGW(TAG, "deploy_protocol_init failed (non-fatal)");
     }
-
-    /* CJ-PATCH: see vib_test_task() above. Low priority, unpinned - purely
-     * a one-shot hardware verification test. Checking the return value
-     * (unlike most fire-and-forget xTaskCreate calls in this file) because
-     * the task previously produced zero log output on a real boot with no
-     * crash/panic either - silent xTaskCreate failure (e.g. transient OOM
-     * during the heavy boot-time allocation window) is the leading
-     * suspect, and this will confirm or rule it out. */
-    BaseType_t vib_test_r = xTaskCreate(vib_test_task, "vib_test", 3072, NULL, 2, NULL);
-    esp_rom_printf("[vib-test] xTaskCreate returned %d (pdPASS=%d)\n", (int)vib_test_r, (int)pdPASS);
 
     printf("BadgeVMS is ready\n");
     free_ram = heap_caps_get_free_size(MALLOC_CAP_DEFAULT);
