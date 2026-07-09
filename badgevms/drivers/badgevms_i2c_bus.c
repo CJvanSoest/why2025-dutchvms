@@ -593,6 +593,13 @@ static void vib_test_task(void *ignored) {
     gpio_set_level(VIB_TEST_GPIO, 0);
     esp_rom_printf("[vib-test] readback after set_level(0): %d\n", gpio_get_level(VIB_TEST_GPIO));
 
+    /* DIAG: sanity check - GPIO5 (RESET line, above in this same file) was
+     * already configured as output and set HIGH earlier in this exact task
+     * chain. Read-only, doesn't touch it. If this also reads back wrong,
+     * the problem is the readback/task mechanism itself, not something
+     * GPIO3-specific. */
+    esp_rom_printf("[vib-test] sanity: GPIO5 (known-good, should read 1) = %d\n", gpio_get_level(GPIO_NUM_5));
+
     vTaskDelay(pdMS_TO_TICKS(3000));
 
     esp_rom_printf("[vib-test] pulsing GPIO3 (PWM_VIB) x5\n");
