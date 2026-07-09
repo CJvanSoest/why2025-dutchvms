@@ -17,7 +17,7 @@
 #include "esp_idf_version.h"
 
 #if ESP_IDF_VERSION < ESP_IDF_VERSION_VAL(5, 5, 0)
-#error "BadgeVMS requires esp-idf 5.50 (or maybe later, who knows)"
+#error "DutchVMS requires esp-idf 5.50 (or maybe later, who knows)"
 #endif
 
 #include "application_private.h"
@@ -70,7 +70,7 @@ void IRAM_ATTR __wrap_esp_panic_handler(panic_info_t *info) {
                 esp_rom_printf("Crashing in task: %u\n", task_info->pid);
             }
         } else {
-            esp_rom_printf("Crashing in BadgeVMS\n");
+            esp_rom_printf("Crashing in DutchVMS\n");
         }
 
         dump_mmu();
@@ -83,7 +83,7 @@ void IRAM_ATTR __wrap_esp_panic_handler(panic_info_t *info) {
 
 int app_main(void) {
     esp_app_desc_t *desc = esp_ota_get_app_description();
-    printf("BadgeVMS version '%s' Initializing...\n", desc->version);
+    printf("DutchVMS version '%s' Initializing...\n", desc->version);
 
     size_t free_ram = heap_caps_get_free_size(MALLOC_CAP_DEFAULT);
     ESP_LOGW(TAG, "Free main memory: %zi", free_ram);
@@ -187,7 +187,7 @@ int app_main(void) {
         ESP_LOGW(TAG, "deploy_protocol_init failed (non-fatal)");
     }
 
-    printf("BadgeVMS is ready\n");
+    printf("DutchVMS is ready\n");
     free_ram = heap_caps_get_free_size(MALLOC_CAP_DEFAULT);
     ESP_LOGW(
         TAG,
