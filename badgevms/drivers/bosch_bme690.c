@@ -15,8 +15,10 @@
  */
 
 #include "bosch_bme690.h"
+
 #include "badgevms_config.h"
 #include "bme690.h"
+
 #include <stdatomic.h>
 
 #define BME690_I2C_ADDR 0x76
@@ -28,29 +30,29 @@
 
 #define I2C_MASTER_NUM     I2C_NUM_0           /*!< I2C port number for master dev */
 #define I2C_MASTER_FREQ_HZ I2C0_MASTER_FREQ_HZ /*!< I2C master clock frequency */
-#define I2C_MASTER_TIMEOUT 100   
+#define I2C_MASTER_TIMEOUT 100
 
 #define TAG "BME690"
 
 static i2c_bus_handle_t i2c_bus;
 
 typedef struct {
-    gas_device_t        device;
-    bme69x_handle_t     sensor;
-    atomic_flag         open;
-    struct bme69x_data  environment;
+    gas_device_t       device;
+    bme69x_handle_t    sensor;
+    atomic_flag        open;
+    struct bme69x_data environment;
 } bosch_bme690_device_t;
 
 void why_bme69x_error_codes_print_result(int8_t rslt) {
     switch (rslt) {
-        case BME69X_OK:                 break;
-        case BME69X_E_NULL_PTR:         ESP_LOGE(TAG, "Error [%d] : Null pointer\r\n", rslt); break;
-        case BME69X_E_COM_FAIL:         ESP_LOGE(TAG, "Error [%d] : Communication failure\r\n", rslt); break;
-        case BME69X_E_INVALID_LENGTH:   ESP_LOGE(TAG, "Error [%d] : Incorrect length parameter\r\n", rslt); break;
-        case BME69X_E_DEV_NOT_FOUND:    ESP_LOGE(TAG, "Error [%d] : Device not found\r\n", rslt); break;
-        case BME69X_E_SELF_TEST:        ESP_LOGE(TAG, "Error [%d] : Self test error\r\n", rslt); break;
-        case BME69X_W_NO_NEW_DATA:      ESP_LOGW(TAG, "Warning [%d] : No new data found\r\n", rslt); break;
-        default:                        ESP_LOGE(TAG, "Error [%d] : Unknown error code", rslt); break;
+        case BME69X_OK: break;
+        case BME69X_E_NULL_PTR: ESP_LOGE(TAG, "Error [%d] : Null pointer\r\n", rslt); break;
+        case BME69X_E_COM_FAIL: ESP_LOGE(TAG, "Error [%d] : Communication failure\r\n", rslt); break;
+        case BME69X_E_INVALID_LENGTH: ESP_LOGE(TAG, "Error [%d] : Incorrect length parameter\r\n", rslt); break;
+        case BME69X_E_DEV_NOT_FOUND: ESP_LOGE(TAG, "Error [%d] : Device not found\r\n", rslt); break;
+        case BME69X_E_SELF_TEST: ESP_LOGE(TAG, "Error [%d] : Self test error\r\n", rslt); break;
+        case BME69X_W_NO_NEW_DATA: ESP_LOGW(TAG, "Warning [%d] : No new data found\r\n", rslt); break;
+        default: ESP_LOGE(TAG, "Error [%d] : Unknown error code", rslt); break;
     }
 }
 
@@ -79,12 +81,12 @@ static ssize_t bme690_lseek(void *dev, int fd, off_t offset, int whence) {
 }
 
 static struct bme69x_data get_environment(void *dev) {
-    int8_t rslt;
-    struct bme69x_conf conf;
+    int8_t                   rslt;
+    struct bme69x_conf       conf;
     struct bme69x_heatr_conf heatr_conf;
-    struct bme69x_data data;
-    uint32_t del_period;
-    uint8_t n_fields;
+    struct bme69x_data       data;
+    uint32_t                 del_period;
+    uint8_t                  n_fields;
 
     bosch_bme690_device_t *device = dev;
 
@@ -92,21 +94,21 @@ static struct bme69x_data get_environment(void *dev) {
         return data;
     }
 
-    conf.filter = BME69X_FILTER_OFF;
-    conf.odr = BME69X_ODR_NONE;
-    conf.os_hum = BME69X_OS_16X;
+    conf.filter  = BME69X_FILTER_OFF;
+    conf.odr     = BME69X_ODR_NONE;
+    conf.os_hum  = BME69X_OS_16X;
     conf.os_pres = BME69X_OS_16X;
     conf.os_temp = BME69X_OS_16X;
-    rslt = bme69x_set_conf(&conf, device->sensor);
+    rslt         = bme69x_set_conf(&conf, device->sensor);
     why_bme69x_error_codes_print_result(rslt);
     if (rslt != BME69X_OK) {
         return device->environment;
     }
 
-    heatr_conf.enable = BME69X_ENABLE;
+    heatr_conf.enable     = BME69X_ENABLE;
     heatr_conf.heatr_temp = 300;
-    heatr_conf.heatr_dur = 100;
-    rslt = bme69x_set_heatr_conf(BME69X_FORCED_MODE, &heatr_conf, device->sensor);
+    heatr_conf.heatr_dur  = 100;
+    rslt                  = bme69x_set_heatr_conf(BME69X_FORCED_MODE, &heatr_conf, device->sensor);
     why_bme69x_error_codes_print_result(rslt);
     if (rslt != BME69X_OK) {
         return device->environment;
@@ -136,32 +138,32 @@ static struct bme69x_data get_environment(void *dev) {
 
 float get_pressure(void *dev) {
     struct bme69x_data data = get_environment(dev);
-    
+
     return data.pressure;
 }
 
 float get_temperature(void *dev) {
     struct bme69x_data data = get_environment(dev);
-    
+
     return data.temperature;
 }
 
 float get_humidity(void *dev) {
     struct bme69x_data data = get_environment(dev);
-    
+
     return data.humidity;
 }
 
 float get_gas_resistance(void *dev) {
     struct bme69x_data data = get_environment(dev);
-    
+
     return data.gas_resistance;
 }
 
 device_t *bosch_bme690_sensor_create() {
-    bosch_bme690_device_t   *dev        = calloc(1, sizeof(bosch_bme690_device_t));
-    gas_device_t            *gas_dev    = (gas_device_t *)dev;
-    device_t                *base_dev   = (device_t *)dev;
+    bosch_bme690_device_t *dev      = calloc(1, sizeof(bosch_bme690_device_t));
+    gas_device_t          *gas_dev  = (gas_device_t *)dev;
+    device_t              *base_dev = (device_t *)dev;
 
     base_dev->type   = DEVICE_TYPE_GAS;
     base_dev->_open  = bme690_open;
@@ -170,10 +172,10 @@ device_t *bosch_bme690_sensor_create() {
     base_dev->_read  = bme690_read;
     base_dev->_lseek = bme690_lseek;
 
-    gas_dev->_get_pressure = get_pressure;
-    gas_dev->_get_temperature = get_temperature;
+    gas_dev->_get_pressure       = get_pressure;
+    gas_dev->_get_temperature    = get_temperature;
     gas_dev->_get_gas_resistance = get_gas_resistance;
-    gas_dev->_get_humidity = get_humidity;
+    gas_dev->_get_humidity       = get_humidity;
 
     i2c_config_t const i2c_bus_conf = {
         .mode             = I2C_MODE_MASTER,
@@ -184,11 +186,11 @@ device_t *bosch_bme690_sensor_create() {
         .master.clk_speed = I2C_MASTER_FREQ_HZ
     };
 
-    #if UE_SW_I2C
-        i2c_bus = i2c_bus_create(I2C_NUM_SW_1, &i2c_bus_conf);
-    #else
-        i2c_bus = i2c_bus_create(I2C_MASTER_NUM, &i2c_bus_conf);
-    #endif
+#if UE_SW_I2C
+    i2c_bus = i2c_bus_create(I2C_NUM_SW_1, &i2c_bus_conf);
+#else
+    i2c_bus = i2c_bus_create(I2C_MASTER_NUM, &i2c_bus_conf);
+#endif
     if (i2c_bus == NULL) {
         ESP_LOGE(TAG, "Failed initialising i2c bus");
         free(dev);

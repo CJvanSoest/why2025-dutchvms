@@ -35,11 +35,12 @@
 #include "rom/uart.h"
 #include "task.h"
 
-#include <errno.h>
-#include <fcntl.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
+
+#include <errno.h>
+#include <fcntl.h>
 #include <string.h>
 #include <sys/stat.h>
 #include <unistd.h>
@@ -56,11 +57,11 @@
  * which resolve through picolibc → ESP-IDF VFS → FATFS without touching
  * BadgeVMS' thread state. */
 
-#define MAX_PAYLOAD_BYTES (2 * 1024 * 1024)  /* 2 MB cap */
+#define MAX_PAYLOAD_BYTES (2 * 1024 * 1024) /* 2 MB cap */
 #define MAX_PATH_BYTES    256
 
-#define CMD_PUT   0x01
-#define CMD_PING  0x07
+#define CMD_PUT  0x01
+#define CMD_PING 0x07
 
 #define ST_OK              0x00
 #define ST_ERR_BAD_FRAME   0x01
@@ -166,10 +167,10 @@ static int vms_to_posix(char const *vms, char *out, size_t out_size) {
         out[pos++] = *p;
     }
 
-    char const *rest    = colon + 1;
-    char const *lb      = strchr(rest, '[');
-    char const *rb      = lb ? strchr(lb, ']') : NULL;
-    char const *fname   = rest;
+    char const *rest  = colon + 1;
+    char const *lb    = strchr(rest, '[');
+    char const *rb    = lb ? strchr(lb, ']') : NULL;
+    char const *fname = rest;
     if (lb && rb && lb == rest) {
         /* [dir.subdir] block — replace dots with / */
         if (pos >= out_size - 1)
@@ -229,15 +230,14 @@ static void handle_put(uint8_t const *payload, uint32_t len) {
         return;
     }
 
-    esp_rom_printf("[deploy] PUT '%s' -> '%s' %u bytes\n",
-                   vms_path, posix_path, (unsigned)data_len);
+    esp_rom_printf("[deploy] PUT '%s' -> '%s' %u bytes\n", vms_path, posix_path, (unsigned)data_len);
 
     /* mkdir -p: create any missing parent directories. We mutate posix_path
      * temporarily by null-terminating at each '/' and calling mkdir. */
     for (char *p = posix_path + 1; *p; p++) {
         if (*p == '/') {
             *p = 0;
-            mkdir(posix_path, 0755);   /* ignore errors (EEXIST is fine) */
+            mkdir(posix_path, 0755); /* ignore errors (EEXIST is fine) */
             *p = '/';
         }
     }
@@ -245,20 +245,23 @@ static void handle_put(uint8_t const *payload, uint32_t len) {
     int fd = open(posix_path, O_WRONLY | O_CREAT | O_TRUNC, 0666);
     if (fd < 0) {
         send_status(ST_ERR_FOPEN);
-        esp_rom_printf("[deploy] PUT open failed for '%s' (errno=%d)\n",
-                       posix_path, errno);
+        esp_rom_printf("[deploy] PUT open failed for '%s' (errno=%d)\n", posix_path, errno);
         return;
     }
 
-    size_t   total   = 0;
-    uint32_t remain  = data_len;
+    size_t   total  = 0;
+    uint32_t remain = data_len;
     while (remain > 0) {
         ssize_t n = write(fd, data + total, remain);
         if (n <= 0) {
             close(fd);
             send_status(ST_ERR_WRITE);
-            esp_rom_printf("[deploy] PUT write failed at %u/%u (errno=%d)\n",
-                           (unsigned)total, (unsigned)data_len, errno);
+            esp_rom_printf(
+                "[deploy] PUT write failed at %u/%u (errno=%d)\n",
+                (unsigned)total,
+                (unsigned)data_len,
+                errno
+            );
             return;
         }
         total  += (size_t)n;
@@ -283,8 +286,7 @@ static void process_one_frame(void) {
     rx_blocking(hdr, 5);
 
     uint8_t  cmd = hdr[0];
-    uint32_t len = (uint32_t)hdr[1] | ((uint32_t)hdr[2] << 8) |
-                   ((uint32_t)hdr[3] << 16) | ((uint32_t)hdr[4] << 24);
+    uint32_t len = (uint32_t)hdr[1] | ((uint32_t)hdr[2] << 8) | ((uint32_t)hdr[3] << 16) | ((uint32_t)hdr[4] << 24);
 
     if (len > MAX_PAYLOAD_BYTES) {
         /* Drain CRC bytes (we already have nothing to read for payload) so
@@ -308,8 +310,7 @@ static void process_one_frame(void) {
 
     uint8_t crc_bytes[2];
     rx_blocking(crc_bytes, 2);
-    uint16_t crc_wire =
-        (uint16_t)crc_bytes[0] | ((uint16_t)crc_bytes[1] << 8);
+    uint16_t crc_wire = (uint16_t)crc_bytes[0] | ((uint16_t)crc_bytes[1] << 8);
 
     /* CRC over [cmd:1][len:4][payload:N] */
     uint16_t crc = 0xFFFF;
@@ -318,24 +319,25 @@ static void process_one_frame(void) {
         crc = esp_rom_crc16_le(crc, payload, len);
 
     if (crc != crc_wire) {
-        esp_rom_printf("[deploy] CRC mismatch: wire=0x%04X calc=0x%04X cmd=0x%02X len=%u\n",
-                       crc_wire, crc, cmd, (unsigned)len);
+        esp_rom_printf(
+            "[deploy] CRC mismatch: wire=0x%04X calc=0x%04X cmd=0x%02X len=%u\n",
+            crc_wire,
+            crc,
+            cmd,
+            (unsigned)len
+        );
         send_status(ST_ERR_BAD_FRAME);
         free(payload);
         return;
     }
 
     switch (cmd) {
-    case CMD_PING:
-        handle_ping(payload, len);
-        break;
-    case CMD_PUT:
-        handle_put(payload, len);
-        break;
-    default:
-        esp_rom_printf("[deploy] unknown cmd 0x%02X\n", cmd);
-        send_status(ST_ERR_UNKNOWN_CMD);
-        break;
+        case CMD_PING: handle_ping(payload, len); break;
+        case CMD_PUT: handle_put(payload, len); break;
+        default:
+            esp_rom_printf("[deploy] unknown cmd 0x%02X\n", cmd);
+            send_status(ST_ERR_UNKNOWN_CMD);
+            break;
     }
 
     free(payload);
@@ -361,7 +363,7 @@ bool deploy_protocol_init(void) {
     BaseType_t r = create_kernel_task(
         deploy_listener_task,
         "deploy",
-        6144,  /* stack — bigger because we now do fwrite/malloc */
+        6144, /* stack — bigger because we now do fwrite/malloc */
         NULL,
         3,
         &deploy_handle,

@@ -62,9 +62,9 @@ static notify_entry_t *notify_find_or_create(char const *unique_identifier) {
         if (!notify_table[i].used) {
             strncpy(notify_table[i].uid, unique_identifier, NOTIFY_UID_MAX - 1);
             notify_table[i].uid[NOTIFY_UID_MAX - 1] = '\0';
-            notify_table[i].used  = true;
-            notify_table[i].count = 0;
-            notify_table[i].dirty = false;
+            notify_table[i].used                    = true;
+            notify_table[i].count                   = 0;
+            notify_table[i].dirty                   = false;
             return &notify_table[i];
         }
     }

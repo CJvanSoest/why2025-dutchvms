@@ -19,8 +19,8 @@
 #include <stdbool.h>
 #include <stdint.h>
 
-#define LORA_MAX_PACKET_LEN       255
-#define LORA_VERSION_STRING_LEN   16
+#define LORA_MAX_PACKET_LEN     255
+#define LORA_VERSION_STRING_LEN 16
 
 typedef enum {
     LORA_MODE_UNKNOWN      = 0x00,
@@ -32,8 +32,8 @@ typedef enum {
 } lora_mode_t;
 
 typedef enum {
-    LORA_CHIP_SX1262 = 0x00,
-    LORA_CHIP_SX1268 = 0x01,
+    LORA_CHIP_SX1262  = 0x00,
+    LORA_CHIP_SX1268  = 0x01,
     LORA_CHIP_UNKNOWN = 0xff,
 } lora_chip_t;
 
@@ -44,14 +44,14 @@ typedef struct {
 } lora_status_t;
 
 typedef struct {
-    uint32_t frequency;                   /* Hz */
-    uint8_t  spreading_factor;            /* 5-12 */
-    uint16_t bandwidth;                   /* kHz: 7,10,15,20,31,41,62,125,250,500 */
-    uint8_t  coding_rate;                 /* 5-8 (4/5 .. 4/8) */
+    uint32_t frequency;        /* Hz */
+    uint8_t  spreading_factor; /* 5-12 */
+    uint16_t bandwidth;        /* kHz: 7,10,15,20,31,41,62,125,250,500 */
+    uint8_t  coding_rate;      /* 5-8 (4/5 .. 4/8) */
     uint8_t  sync_word;
-    uint16_t preamble_length;             /* symbols */
-    uint8_t  power;                       /* dBm */
-    uint8_t  ramp_time;                   /* us */
+    uint16_t preamble_length; /* symbols */
+    uint8_t  power;           /* dBm */
+    uint8_t  ramp_time;       /* us */
     bool     crc_enabled;
     bool     invert_iq;
     bool     low_data_rate_optimization;

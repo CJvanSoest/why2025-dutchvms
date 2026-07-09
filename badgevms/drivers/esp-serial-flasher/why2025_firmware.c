@@ -178,7 +178,7 @@ void free_why2025_binaries(why2025_binaries_t *bins) {
 
 #endif
 
-static const char *get_error_string(const esp_loader_error_t error) {
+static char const *get_error_string(esp_loader_error_t const error) {
     char const *mapping[ESP_LOADER_ERROR_INVALID_RESPONSE + 1] = {
         "NONE",
         "UNKNOWN",
@@ -241,7 +241,7 @@ esp_loader_error_t connect_to_target(uint32_t higher_transmission_rate) {
 
 #if (defined SERIAL_FLASHER_INTERFACE_UART) || (defined SERIAL_FLASHER_INTERFACE_USB)
 esp_loader_error_t
-    connect_to_target_with_stub(const uint32_t current_transmission_rate, const uint32_t higher_transmission_rate) {
+    connect_to_target_with_stub(uint32_t const current_transmission_rate, uint32_t const higher_transmission_rate) {
     esp_loader_connect_args_t connect_config = ESP_LOADER_CONNECT_DEFAULT();
 
     esp_loader_error_t err = esp_loader_connect_with_stub(&connect_config);
@@ -294,10 +294,8 @@ esp_loader_error_t flash_binary(FILE *bin, size_t size, size_t address) {
         printf("Erasing flash failed with error: %s.\n", get_error_string(err));
 
         if (err == ESP_LOADER_ERROR_INVALID_PARAM) {
-            printf(
-                "If using Secure Download Mode, double check that the specified "
-                "target flash size is correct.\n"
-            );
+            printf("If using Secure Download Mode, double check that the specified "
+                   "target flash size is correct.\n");
         }
         return err;
     }
@@ -341,7 +339,7 @@ esp_loader_error_t flash_binary(FILE *bin, size_t size, size_t address) {
 }
 #endif /* SERIAL_FLASHER_INTERFACE_SPI */
 
-esp_loader_error_t load_ram_binary(const uint8_t *bin) {
+esp_loader_error_t load_ram_binary(uint8_t const *bin) {
     printf("Start loading\n");
     esp_loader_error_t             err;
     esp_loader_bin_header_t const *header = (esp_loader_bin_header_t const *)bin;

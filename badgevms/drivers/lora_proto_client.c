@@ -1,13 +1,13 @@
 #include "lora_proto_client.h"
+
 #include "badgevms/lora.h"
-
-#include <string.h>
-
 #include "esp_hosted.h"
 #include "esp_log.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/semphr.h"
 #include "freertos/task.h"
+
+#include <string.h>
 
 /* Tanmatsu esp-hosted custom_data channel IDs.
  * Must match slave/main/tanmatsu/tanmatsu_main.c. */
@@ -66,17 +66,17 @@ typedef struct {
     uint8_t data[];
 } __attribute__((packed)) lora_protocol_lora_packet_t;
 
-#define LORA_REPLY_BUF_SIZE (sizeof(lora_protocol_header_t) + LORA_MAX_PACKET_LEN + 32)
+#define LORA_REPLY_BUF_SIZE   (sizeof(lora_protocol_header_t) + LORA_MAX_PACKET_LEN + 32)
 #define LORA_REPLY_TIMEOUT_MS 2000
 
 static char const *TAG = "lora_proto";
 
-static SemaphoreHandle_t reply_sem  = NULL; /* signaled when reply for outstanding_seq lands */
-static SemaphoreHandle_t mutex      = NULL; /* serialize requests (only one outstanding) */
+static SemaphoreHandle_t reply_sem = NULL; /* signaled when reply for outstanding_seq lands */
+static SemaphoreHandle_t mutex     = NULL; /* serialize requests (only one outstanding) */
 static uint8_t           reply_buf[LORA_REPLY_BUF_SIZE];
-static size_t            reply_len  = 0;
+static size_t            reply_len       = 0;
 static uint32_t          outstanding_seq = 0; /* 0 = no request outstanding */
-static uint32_t          seq_ctr     = 1;
+static uint32_t          seq_ctr         = 1;
 
 static lora_rx_callback_t rx_cb = NULL;
 
@@ -85,9 +85,9 @@ static lora_rx_callback_t rx_cb = NULL;
  * Callback-based delivery (rx_cb) is unsafe in BadgeVMS because cross-task
  * calls into PIE ELF code crash the app — use polling instead. */
 #define LORA_RX_RING_SLOTS 8
-static lora_packet_t  rx_ring[LORA_RX_RING_SLOTS];
-static volatile uint32_t rx_ring_head = 0;  /* write index (producer: dispatch) */
-static volatile uint32_t rx_ring_tail = 0;  /* read  index (consumer: poll)     */
+static lora_packet_t rx_ring[LORA_RX_RING_SLOTS];
+static uint32_t volatile rx_ring_head = 0; /* write index (producer: dispatch) */
+static uint32_t volatile rx_ring_tail = 0; /* read  index (consumer: poll)     */
 
 /* PACKET_RX payload from slave is the raw LoRa packet bytes (NO length-prefix).
  * Slave sends sizeof(header) + N total; master computes N = data_len - sizeof(header)
@@ -118,16 +118,19 @@ static void lora_callback(uint32_t msg_id, uint8_t const *data, size_t data_len)
 
     /* PACKET_RX with seq=0 is an unsolicited event from the radio. */
     if (hdr->type == LORA_PROTOCOL_TYPE_PACKET_RX && hdr->sequence_number == 0) {
-        dispatch_rx_packet(data + sizeof(lora_protocol_header_t),
-                           data_len - sizeof(lora_protocol_header_t));
+        dispatch_rx_packet(data + sizeof(lora_protocol_header_t), data_len - sizeof(lora_protocol_header_t));
         return;
     }
 
     /* Otherwise this is a reply to an outstanding request. */
     if (outstanding_seq == 0 || hdr->sequence_number != outstanding_seq) {
-        ESP_LOGW(TAG, "stale/unmatched reply seq=%u type=0x%02x (outstanding=%u)",
-                 (unsigned)hdr->sequence_number, (unsigned)hdr->type,
-                 (unsigned)outstanding_seq);
+        ESP_LOGW(
+            TAG,
+            "stale/unmatched reply seq=%u type=0x%02x (outstanding=%u)",
+            (unsigned)hdr->sequence_number,
+            (unsigned)hdr->type,
+            (unsigned)outstanding_seq
+        );
         return;
     }
     size_t n = data_len > sizeof(reply_buf) ? sizeof(reply_buf) : data_len;
@@ -163,8 +166,7 @@ static esp_err_t request_reply(uint32_t type, void const *params, size_t params_
     outstanding_seq = my_seq;
     xSemaphoreTake(reply_sem, 0); /* drain stale */
 
-    esp_err_t res = esp_hosted_send_custom_data(TANMATSU_EVENT_LORA, buf,
-                                                sizeof(lora_protocol_header_t) + params_len);
+    esp_err_t res = esp_hosted_send_custom_data(TANMATSU_EVENT_LORA, buf, sizeof(lora_protocol_header_t) + params_len);
     if (res != ESP_OK) {
         outstanding_seq = 0;
         ESP_LOGE(TAG, "send type=0x%02x failed: %s", (unsigned)type, esp_err_to_name(res));
@@ -192,7 +194,8 @@ static esp_err_t request_reply(uint32_t type, void const *params, size_t params_
 /* ===== Public API ===== */
 
 bool lora_get_status(lora_status_t *out_status) {
-    if (!out_status || !mutex) return false;
+    if (!out_status || !mutex)
+        return false;
     bool ok = false;
     xSemaphoreTake(mutex, portMAX_DELAY);
     if (request_reply(LORA_PROTOCOL_TYPE_GET_STATUS, NULL, 0) == ESP_OK &&
@@ -203,14 +206,15 @@ bool lora_get_status(lora_status_t *out_status) {
         out_status->chip_type = (lora_chip_t)st->chip_type;
         memcpy(out_status->version_string, st->version_string, LORA_VERSION_STRING_LEN);
         out_status->version_string[LORA_VERSION_STRING_LEN] = '\0';
-        ok = true;
+        ok                                                  = true;
     }
     xSemaphoreGive(mutex);
     return ok;
 }
 
 bool lora_get_mode(lora_mode_t *out_mode) {
-    if (!out_mode || !mutex) return false;
+    if (!out_mode || !mutex)
+        return false;
     bool ok = false;
     xSemaphoreTake(mutex, portMAX_DELAY);
     if (request_reply(LORA_PROTOCOL_TYPE_GET_MODE, NULL, 0) == ESP_OK &&
@@ -225,8 +229,9 @@ bool lora_get_mode(lora_mode_t *out_mode) {
 }
 
 bool lora_set_mode(lora_mode_t mode) {
-    if (!mutex) return false;
-    lora_protocol_mode_params_t mp = { .mode = (uint32_t)mode };
+    if (!mutex)
+        return false;
+    lora_protocol_mode_params_t mp = {.mode = (uint32_t)mode};
     xSemaphoreTake(mutex, portMAX_DELAY);
     bool ok = request_reply(LORA_PROTOCOL_TYPE_SET_MODE, &mp, sizeof(mp)) == ESP_OK;
     xSemaphoreGive(mutex);
@@ -234,7 +239,8 @@ bool lora_set_mode(lora_mode_t mode) {
 }
 
 bool lora_get_config(lora_config_t *out_config) {
-    if (!out_config || !mutex) return false;
+    if (!out_config || !mutex)
+        return false;
     bool ok = false;
     xSemaphoreTake(mutex, portMAX_DELAY);
     if (request_reply(LORA_PROTOCOL_TYPE_GET_CONFIG, NULL, 0) == ESP_OK &&
@@ -259,7 +265,8 @@ bool lora_get_config(lora_config_t *out_config) {
 }
 
 bool lora_set_config(lora_config_t const *config) {
-    if (!config || !mutex) return false;
+    if (!config || !mutex)
+        return false;
     lora_protocol_config_params_t cp = {
         .frequency                  = config->frequency,
         .spreading_factor           = config->spreading_factor,
@@ -280,7 +287,8 @@ bool lora_set_config(lora_config_t const *config) {
 }
 
 bool lora_send_packet(uint8_t const *data, uint8_t length) {
-    if (!data || length == 0 || !mutex) return false;
+    if (!data || length == 0 || !mutex)
+        return false;
     uint8_t buf[1 + LORA_MAX_PACKET_LEN];
     buf[0] = length;
     memcpy(buf + 1, data, length);
@@ -299,10 +307,11 @@ void lora_set_rx_callback(lora_rx_callback_t callback) {
 }
 
 bool lora_poll_packet(lora_packet_t *out) {
-    if (!out) return false;
+    if (!out)
+        return false;
     uint32_t tail = rx_ring_tail;
     if (tail == rx_ring_head) {
-        return false;  /* empty */
+        return false; /* empty */
     }
     out->length = rx_ring[tail].length;
     memcpy(out->data, rx_ring[tail].data, out->length);
@@ -313,8 +322,10 @@ bool lora_poll_packet(lora_packet_t *out) {
 /* ===== Init ===== */
 
 esp_err_t lora_proto_client_init(void) {
-    if (!reply_sem) reply_sem = xSemaphoreCreateBinary();
-    if (!mutex)     mutex     = xSemaphoreCreateMutex();
+    if (!reply_sem)
+        reply_sem = xSemaphoreCreateBinary();
+    if (!mutex)
+        mutex = xSemaphoreCreateMutex();
 
     esp_err_t res = esp_hosted_register_custom_callback(TANMATSU_EVENT_LORA, lora_callback);
     if (res != ESP_OK) {

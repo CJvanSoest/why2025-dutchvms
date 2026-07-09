@@ -93,8 +93,7 @@ __attribute__((always_inline)) inline static window_rect_t rect_intersection(win
     int right  = ((a.x + a.w) < (b.x + b.w)) ? (a.x + a.w) : (b.x + b.w);
     int bottom = ((a.y + a.h) < (b.y + b.h)) ? (a.y + a.h) : (b.y + b.h);
 
-    return (
-        window_rect_t
+    return (window_rect_t
     ){.x = left, .y = top, .w = (right > left) ? (right - left) : 0, .h = (bottom > top) ? (bottom - top) : 0};
 }
 

@@ -1,0 +1,52 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  format-check:
+    name: clang-format
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install clang-format
+        run: |
+          wget -qO- https://apt.llvm.org/llvm-snapshot.gpg.key | sudo tee /etc/apt/trusted.gpg.d/llvm.asc >/dev/null
+          echo "deb http://apt.llvm.org/$(lsb_release -cs)/ llvm-toolchain-$(lsb_release -cs)-18 main" | sudo tee /etc/apt/sources.list.d/llvm.list
+          sudo apt-get update -qq
+          sudo apt-get install -y clang-format-18
+          sudo ln -sf /usr/bin/clang-format-18 /usr/local/bin/clang-format
+          clang-format --version
+
+      - name: Check formatting (badgevms/ only - not vendored components/sdk_apps/thirdparty)
+        run: |
+          files=$(find badgevms -name '*.c' -o -name '*.h' | grep -v /thirdparty/ | sort)
+          if [ -z "$files" ]; then
+            echo "No files found to check"; exit 1
+          fi
+          fail=0
+          for f in $files; do
+            clang-format "$f" > /tmp/formatted.txt
+            if ! diff -u "$f" /tmp/formatted.txt; then
+              echo "::error file=$f::not clang-format clean"
+              fail=1
+            fi
+          done
+          exit $fail
+
+  build:
+    name: ESP-IDF build
+    runs-on: ubuntu-latest
+    container:
+      image: espressif/idf:v5.5.1
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Mark workspace as safe (container runs as root)
+        run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
+
+      - name: Build
+        run: idf.py build

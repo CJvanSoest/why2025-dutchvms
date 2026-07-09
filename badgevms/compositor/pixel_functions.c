@@ -215,10 +215,8 @@ small_rect_array_t rect_subtract(window_rect_t a, window_rect_t b) {
 
     // Bottom
     if (overlap.y + overlap.h < a.y + a.h) {
-        result.rects[result.count++] = (window_rect_t){.x = overlap.x,
-                                                       .y = overlap.y + overlap.h,
-                                                       .w = overlap.w,
-                                                       .h = (a.y + a.h) - (overlap.y + overlap.h)};
+        result.rects[result.count++] = (window_rect_t
+        ){.x = overlap.x, .y = overlap.y + overlap.h, .w = overlap.w, .h = (a.y + a.h) - (overlap.y + overlap.h)};
     }
 
     return result;

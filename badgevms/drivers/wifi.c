@@ -15,12 +15,12 @@
  */
 
 #include "esp-serial-flasher/slave_c6_flasher.h"
-#include "lora_proto_client.h"
 #include "esp_attr.h"
 #include "esp_event.h"
 #include "esp_log.h"
 #include "esp_wifi.h"
 #include "freertos/FreeRTOS.h"
+#include "lora_proto_client.h"
 #include "nvs_flash.h"
 #include "task.h"
 #include "thirdparty/dlmalloc.h"
