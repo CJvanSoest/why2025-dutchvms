@@ -1,0 +1,14 @@
+DutchVMS — a WHY2025 BadgeVMS fork
+
+This firmware targets the WHY2025 conference badge (https://why2025.org/) and
+is a fork of BadgeVMS, originally created and maintained by Team:Badge
+(badge.team, https://github.com/badgeteam). WHY2025-specific branding,
+naming, and hardware identity referenced in this codebase belong to the
+WHY2025 event and Team:Badge; this fork's own code changes are licensed
+GPL-3.0-or-later (see COPYING and CREDITS.md) but do not claim any WHY2025 or
+Team:Badge trademark/brand rights.
+
+If you plan to redistribute builds of this firmware publicly, check the
+WHY2025/Team:Badge asset and trademark terms before including their logos or
+branding assets — this notice does not grant those rights, it only
+acknowledges the source.
