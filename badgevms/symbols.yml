@@ -35,6 +35,7 @@ include:
   - badgevms/device.h
   - badgevms/event.h
   - badgevms/misc_funcs.h
+  - badgevms/notify.h
   - badgevms/ota.h
   - badgevms/process.h
   - badgevms/wifi.h
@@ -922,6 +923,10 @@ simple_function:
   - lora_set_mode
   - lora_set_rx_callback
   - mkdir_p
+  - notify_clear
+  - notify_get_count
+  - notify_get_dirty
+  - notify_increment
   - ota_get_invalid_version
   - ota_get_running_version
   - ota_session_abort

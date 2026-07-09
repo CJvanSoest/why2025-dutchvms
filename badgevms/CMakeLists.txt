@@ -26,6 +26,7 @@ idf_component_register(
      "logical_names.c"
      "memory.c"
      "memory_heap_caps.c"
+     "notify.c"
      "ota.c"
      "pathfuncs.c"
      "task.c"

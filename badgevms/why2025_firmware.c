@@ -22,6 +22,7 @@
 
 #include "application_private.h"
 #include "badgevms/device.h"
+#include "badgevms/notify.h"
 #include "badgevms/ota.h"
 #include "badgevms/process.h"
 #include "badgevms_config.h"
@@ -94,6 +95,8 @@ int app_main(void) {
         ESP_LOGE(TAG, "Failed to initialize tasking subsystem");
         invalidate_ota_partition();
     }
+
+    notify_system_init();
 
     if (!device_init()) {
         ESP_LOGE(TAG, "Failed to initialize device subsystem");

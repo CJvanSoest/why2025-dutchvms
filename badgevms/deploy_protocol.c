@@ -351,12 +351,19 @@ static void deploy_listener_task(void *arg) {
 
 bool deploy_protocol_init(void) {
     esp_rom_printf("[deploy] init: creating listener task\n");
+    /* Priority must stay below the wifi hermes task (5, also core 0) - at 6
+     * this task permanently starved hermes and everything else <=6 on core 0
+     * (confirmed root cause of the wifi-analyzer hang investigation: hermes
+     * stuck eReady forever, core-0-pinned diagnostic tasks froze right after
+     * this task's creation, and skipping this call entirely kept core 0
+     * alive). rx_blocking()'s 2ms poll cadence has no real-time requirement
+     * that needs a high priority. */
     BaseType_t r = create_kernel_task(
         deploy_listener_task,
         "deploy",
         6144,  /* stack — bigger because we now do fwrite/malloc */
         NULL,
-        6,
+        3,
         &deploy_handle,
         0
     );
