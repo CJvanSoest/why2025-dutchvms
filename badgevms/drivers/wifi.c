@@ -262,9 +262,7 @@ static void hermes_do_disconnect() {
     status.connection_status = WIFI_DISCONNECTED;
     int retries              = 5;
 again:
-    ESP_LOGW("HERMES-DIAG", "hermes_do_disconnect: calling esp_wifi_disconnect() (retries=%d)", retries);
     ESP_ERROR_CHECK(esp_wifi_disconnect());
-    ESP_LOGW("HERMES-DIAG", "hermes_do_disconnect: esp_wifi_disconnect() returned, waiting on event bits");
     EventBits_t bits = xEventGroupWaitBits(
         wifi_event_group,
         WIFI_CONNECTED_BIT | WIFI_DISCONNECTED_BIT | WIFI_FAIL_BIT,
@@ -272,7 +270,6 @@ again:
         pdFALSE,
         5000 / portTICK_PERIOD_MS
     );
-    ESP_LOGW("HERMES-DIAG", "hermes_do_disconnect: wait returned bits=0x%02x", (unsigned)bits);
     if ((!(bits & WIFI_DISCONNECTED_BIT)) && retries) {
         --retries;
         goto again;
@@ -368,20 +365,15 @@ static void hermes_do_scan() {
 
     status.last_scan_time = cur_time;
 
-    ESP_LOGW("HERMES-DIAG", "hermes_do_scan: calling esp_wifi_scan_start(NULL, true)");
-    esp_err_t scan_err = esp_wifi_scan_start(NULL, true);
-    ESP_LOGW("HERMES-DIAG", "hermes_do_scan: esp_wifi_scan_start() returned err=%d", (int)scan_err);
+    esp_wifi_scan_start(NULL, true);
 
     uint16_t         number = DEFAULT_SCAN_LIST_SIZE;
     wifi_ap_record_t ap_info[DEFAULT_SCAN_LIST_SIZE];
     uint16_t         ap_count = 0;
     memset(ap_info, 0, sizeof(ap_info));
 
-    ESP_LOGW("HERMES-DIAG", "hermes_do_scan: calling esp_wifi_scan_get_ap_num()");
     ESP_ERROR_CHECK(esp_wifi_scan_get_ap_num(&ap_count));
-    ESP_LOGW("HERMES-DIAG", "hermes_do_scan: ap_count=%u, calling esp_wifi_scan_get_ap_records()", ap_count);
     ESP_ERROR_CHECK(esp_wifi_scan_get_ap_records(&number, ap_info));
-    ESP_LOGW("HERMES-DIAG", "hermes_do_scan: got %u records", number);
 
     ESP_LOGW("HERMES", "Total APs scanned = %u, actual AP number ap_info holds = %u", ap_count, number);
     ap_count = MIN(ap_count, number);
@@ -393,61 +385,6 @@ static void hermes_do_scan() {
         result_to_station(s, &ap_info[i]);
     }
     xSemaphoreGive(status.mutex);
-}
-
-/* DIAG (temporary): a successful xQueueSend() to hermes_queue was observed
- * to never wake the hermes task blocked in xQueueReceive(). This task logs
- * hermes' actual FreeRTOS task state + queue depth every 2s so we can see,
- * live during a hang, whether hermes is eBlocked/eReady/eSuspended/eDeleted
- * and whether the sent item is still sitting unconsumed in the queue - to
- * distinguish "task genuinely blocked deeper than expected" from "task/queue
- * state corrupted" from "task no longer exists". */
-static char const *task_state_name(eTaskState s) {
-    switch (s) {
-        case eRunning:   return "eRunning";
-        case eReady:     return "eReady";
-        case eBlocked:   return "eBlocked";
-        case eSuspended: return "eSuspended";
-        case eDeleted:   return "eDeleted";
-        case eInvalid:   return "eInvalid";
-        default:         return "?";
-    }
-}
-static void wifi_diag_task(void *ignored) {
-    (void)ignored;
-    for (;;) {
-        vTaskDelay(pdMS_TO_TICKS(2000));
-        if (hermes_handle == NULL) {
-            ESP_LOGW("WIFI-DIAG", "hermes_handle is NULL");
-            continue;
-        }
-        eTaskState state    = eTaskGetState(hermes_handle);
-        UBaseType_t waiting = hermes_queue ? uxQueueMessagesWaiting(hermes_queue) : 0;
-        UBaseType_t spaces  = hermes_queue ? uxQueueSpacesAvailable(hermes_queue) : 0;
-        ESP_LOGW("WIFI-DIAG", "hermes state=%s  queue: waiting=%u spaces=%u",
-                 task_state_name(state), (unsigned)waiting, (unsigned)spaces);
-    }
-}
-
-/* DIAG (temporary): hermes (core 0, prio 5) has been observed stuck in
- * eReady - runnable, never actually scheduled - while nothing else visibly
- * occupies core 0 (compositor, also core 0, confirmed eBlocked throughout).
- * This task is explicitly pinned to core 0 (unlike wifi_diag_task, which has
- * no affinity) purely to prove whether core 0's scheduler is alive at all
- * during the hang, or whether it's specifically hermes's own scheduling
- * state that's wedged/corrupted while core 0 keeps running everything else
- * fine. */
-static void core0_diag_task(void *ignored) {
-    (void)ignored;
-    uint32_t tick = 0;
-    for (;;) {
-        /* DIAG (temporary): 100ms resolution (down from 1000ms) to pinpoint
-         * which boot log line immediately precedes core 0's death - it's
-         * been narrowed to a ~1s window (BMI270 init / compositor framebuffer
-         * cache-sync / deploy listener creation all happen in that window). */
-        vTaskDelay(pdMS_TO_TICKS(100));
-        ESP_LOGW("CORE0-DIAG", "core0 alive tick=%u", (unsigned)tick++);
-    }
 }
 
 static void hermes(void *ignored) {
@@ -487,13 +424,8 @@ static badgevms_wifi_connection_status_t send_command(wifi_command_t command) {
     c->caller  = xTaskGetCurrentTaskHandle();
     c->command = command;
 
-    /* DIAG (temporary): pinpoint whether a hang is before hermes ever sees
-     * the command, inside hermes' handling of it, or in the notify-wait. */
-    ESP_LOGW("HERMES-DIAG", "send_command: enqueueing cmd=%u", (unsigned)command);
     xQueueSend(hermes_queue, &c, portMAX_DELAY);
-    ESP_LOGW("HERMES-DIAG", "send_command: enqueued cmd=%u, waiting for notify", (unsigned)command);
     badgevms_wifi_connection_status_t status = ulTaskNotifyTakeIndexed(0, pdTRUE, portMAX_DELAY);
-    ESP_LOGW("HERMES-DIAG", "send_command: notified, cmd=%u done, status=%d", (unsigned)command, (int)status);
     return status;
 }
 
@@ -727,12 +659,6 @@ device_t *wifi_create() {
 #if CJ_BADGEVMS_ENABLE_WIFI
     create_kernel_task(hermes, "Hermes", 4096, NULL, 5, &hermes_handle, 0);
     lora_proto_client_init();
-    /* DIAG (temporary): see wifi_diag_task comment above. Low priority (1),
-     * no core affinity - purely observational. */
-    xTaskCreate(wifi_diag_task, "wifi_diag", 3072, NULL, 1, NULL);
-    /* DIAG (temporary): see core0_diag_task comment above. Pinned to core 0
-     * on purpose. */
-    xTaskCreatePinnedToCore(core0_diag_task, "core0_diag", 3072, NULL, 1, NULL, 0);
 #endif
     return (device_t *)dev;
 }
