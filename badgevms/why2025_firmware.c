@@ -224,8 +224,14 @@ int app_main(void) {
     }
 
     /* CJ-PATCH: see vib_test_task() above. Low priority, unpinned - purely
-     * a one-shot hardware verification test. */
-    xTaskCreate(vib_test_task, "vib_test", 2048, NULL, 2, NULL);
+     * a one-shot hardware verification test. Checking the return value
+     * (unlike most fire-and-forget xTaskCreate calls in this file) because
+     * the task previously produced zero log output on a real boot with no
+     * crash/panic either - silent xTaskCreate failure (e.g. transient OOM
+     * during the heavy boot-time allocation window) is the leading
+     * suspect, and this will confirm or rule it out. */
+    BaseType_t vib_test_r = xTaskCreate(vib_test_task, "vib_test", 3072, NULL, 2, NULL);
+    ESP_LOGW(TAG, "vib_test_task create: %s", vib_test_r == pdPASS ? "OK" : "FAILED");
 
     printf("BadgeVMS is ready\n");
     free_ram = heap_caps_get_free_size(MALLOC_CAP_DEFAULT);
