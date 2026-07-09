@@ -551,6 +551,11 @@ static void ws2812_task(void *arg) {
         ws2812_set_scaled(3, 0, 0, 0);
 
         ws2812_show();
+        /* DIAG (temporary): low-priority heartbeat. If this keeps ticking
+         * during a WiFi hang, the scheduler/system is alive and only the
+         * hermes task specifically is stuck; if this also stops, it's a
+         * wider freeze (not task-priority starvation). */
+        ESP_LOGW("HEARTBEAT", "tick secs=%u", (unsigned)secs);
         vTaskDelay(pdMS_TO_TICKS(1000));
         secs += 1;
     }
