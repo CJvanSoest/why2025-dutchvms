@@ -52,6 +52,32 @@ static TaskHandle_t  compositor_handle;
 static lcd_device_t *lcd_device;
 static device_t     *keyboard_device;
 
+/* DIAG (temporary): see compositor_start() for why this exists. */
+static char const *compositor_diag_state_name(eTaskState s) {
+    switch (s) {
+        case eRunning:   return "eRunning";
+        case eReady:     return "eReady";
+        case eBlocked:   return "eBlocked";
+        case eSuspended: return "eSuspended";
+        case eDeleted:   return "eDeleted";
+        case eInvalid:   return "eInvalid";
+        default:         return "?";
+    }
+}
+
+static void compositor_diag_task(void *ignored) {
+    (void)ignored;
+    for (;;) {
+        vTaskDelay(pdMS_TO_TICKS(2000));
+        if (compositor_handle == NULL) {
+            ESP_LOGW("COMP-DIAG", "compositor_handle is NULL");
+            continue;
+        }
+        eTaskState state = eTaskGetState(compositor_handle);
+        ESP_LOGW("COMP-DIAG", "compositor state=%s", compositor_diag_state_name(state));
+    }
+}
+
 static window_t     *window_stack = NULL;
 static QueueHandle_t compositor_queue;
 
@@ -1195,6 +1221,17 @@ bool compositor_init(char const *lcd_device_name, char const *keyboard_device_na
 
     compositor_queue = xQueueCreate(10, sizeof(compositor_message_t));
     create_kernel_task(compositor, "Compositor", 8192, NULL, 20, &compositor_handle, 0);
+
+    /* DIAG (temporary): compositor runs at priority 20 pinned to core 0, the
+     * highest priority in the system and the same core as the wifi "hermes"
+     * task (priority 5). If compositor is ever runnable without blocking
+     * (spin loop, or a wait that never resolves) it would starve hermes
+     * completely while leaving core-1 tasks unaffected - which matches the
+     * wifi-hang symptoms. Log compositor's own task state every 2s to check
+     * this empirically instead of assuming ulTaskNotifyTakeIndexed always
+     * blocks as intended. Low priority (1), no core affinity - purely
+     * observational. */
+    xTaskCreate(compositor_diag_task, "comp_diag", 3072, NULL, 1, NULL);
 
     return true;
 }
