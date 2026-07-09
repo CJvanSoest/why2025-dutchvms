@@ -37,3 +37,9 @@ void     notify_increment(char const *unique_identifier);
 void     notify_clear(char const *unique_identifier);
 uint32_t notify_get_count(char const *unique_identifier);
 bool     notify_get_dirty(char const *unique_identifier);
+
+/* Kernel-only (not exported to apps via symbols.yml): true if ANY tracked app
+ * currently has a dirty/unread notification. Used by the LED-matrix add-on's
+ * ws2812_task (badgevms_i2c_bus.c) to drive a single shared "unread" indicator
+ * on the RGBW side LEDs without needing to know which app(s) are dirty. */
+bool notify_any_dirty(void);

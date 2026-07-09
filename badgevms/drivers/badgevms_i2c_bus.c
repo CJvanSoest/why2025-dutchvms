@@ -17,6 +17,7 @@
 #include "badgevms_i2c_bus.h"
 
 #include "badgevms/lora.h"
+#include "badgevms/notify.h"
 #include "badgevms/wifi.h"
 #include "badgevms_config.h"
 #include "driver/gpio.h"
@@ -571,11 +572,20 @@ static void ws2812_set_scaled(int i, uint8_t r, uint8_t g, uint8_t b) {
 }
 
 /* Status indicator on the 4 RGBW LEDs (GPIO7):
- *   LED0 = LoRa radio : green = up/active, blue = starting up, red = offline
- *   LED1 = WiFi       : green = connected, blue = enabled/connecting, off = disabled
- *   LED2, LED3        = reserved (off) for future DM/channel message-notify,
- *                       which needs an app->LED channel that does not exist yet.
- * State comes from the firmware-internal LoRa/WiFi query APIs. */
+ *   LED0 = LoRa radio  : green = up/active, blue = starting up, red = offline
+ *   LED1 = WiFi        : green = connected, blue = enabled/connecting, off = disabled
+ *   LED2, LED3 = LED-notify : shared "unread notification" indicator, driven by
+ *                the notify.c table (badgevms/notify.h) rather than any single
+ *                app - whichever app increments its counter (e.g. cj_meshcore on
+ *                a new DM/channel message) lights these up, and they turn off
+ *                again automatically once every tracked app is back to 0/clean.
+ *                Slow ~0.5 Hz on/off pulse on the W (white) channel only, so it
+ *                reads as clearly distinct from the R/G/B colors used by LED0/
+ *                LED1 above, and deliberately exercises the RGBW W-byte (this
+ *                add-on's LEDs are XL-5050RGBWC, NOT plain WS2812B - they need
+ *                the 4-byte G,R,B,W protocol already implemented in ws2812_set()/
+ *                ws2812_show() above; do not bypass those helpers here).
+ * State comes from the firmware-internal LoRa/WiFi query APIs plus notify.c. */
 #define LORA_STARTUP_GRACE_S 15
 static void ws2812_task(void *arg) {
     (void)arg;
@@ -584,7 +594,11 @@ static void ws2812_task(void *arg) {
         vTaskDelete(NULL);
         return;
     }
-    ESP_LOGW(TAG, "=== RGBW status LEDs (4x on GPIO%d) START: LED0=radio LED1=wifi ===", WS_GPIO);
+    ESP_LOGW(
+        TAG,
+        "=== RGBW status LEDs (4x on GPIO%d) START: LED0=radio LED1=wifi LED2/3=notify ===",
+        WS_GPIO
+    );
     uint32_t secs = 0;
     for (;;) {
         /* LED0: LoRa radio status */
@@ -609,9 +623,20 @@ static void ws2812_task(void *arg) {
             ws2812_set_scaled(1, 0, 0, 255); /* blue: enabled / connecting */
         }
 
-        /* LED2, LED3: reserved for message-notify (app->LED channel TBD) */
-        ws2812_set_scaled(2, 0, 0, 0);
-        ws2812_set_scaled(3, 0, 0, 0);
+        /* LED2, LED3: LED-notify. Cheap poll (once per this task's existing
+         * 1s cadence - no separate task/timer needed) across the shared
+         * notify.c table; on while any app is dirty, off once they've all
+         * been cleared. Dim white, blinking every other second (~0.5 Hz) so
+         * it reads as "waiting for attention" rather than a steady-on light. */
+        if (notify_any_dirty()) {
+            uint8_t const w = (uint8_t)((255u * LED_BRIGHTNESS) / 100u);
+            uint8_t const pulse = (secs % 2 == 0) ? w : 0;
+            ws2812_set(2, 0, 0, 0, pulse);
+            ws2812_set(3, 0, 0, 0, pulse);
+        } else {
+            ws2812_set(2, 0, 0, 0, 0);
+            ws2812_set(3, 0, 0, 0, 0);
+        }
 
         ws2812_show();
         vTaskDelay(pdMS_TO_TICKS(1000));

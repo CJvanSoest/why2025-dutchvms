@@ -116,3 +116,17 @@ bool notify_get_dirty(char const *unique_identifier) {
     xSemaphoreGive(notify_lock);
     return result;
 }
+
+bool notify_any_dirty(void) {
+    bool result = false;
+    if (xSemaphoreTake(notify_lock, portMAX_DELAY) != pdTRUE)
+        return false;
+    for (int i = 0; i < NOTIFY_MAX_APPS; i++) {
+        if (notify_table[i].used && notify_table[i].dirty) {
+            result = true;
+            break;
+        }
+    }
+    xSemaphoreGive(notify_lock);
+    return result;
+}
