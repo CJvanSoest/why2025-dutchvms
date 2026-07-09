@@ -39,7 +39,7 @@ idf.py sdk                    # eenmalig — produceert sdk_dist/ voor app-build
 
 ## Remotes
 
-- `origin` → CJ Gitea (`http://192.168.2.25:3000/CJ/DutchVMS.git`)
+- `origin` → [why2025-dutchvms](https://github.com/CJvanSoest/why2025-dutchvms) (GitHub, private dev)
 - `upstream` → WHY-team gitlab (`https://gitlab.com/why2025/team-badge/firmware.git`)
 
 Upstream-changes mergen:
@@ -51,4 +51,4 @@ git push origin
 
 ## Apps + tooling
 
-De cj_apps en deploy-tool wonen in de [WHY2025-apps](http://192.168.2.25:3000/CJ/WHY2025-apps) repo — apart gehouden om deze fork een schone diff vs upstream te laten houden.
+De cj_apps en deploy-tool wonen in de [why2025-apps](https://github.com/CJvanSoest/why2025-apps) repo — apart gehouden om deze fork een schone diff vs upstream te laten houden.
