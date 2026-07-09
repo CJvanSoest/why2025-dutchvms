@@ -180,9 +180,20 @@ int app_main(void) {
 
     /* CJ-PATCH: start UART deploy protocol listener (Phase A: echo stub).
      * Allowed to fail — non-critical for boot. */
+    /* DIAG (temporary, wifi-hang investigation): core 0 permanently stops
+     * scheduling ready tasks right after this call in every boot log we've
+     * captured. deploy_listener_task runs at priority 6 (higher than hermes'
+     * 5) pinned to core 0. Skipping this call to test whether core 0 stays
+     * alive without it - the cleanest causal test after several disproven
+     * hypotheses (compositor priority, bit-bang I2C probe). */
+#define DIAG_SKIP_DEPLOY_INIT 1
+#if !DIAG_SKIP_DEPLOY_INIT
     if (!deploy_protocol_init()) {
         ESP_LOGW(TAG, "deploy_protocol_init failed (non-fatal)");
     }
+#else
+    ESP_LOGW(TAG, "DIAG: skipping deploy_protocol_init()");
+#endif
 
     printf("BadgeVMS is ready\n");
     free_ram = heap_caps_get_free_size(MALLOC_CAP_DEFAULT);
