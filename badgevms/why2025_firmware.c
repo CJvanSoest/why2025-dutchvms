@@ -21,6 +21,7 @@
 #endif
 
 #include "application_private.h"
+#include "badgelink_transport_uart.h"
 #include "badgevms/device.h"
 #include "badgevms/notify.h"
 #include "badgevms/ota.h"
@@ -59,6 +60,16 @@
 extern void __real_esp_panic_handler(panic_info_t *info);
 
 static char const *TAG = "why2025_main";
+
+/* Set to 1 to start the BadgeLink protocol (badgevms/drivers/badgelink/)
+ * over UART0/CH340 instead of this project's own deploy_protocol.c.
+ *
+ * Off by default: both listeners would otherwise race to read the same
+ * UART0 RX byte stream, and deploy_protocol.c is the proven, already-working
+ * workflow badge_deploy.py relies on today. Flip this on for a dedicated
+ * test build/flash to try BadgeLink (badgelink.py --port <CH340 dev> ...)
+ * — see badgelink_transport_uart.h for why UART0 rather than native USB. */
+#define CJ_BADGEVMS_ENABLE_BADGELINK 0
 
 void IRAM_ATTR __wrap_esp_panic_handler(panic_info_t *info) {
     if (xTaskGetApplicationTaskTag(NULL) == (void *)0x12345678) {
@@ -182,10 +193,19 @@ int app_main(void) {
     logical_name_set("SEARCH", "FLASH0:[SUBDIR], FLASH0:[SUBDIR.ANOTHER]", false);
 
     /* CJ-PATCH: start UART deploy protocol listener (Phase A: echo stub).
-     * Allowed to fail — non-critical for boot. */
+     * Allowed to fail — non-critical for boot.
+     *
+     * Mutually exclusive with badgelink_transport_uart_init() — see
+     * CJ_BADGEVMS_ENABLE_BADGELINK above. */
+#if CJ_BADGEVMS_ENABLE_BADGELINK
+    if (!badgelink_transport_uart_init()) {
+        ESP_LOGW(TAG, "badgelink_transport_uart_init failed (non-fatal)");
+    }
+#else
     if (!deploy_protocol_init()) {
         ESP_LOGW(TAG, "deploy_protocol_init failed (non-fatal)");
     }
+#endif
 
     printf("DutchVMS is ready\n");
     free_ram = heap_caps_get_free_size(MALLOC_CAP_DEFAULT);
