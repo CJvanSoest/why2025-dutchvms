@@ -25,6 +25,7 @@
  * against without pulling in TinyUSB-shaped assumptions. */
 
 #include "badgelink_setusbmode.h"
+
 #include "badgelink_internal.h"
 
 void badgelink_setusbmode_handle() {

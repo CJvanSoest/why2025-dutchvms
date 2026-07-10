@@ -18,11 +18,11 @@ extern "C" {
 
 // Encode some binary data with COBS.
 // Adds a null-terminator at the end of the output.
-size_t cobs_encode(uint8_t* output, uint8_t const* input, size_t input_len);
+size_t cobs_encode(uint8_t *output, uint8_t const *input, size_t input_len);
 
 // Decode some binary data with COBS.
 // Assumes the null-terminator is still present.
-size_t cobs_decode(uint8_t* output, uint8_t const* input, size_t input_len);
+size_t cobs_decode(uint8_t *output, uint8_t const *input, size_t input_len);
 
 #ifdef __cplusplus
 }

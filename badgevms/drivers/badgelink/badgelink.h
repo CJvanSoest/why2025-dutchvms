@@ -7,7 +7,7 @@
 #include <stddef.h>
 #include <stdint.h>
 
-typedef void (*usb_callback_t)(uint8_t const* data, size_t len);
+typedef void (*usb_callback_t)(uint8_t const *data, size_t len);
 
 // Callback invoked just before badgelink causes the host device to reboot
 // into a launched app. Host should put hardware (USB, radio, etc.) into a
@@ -40,7 +40,7 @@ void badgelink_init();
 void badgelink_start(usb_callback_t usb_callback);
 
 // Handle received data.
-void badgelink_rxdata_cb(uint8_t const* data, size_t len);
+void badgelink_rxdata_cb(uint8_t const *data, size_t len);
 
 // Get the negotiated protocol version.
 uint16_t badgelink_get_protocol_version();

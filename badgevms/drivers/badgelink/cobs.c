@@ -3,11 +3,12 @@
 // SPDX-License-Identifier: MIT
 
 #include "cobs.h"
+
 #include <string.h>
 
 // Encode some binary data with COBS.
 // Adds a null-terminator at the end of the output.
-size_t cobs_encode(uint8_t* output, uint8_t const* input, size_t input_len) {
+size_t cobs_encode(uint8_t *output, uint8_t const *input, size_t input_len) {
     bool   final_zero = true;
     size_t output_len = 0;
     size_t search_idx = 0;
@@ -44,7 +45,7 @@ size_t cobs_encode(uint8_t* output, uint8_t const* input, size_t input_len) {
 
 // Decode some binary data with COBS.
 // Assumes the null-terminator is still present.
-size_t cobs_decode(uint8_t* output, uint8_t const* input, size_t input_len) {
+size_t cobs_decode(uint8_t *output, uint8_t const *input, size_t input_len) {
     if (input_len < 1) {
         return 0;
     }

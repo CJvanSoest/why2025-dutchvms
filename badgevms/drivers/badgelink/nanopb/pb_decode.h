@@ -15,7 +15,7 @@ extern "C" {
 /* Structure for defining custom input streams. You will need to provide
  * a callback function to read the bytes from your storage, which can be
  * for example a file or a network socket.
- * 
+ *
  * The callback must conform to these rules:
  *
  * 1) Return false on IO errors. This will cause decoding to abort.
@@ -25,8 +25,7 @@ extern "C" {
  *    is different than from the main stream. Don't use bytes_left to compute
  *    any pointers.
  */
-struct pb_istream_s
-{
+struct pb_istream_s {
 #ifdef PB_BUFFER_ONLY
     /* Callback pointer is not used in buffer-only configuration.
      * Having an int pointer here allows binary compatibility but
@@ -49,23 +48,23 @@ struct pb_istream_s
      * denial-of-service by excessively long messages.
      */
     size_t bytes_left;
-    
+
 #ifndef PB_NO_ERRMSG
     /* Pointer to constant (ROM) string when decoding function returns error */
-    const char *errmsg;
+    char const *errmsg;
 #endif
 };
 
 #ifndef PB_NO_ERRMSG
-#define PB_ISTREAM_EMPTY {0,0,0,0}
+#define PB_ISTREAM_EMPTY {0, 0, 0, 0}
 #else
-#define PB_ISTREAM_EMPTY {0,0,0}
+#define PB_ISTREAM_EMPTY {0, 0, 0}
 #endif
 
 /***************************
  * Main decoding functions *
  ***************************/
- 
+
 /* Decode a single protocol buffers message from input stream into a C structure.
  * Returns true on success, false on any failure.
  * The actual struct pointed to by dest must match the description in fields.
@@ -76,13 +75,13 @@ struct pb_istream_s
  *    MyMessage msg = {};
  *    uint8_t buffer[64];
  *    pb_istream_t stream;
- *    
+ *
  *    // ... read some data into buffer ...
  *
  *    stream = pb_istream_from_buffer(buffer, count);
  *    pb_decode(&stream, MyMessage_fields, &msg);
  */
-bool pb_decode(pb_istream_t *stream, const pb_msgdesc_t *fields, void *dest_struct);
+bool pb_decode(pb_istream_t *stream, pb_msgdesc_t const *fields, void *dest_struct);
 
 /* Extended version of pb_decode, with several options to control
  * the decoding process:
@@ -107,22 +106,22 @@ bool pb_decode(pb_istream_t *stream, const pb_msgdesc_t *fields, void *dest_stru
  *
  * Multiple flags can be combined with bitwise or (| operator)
  */
-#define PB_DECODE_NOINIT          0x01U
-#define PB_DECODE_DELIMITED       0x02U
-#define PB_DECODE_NULLTERMINATED  0x04U
-bool pb_decode_ex(pb_istream_t *stream, const pb_msgdesc_t *fields, void *dest_struct, unsigned int flags);
+#define PB_DECODE_NOINIT         0x01U
+#define PB_DECODE_DELIMITED      0x02U
+#define PB_DECODE_NULLTERMINATED 0x04U
+bool pb_decode_ex(pb_istream_t *stream, pb_msgdesc_t const *fields, void *dest_struct, unsigned int flags);
 
 /* Defines for backwards compatibility with code written before nanopb-0.4.0 */
-#define pb_decode_noinit(s,f,d) pb_decode_ex(s,f,d, PB_DECODE_NOINIT)
-#define pb_decode_delimited(s,f,d) pb_decode_ex(s,f,d, PB_DECODE_DELIMITED)
-#define pb_decode_delimited_noinit(s,f,d) pb_decode_ex(s,f,d, PB_DECODE_DELIMITED | PB_DECODE_NOINIT)
-#define pb_decode_nullterminated(s,f,d) pb_decode_ex(s,f,d, PB_DECODE_NULLTERMINATED)
+#define pb_decode_noinit(s, f, d)           pb_decode_ex(s, f, d, PB_DECODE_NOINIT)
+#define pb_decode_delimited(s, f, d)        pb_decode_ex(s, f, d, PB_DECODE_DELIMITED)
+#define pb_decode_delimited_noinit(s, f, d) pb_decode_ex(s, f, d, PB_DECODE_DELIMITED | PB_DECODE_NOINIT)
+#define pb_decode_nullterminated(s, f, d)   pb_decode_ex(s, f, d, PB_DECODE_NULLTERMINATED)
 
 /* Release any allocated pointer fields. If you use dynamic allocation, you should
  * call this for any successfully decoded message when you are done with it. If
  * pb_decode() returns with an error, the message is already released.
  */
-void pb_release(const pb_msgdesc_t *fields, void *dest_struct);
+void pb_release(pb_msgdesc_t const *fields, void *dest_struct);
 
 /**************************************
  * Functions for manipulating streams *
@@ -136,7 +135,7 @@ void pb_release(const pb_msgdesc_t *fields, void *dest_struct);
  * Alternatively, you can use a custom stream that reads directly from e.g.
  * a file or a network socket.
  */
-pb_istream_t pb_istream_from_buffer(const pb_byte_t *buf, size_t msglen);
+pb_istream_t pb_istream_from_buffer(pb_byte_t const *buf, size_t msglen);
 
 /* Function to read from a pb_istream_t. You can use this if you need to
  * read some custom header data, or to read data in field callbacks.

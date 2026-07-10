@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: MIT
 
 #include "badgelink_nvs.h"
+
 #include "esp_log.h"
 #include "nvs.h"
 
@@ -11,28 +12,18 @@ static char const TAG[] = "badgelink_nvs";
 // Handle an NVS request packet.
 void badgelink_nvs_handle() {
     switch (badgelink_packet.packet.request.req.nvs_action.type) {
-        case badgelink_NvsActionType_NvsActionList:
-            badgelink_nvs_list();
-            break;
-        case badgelink_NvsActionType_NvsActionRead:
-            badgelink_nvs_read();
-            break;
-        case badgelink_NvsActionType_NvsActionWrite:
-            badgelink_nvs_write();
-            break;
-        case badgelink_NvsActionType_NvsActionDelete:
-            badgelink_nvs_delete();
-            break;
-        default:
-            badgelink_status_unsupported();
-            break;
+        case badgelink_NvsActionType_NvsActionList: badgelink_nvs_list(); break;
+        case badgelink_NvsActionType_NvsActionRead: badgelink_nvs_read(); break;
+        case badgelink_NvsActionType_NvsActionWrite: badgelink_nvs_write(); break;
+        case badgelink_NvsActionType_NvsActionDelete: badgelink_nvs_delete(); break;
+        default: badgelink_status_unsupported(); break;
     }
 }
 
 // Handle an NVS list request.
 void badgelink_nvs_list() {
     // Validate request.
-    badgelink_NvsActionReq* req = &badgelink_packet.packet.request.req.nvs_action;
+    badgelink_NvsActionReq *req = &badgelink_packet.packet.request.req.nvs_action;
     if (req->has_wdata || req->key[0]) {
         badgelink_status_malformed();
         return;
@@ -56,7 +47,7 @@ void badgelink_nvs_list() {
     badgelink_packet.packet.response.status_code             = badgelink_StatusCode_StatusOk;
     badgelink_packet.packet.response.which_resp              = badgelink_Response_nvs_resp_tag;
     badgelink_packet.packet.response.resp.nvs_resp.which_val = badgelink_NvsActionResp_entries_tag;
-    badgelink_NvsEntriesList* entries     = &badgelink_packet.packet.response.resp.nvs_resp.val.entries;
+    badgelink_NvsEntriesList *entries     = &badgelink_packet.packet.response.resp.nvs_resp.val.entries;
     size_t const              max_entries = sizeof(entries->entries) / sizeof(badgelink_NvsEntry);
     entries->entries_count                = 0;
 
@@ -90,36 +81,16 @@ void badgelink_nvs_list() {
             // Translate NVS entry type.
             badgelink_NvsValueType type;
             switch (info.type) {
-                case NVS_TYPE_U8:
-                    type = badgelink_NvsValueType_NvsValueUint8;
-                    break;
-                case NVS_TYPE_I8:
-                    type = badgelink_NvsValueType_NvsValueInt8;
-                    break;
-                case NVS_TYPE_U16:
-                    type = badgelink_NvsValueType_NvsValueUint16;
-                    break;
-                case NVS_TYPE_I16:
-                    type = badgelink_NvsValueType_NvsValueInt16;
-                    break;
-                case NVS_TYPE_U32:
-                    type = badgelink_NvsValueType_NvsValueUint32;
-                    break;
-                case NVS_TYPE_I32:
-                    type = badgelink_NvsValueType_NvsValueInt32;
-                    break;
-                case NVS_TYPE_U64:
-                    type = badgelink_NvsValueType_NvsValueUint64;
-                    break;
-                case NVS_TYPE_I64:
-                    type = badgelink_NvsValueType_NvsValueInt64;
-                    break;
-                case NVS_TYPE_STR:
-                    type = badgelink_NvsValueType_NvsValueString;
-                    break;
-                case NVS_TYPE_BLOB:
-                    type = badgelink_NvsValueType_NvsValueBlob;
-                    break;
+                case NVS_TYPE_U8: type = badgelink_NvsValueType_NvsValueUint8; break;
+                case NVS_TYPE_I8: type = badgelink_NvsValueType_NvsValueInt8; break;
+                case NVS_TYPE_U16: type = badgelink_NvsValueType_NvsValueUint16; break;
+                case NVS_TYPE_I16: type = badgelink_NvsValueType_NvsValueInt16; break;
+                case NVS_TYPE_U32: type = badgelink_NvsValueType_NvsValueUint32; break;
+                case NVS_TYPE_I32: type = badgelink_NvsValueType_NvsValueInt32; break;
+                case NVS_TYPE_U64: type = badgelink_NvsValueType_NvsValueUint64; break;
+                case NVS_TYPE_I64: type = badgelink_NvsValueType_NvsValueInt64; break;
+                case NVS_TYPE_STR: type = badgelink_NvsValueType_NvsValueString; break;
+                case NVS_TYPE_BLOB: type = badgelink_NvsValueType_NvsValueBlob; break;
                 default:
                     nvs_release_iterator(iter);
                     badgelink_status_int_err();
@@ -153,7 +124,7 @@ void badgelink_nvs_list() {
 // Handle an NVS read request.
 void badgelink_nvs_read() {
     // Validate request.
-    badgelink_NvsActionReq* req = &badgelink_packet.packet.request.req.nvs_action;
+    badgelink_NvsActionReq *req = &badgelink_packet.packet.request.req.nvs_action;
     if (req->has_wdata || !req->key[0] || !req->namespc[0]) {
         badgelink_status_malformed();
     }
@@ -182,7 +153,7 @@ void badgelink_nvs_read() {
     badgelink_packet.packet.response.resp.nvs_resp.which_val = badgelink_NvsActionResp_rdata_tag;
 
     // Try to read from NVS.
-    badgelink_NvsValue* rdata = &badgelink_packet.packet.response.resp.nvs_resp.val.rdata;
+    badgelink_NvsValue *rdata = &badgelink_packet.packet.response.resp.nvs_resp.val.rdata;
     rdata->type               = nvs_type;
     switch (nvs_type) {
         case badgelink_NvsValueType_NvsValueUint8: {
@@ -257,9 +228,7 @@ void badgelink_nvs_read() {
                 }
             }
         } break;
-        default:
-            ec = ESP_FAIL;
-            break;
+        default: ec = ESP_FAIL; break;
     }
     nvs_close(handle);
 
@@ -277,7 +246,7 @@ void badgelink_nvs_read() {
 // Handle an NVS write request.
 void badgelink_nvs_write() {
     // Validate request.
-    badgelink_NvsActionReq* req = &badgelink_packet.packet.request.req.nvs_action;
+    badgelink_NvsActionReq *req = &badgelink_packet.packet.request.req.nvs_action;
     if (!req->has_wdata || !req->key[0] || !req->namespc[0]) {
         ESP_LOGE(TAG, "Malformed NVS write: missing wdata, key or namespc");
         badgelink_status_malformed();
@@ -331,38 +300,25 @@ void badgelink_nvs_write() {
 
     // Try to write NVS.
     switch (req->wdata.type) {
-        case badgelink_NvsValueType_NvsValueUint8:
-            ec = nvs_set_u8(handle, req->key, req->wdata.val.numericval);
-            break;
-        case badgelink_NvsValueType_NvsValueInt8:
-            ec = nvs_set_i8(handle, req->key, req->wdata.val.numericval);
-            break;
+        case badgelink_NvsValueType_NvsValueUint8: ec = nvs_set_u8(handle, req->key, req->wdata.val.numericval); break;
+        case badgelink_NvsValueType_NvsValueInt8: ec = nvs_set_i8(handle, req->key, req->wdata.val.numericval); break;
         case badgelink_NvsValueType_NvsValueUint16:
             ec = nvs_set_u16(handle, req->key, req->wdata.val.numericval);
             break;
-        case badgelink_NvsValueType_NvsValueInt16:
-            ec = nvs_set_i16(handle, req->key, req->wdata.val.numericval);
-            break;
+        case badgelink_NvsValueType_NvsValueInt16: ec = nvs_set_i16(handle, req->key, req->wdata.val.numericval); break;
         case badgelink_NvsValueType_NvsValueUint32:
             ec = nvs_set_u32(handle, req->key, req->wdata.val.numericval);
             break;
-        case badgelink_NvsValueType_NvsValueInt32:
-            ec = nvs_set_i32(handle, req->key, req->wdata.val.numericval);
-            break;
+        case badgelink_NvsValueType_NvsValueInt32: ec = nvs_set_i32(handle, req->key, req->wdata.val.numericval); break;
         case badgelink_NvsValueType_NvsValueUint64:
             ec = nvs_set_u64(handle, req->key, req->wdata.val.numericval);
             break;
-        case badgelink_NvsValueType_NvsValueInt64:
-            ec = nvs_set_i64(handle, req->key, req->wdata.val.numericval);
-            break;
-        case badgelink_NvsValueType_NvsValueString:
-            ec = nvs_set_str(handle, req->key, req->wdata.val.stringval);
-            break;
+        case badgelink_NvsValueType_NvsValueInt64: ec = nvs_set_i64(handle, req->key, req->wdata.val.numericval); break;
+        case badgelink_NvsValueType_NvsValueString: ec = nvs_set_str(handle, req->key, req->wdata.val.stringval); break;
         case badgelink_NvsValueType_NvsValueBlob:
             ec = nvs_set_blob(handle, req->key, req->wdata.val.blobval.bytes, req->wdata.val.blobval.size);
             break;
-        default:
-            __builtin_unreachable();
+        default: __builtin_unreachable();
     }
 
     // Clean up and report status.
@@ -378,7 +334,7 @@ void badgelink_nvs_write() {
 // Handle an NVS delete request.
 void badgelink_nvs_delete() {
     // Validate request.
-    badgelink_NvsActionReq* req = &badgelink_packet.packet.request.req.nvs_action;
+    badgelink_NvsActionReq *req = &badgelink_packet.packet.request.req.nvs_action;
     if (req->has_wdata || !req->key[0] || !req->namespc[0]) {
         badgelink_status_malformed();
         return;

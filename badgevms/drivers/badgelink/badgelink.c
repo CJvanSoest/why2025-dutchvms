@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: MIT
 
 #include "badgelink.h"
+
 #include "assert.h"
 #include "badgelink_appfs.h"
 #include "badgelink_fs.h"
@@ -36,9 +37,9 @@ typedef struct {
     uint8_t len;
 } fragment_t;
 
-static usb_callback_t                 usb_send_data_cb  = NULL;
-static badgelink_prepare_device_cb_t  prepare_device_cb = NULL;
-static badgelink_set_usb_mode_cb_t    set_usb_mode_cb   = NULL;
+static usb_callback_t                usb_send_data_cb  = NULL;
+static badgelink_prepare_device_cb_t prepare_device_cb = NULL;
+static badgelink_set_usb_mode_cb_t   set_usb_mode_cb   = NULL;
 
 void badgelink_set_prepare_device_callback(badgelink_prepare_device_cb_t cb) {
     prepare_device_cb = cb;
@@ -91,7 +92,7 @@ static QueueHandle_t rxqueue;
 // Handle to the BadgeLink thread.
 static TaskHandle_t  badgelink_thread_handle;
 // Main function for the BadgeLink thread.
-static void          badgelink_thread_main(void*);
+static void          badgelink_thread_main(void *);
 
 // Prepare the data for the BadgeLink service to start.
 void badgelink_init() {
@@ -172,21 +173,26 @@ uint16_t badgelink_get_protocol_version() {
 
 // Handle a version negotiation request.
 static void handle_version_req() {
-    badgelink_VersionReq* req = &badgelink_packet.packet.request.req.version_req;
-    uint16_t client_version   = req->client_version;
+    badgelink_VersionReq *req            = &badgelink_packet.packet.request.req.version_req;
+    uint16_t              client_version = req->client_version;
 
     // Negotiate: use the lower of client and server versions.
     uint16_t negotiated = client_version < BADGELINK_PROTOCOL_VERSION ? client_version : BADGELINK_PROTOCOL_VERSION;
     negotiated_version  = negotiated;
 
-    ESP_LOGI(TAG, "Version negotiation: client=%u, server=%u, negotiated=%u", client_version,
-             BADGELINK_PROTOCOL_VERSION, negotiated);
+    ESP_LOGI(
+        TAG,
+        "Version negotiation: client=%u, server=%u, negotiated=%u",
+        client_version,
+        BADGELINK_PROTOCOL_VERSION,
+        negotiated
+    );
 
     // Send response with server version and negotiated version.
-    badgelink_packet.which_packet                                        = badgelink_Packet_response_tag;
-    badgelink_packet.packet.response.status_code                         = badgelink_StatusCode_StatusOk;
-    badgelink_packet.packet.response.which_resp                          = badgelink_Response_version_resp_tag;
-    badgelink_packet.packet.response.resp.version_resp.server_version    = BADGELINK_PROTOCOL_VERSION;
+    badgelink_packet.which_packet                                         = badgelink_Packet_response_tag;
+    badgelink_packet.packet.response.status_code                          = badgelink_StatusCode_StatusOk;
+    badgelink_packet.packet.response.which_resp                           = badgelink_Response_version_resp_tag;
+    badgelink_packet.packet.response.resp.version_resp.server_version     = BADGELINK_PROTOCOL_VERSION;
     badgelink_packet.packet.response.resp.version_resp.negotiated_version = negotiated;
     badgelink_send_packet();
 }
@@ -194,24 +200,23 @@ static void handle_version_req() {
 // Abort / finish a transfer.
 static void xfer_stop(bool abnormal) {
     switch (badgelink_xfer_type) {
-        case BADGELINK_XFER_APPFS:
-            badgelink_appfs_xfer_stop(abnormal);
-            break;
-        case BADGELINK_XFER_FS:
-            badgelink_fs_xfer_stop(abnormal);
-            break;
-        default:
-            break;
+        case BADGELINK_XFER_APPFS: badgelink_appfs_xfer_stop(abnormal); break;
+        case BADGELINK_XFER_FS: badgelink_fs_xfer_stop(abnormal); break;
+        default: break;
     }
     badgelink_xfer_type = BADGELINK_XFER_NONE;
 }
 
 // Handle an upload chunk.
 static void xfer_upload_chunk() {
-    badgelink_Chunk* chunk = &badgelink_packet.packet.request.req.upload_chunk;
+    badgelink_Chunk *chunk = &badgelink_packet.packet.request.req.upload_chunk;
     if (chunk->position != badgelink_xfer_pos) {
-        ESP_LOGE(TAG, "Incorrect chunk position; expected %" PRIu32 " but got %" PRIu32, badgelink_xfer_pos,
-                 chunk->position);
+        ESP_LOGE(
+            TAG,
+            "Incorrect chunk position; expected %" PRIu32 " but got %" PRIu32,
+            badgelink_xfer_pos,
+            chunk->position
+        );
         xfer_stop(true);
         badgelink_status_ill_state();
         return;
@@ -227,12 +232,8 @@ static void xfer_upload_chunk() {
     uint32_t chunk_len = chunk->data.size;
 
     switch (badgelink_xfer_type) {
-        case BADGELINK_XFER_APPFS:
-            badgelink_appfs_xfer_upload();
-            break;
-        case BADGELINK_XFER_FS:
-            badgelink_fs_xfer_upload();
-            break;
+        case BADGELINK_XFER_APPFS: badgelink_appfs_xfer_upload(); break;
+        case BADGELINK_XFER_FS: badgelink_fs_xfer_upload(); break;
         default:
             ESP_LOGE(TAG, "Invalid internal transfer state");
             badgelink_status_int_err();
@@ -245,12 +246,8 @@ static void xfer_upload_chunk() {
 // Handle a download chunk.
 static void xfer_download_chunk() {
     switch (badgelink_xfer_type) {
-        case BADGELINK_XFER_APPFS:
-            badgelink_appfs_xfer_download();
-            break;
-        case BADGELINK_XFER_FS:
-            badgelink_fs_xfer_download();
-            break;
+        case BADGELINK_XFER_APPFS: badgelink_appfs_xfer_download(); break;
+        case BADGELINK_XFER_FS: badgelink_fs_xfer_download(); break;
         default:
             ESP_LOGE(TAG, "Invalid internal transfer state");
             badgelink_status_int_err();
@@ -274,9 +271,7 @@ static void xfer_ctrl() {
                 xfer_download_chunk();
             }
             break;
-        case badgelink_XferReq_XferAbort:
-            xfer_stop(true);
-            break;
+        case badgelink_XferReq_XferAbort: xfer_stop(true); break;
         case badgelink_XferReq_XferFinish:
             if (badgelink_xfer_pos != badgelink_xfer_size) {
                 ESP_LOGE(TAG, "Transfer finished too early");
@@ -286,9 +281,7 @@ static void xfer_ctrl() {
                 xfer_stop(false);
             }
             break;
-        default:
-            badgelink_status_unsupported();
-            break;
+        default: badgelink_status_unsupported(); break;
     }
 }
 
@@ -344,27 +337,13 @@ static void handle_packet() {
             ESP_LOGE(TAG, "Transfer control without transfer in progress");
             badgelink_status_ill_state();
             break;
-        case badgelink_Request_start_app_tag:
-            badgelink_startapp_handle();
-            break;
-        case badgelink_Request_nvs_action_tag:
-            badgelink_nvs_handle();
-            break;
-        case badgelink_Request_appfs_action_tag:
-            badgelink_appfs_handle();
-            break;
-        case badgelink_Request_fs_action_tag:
-            badgelink_fs_handle();
-            break;
-        case badgelink_Request_version_req_tag:
-            handle_version_req();
-            break;
-        case badgelink_Request_set_usb_mode_tag:
-            badgelink_setusbmode_handle();
-            break;
-        default:
-            badgelink_status_unsupported();
-            break;
+        case badgelink_Request_start_app_tag: badgelink_startapp_handle(); break;
+        case badgelink_Request_nvs_action_tag: badgelink_nvs_handle(); break;
+        case badgelink_Request_appfs_action_tag: badgelink_appfs_handle(); break;
+        case badgelink_Request_fs_action_tag: badgelink_fs_handle(); break;
+        case badgelink_Request_version_req_tag: handle_version_req(); break;
+        case badgelink_Request_set_usb_mode_tag: badgelink_setusbmode_handle(); break;
+        default: badgelink_status_unsupported(); break;
     }
 }
 
@@ -421,7 +400,7 @@ static void handle_frame(size_t len) {
 }
 
 // Main function for the BadgeLink thread.
-static void badgelink_thread_main(void* ignored) {
+static void badgelink_thread_main(void *ignored) {
     (void)ignored;
 
     // Amount of data in the receive buffer.
@@ -454,7 +433,7 @@ static void badgelink_thread_main(void* ignored) {
 }
 
 // Handle received data.
-void badgelink_rxdata_cb(uint8_t const* buf, size_t len) {
+void badgelink_rxdata_cb(uint8_t const *buf, size_t len) {
     fragment_t frag;
     while (len) {
         if (len > sizeof(frag.data)) {

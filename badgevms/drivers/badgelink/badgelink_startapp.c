@@ -13,6 +13,7 @@
  * mis-mapping "start app" onto the wrong thing. */
 
 #include "badgelink_startapp.h"
+
 #include "badgelink_internal.h"
 
 void badgelink_startapp_handle() {

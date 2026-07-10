@@ -21,9 +21,9 @@ jobs:
           sudo ln -sf /usr/bin/clang-format-18 /usr/local/bin/clang-format
           clang-format --version
 
-      - name: Check formatting (badgevms/ only - not vendored components/sdk_apps/thirdparty)
+      - name: Check formatting (badgevms/ only - not vendored components/sdk_apps/thirdparty/nanopb)
         run: |
-          files=$(find badgevms -name '*.c' -o -name '*.h' | grep -v /thirdparty/ | sort)
+          files=$(find badgevms -name '*.c' -o -name '*.h' | grep -v /thirdparty/ | grep -v /nanopb/ | sort)
           if [ -z "$files" ]; then
             echo "No files found to check"; exit 1
           fi

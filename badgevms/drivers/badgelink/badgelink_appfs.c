@@ -18,6 +18,7 @@
  * family in badgelink_fs.c, which is what this port is actually for. */
 
 #include "badgelink_appfs.h"
+
 #include "badgelink_internal.h"
 
 void badgelink_appfs_handle() {

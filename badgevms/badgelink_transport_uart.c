@@ -88,15 +88,8 @@ bool badgelink_transport_uart_init(void) {
      * everything else <=5 on core 0. This task is a blocking byte-at-a-time
      * UART reader with no real-time requirement that needs a high
      * priority. */
-    BaseType_t r = create_kernel_task(
-        badgelink_uart_rx_task,
-        "badgelink_uart",
-        4096,
-        NULL,
-        3,
-        &badgelink_uart_task_handle,
-        0
-    );
+    BaseType_t r =
+        create_kernel_task(badgelink_uart_rx_task, "badgelink_uart", 4096, NULL, 3, &badgelink_uart_task_handle, 0);
     if (r != pdTRUE) {
         esp_rom_printf("[badgelink] FAILED to create UART reader task\n");
         return false;

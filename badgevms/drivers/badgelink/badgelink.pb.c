@@ -73,16 +73,3 @@ PB_BIND(badgelink_NvsEntriesList, badgelink_NvsEntriesList, 4)
 
 
 PB_BIND(badgelink_NvsActionResp, badgelink_NvsActionResp, 4)
-
-
-
-
-
-
-
-
-
-
-
-
-

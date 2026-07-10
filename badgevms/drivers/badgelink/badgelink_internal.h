@@ -33,9 +33,9 @@ extern uint32_t         badgelink_xfer_pos;
 extern uint32_t         badgelink_xfer_size;
 
 // Send raw bytes of data.
-void   badgelink_raw_tx(void const* buf, size_t len);
+void   badgelink_raw_tx(void const *buf, size_t len);
 // Receive raw bytes of data.
-size_t badgelink_raw_rx(void* buf, size_t max_len);
+size_t badgelink_raw_rx(void *buf, size_t max_len);
 
 // Internal: invoke the registered prepare-device callback, no-op if unset.
 void badgelink_call_prepare_device(void);
