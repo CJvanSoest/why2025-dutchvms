@@ -32,6 +32,12 @@
 #include <sys/stat.h>
 #include <unistd.h>
 
+// Not exposed via why_io.h (used by user apps), but defined in wrapped_funcs.c
+// as part of the same kernel component - used here purely for diagnostics on
+// load failures (see load_application_metadata()).
+extern int  *why_errno(void);
+extern char *why_strerror(int errnum);
+
 #define TAG "application"
 
 #define APPLICATION_MAGIC 0xDEADBEEF
@@ -195,11 +201,18 @@ static application_t *load_application_metadata(char const *unique_identifier) {
         return NULL;
 
     char *metadata_path = get_metadata_path(unique_identifier);
-    if (!metadata_path)
+    if (!metadata_path) {
+        ESP_LOGW(
+            TAG,
+            "SKIP %s: get_metadata_path() failed (invalid unique_identifier or empty base dir)",
+            unique_identifier
+        );
         return NULL;
+    }
 
     FILE *fp = why_fopen(metadata_path, "r");
     if (!fp) {
+        ESP_LOGW(TAG, "SKIP %s: fopen(%s) failed: %s", unique_identifier, metadata_path, why_strerror(*why_errno()));
         why_free(metadata_path);
         return NULL;
     }
@@ -208,26 +221,78 @@ static application_t *load_application_metadata(char const *unique_identifier) {
     long file_size = why_ftell(fp);
     why_fseek(fp, 0, SEEK_SET);
 
-    char *content = why_malloc(file_size + 1);
-    if (!content) {
+    if (file_size <= 0) {
+        ESP_LOGW(TAG, "SKIP %s: %s is empty or ftell failed (size=%ld)", unique_identifier, metadata_path, file_size);
         why_fclose(fp);
         why_free(metadata_path);
         return NULL;
     }
 
-    why_fread(content, 1, file_size, fp);
-    content[file_size] = '\0';
-    why_fclose(fp);
-    why_free(metadata_path);
-
-    cJSON *json = cJSON_Parse(content);
-    why_free(content);
-
-    if (!json)
+    char *content = why_malloc(file_size + 1);
+    if (!content) {
+        ESP_LOGW(
+            TAG,
+            "SKIP %s: out of memory allocating %ld bytes for %s",
+            unique_identifier,
+            file_size,
+            metadata_path
+        );
+        why_fclose(fp);
+        why_free(metadata_path);
         return NULL;
+    }
+
+    size_t read_bytes   = why_fread(content, 1, file_size, fp);
+    content[read_bytes] = '\0';
+    why_fclose(fp);
+
+    if (read_bytes != (size_t)file_size) {
+        ESP_LOGW(
+            TAG,
+            "WARN %s: short read on %s (expected %ld bytes, got %zu)",
+            unique_identifier,
+            metadata_path,
+            file_size,
+            read_bytes
+        );
+    }
+
+    char const *error_ptr = NULL;
+    cJSON      *json      = cJSON_ParseWithOpts(content, &error_ptr, false);
+
+    if (!json) {
+        size_t offset = error_ptr ? (size_t)((char const *)error_ptr - content) : 0;
+        ESP_LOGW(
+            TAG,
+            "SKIP %s: cJSON_Parse failed on %s at offset %zu, near: \"%.40s\"",
+            unique_identifier,
+            metadata_path,
+            offset,
+            error_ptr ? error_ptr : "(unknown)"
+        );
+        why_free(content);
+        why_free(metadata_path);
+        return NULL;
+    }
+
+    why_free(content);
+    why_free(metadata_path);
 
     application_t *app = json_to_application(json);
     cJSON_Delete(json);
+
+    if (!app) {
+        ESP_LOGW(TAG, "SKIP %s: json_to_application() returned NULL (out of memory?)", unique_identifier);
+        return NULL;
+    }
+
+    if (!app->binary_path || !app->binary_path[0]) {
+        ESP_LOGW(
+            TAG,
+            "NOTE %s: loaded OK but binary_path is missing/empty - app will parse but may be unlaunchable",
+            unique_identifier
+        );
+    }
 
     return app;
 }
