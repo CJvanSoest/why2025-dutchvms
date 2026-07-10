@@ -278,23 +278,39 @@ bool lora_get_config(lora_config_t *out_config) {
         return false;
     bool ok = false;
     xSemaphoreTake(mutex, portMAX_DELAY);
-    if (request_reply(LORA_PROTOCOL_TYPE_GET_CONFIG, NULL, 0) == ESP_OK &&
-        reply_len >= sizeof(lora_protocol_header_t) + sizeof(lora_protocol_config_params_t)) {
-        lora_protocol_config_params_t const *cp =
-            (lora_protocol_config_params_t const *)(reply_buf + sizeof(lora_protocol_header_t));
-        out_config->frequency                  = cp->frequency;
-        out_config->spreading_factor           = cp->spreading_factor;
-        out_config->bandwidth                  = cp->bandwidth;
-        out_config->coding_rate                = cp->coding_rate;
-        out_config->sync_word                  = cp->sync_word;
-        out_config->preamble_length            = cp->preamble_length;
-        out_config->power                      = cp->power;
-        out_config->ramp_time                  = cp->ramp_time;
-        out_config->crc_enabled                = cp->crc_enabled;
-        out_config->invert_iq                  = cp->invert_iq;
-        out_config->low_data_rate_optimization = cp->low_data_rate_optimization;
-        out_config->rx_boost                   = cp->rx_boost;
-        ok                                     = true;
+    if (request_reply(LORA_PROTOCOL_TYPE_GET_CONFIG, NULL, 0) == ESP_OK) {
+        /* rx_boost was appended to lora_protocol_config_params_t after both
+         * sides had already shipped (see the WIRE-COMPATIBILITY WARNING on
+         * that struct in lora_protocol.h). apply_config() on the slave
+         * defends the SET_CONFIG direction (rejects a too-short payload), but
+         * nothing previously defended this GET_CONFIG direction: a C6 slave
+         * built before rx_boost existed replies with exactly one byte less
+         * than sizeof(lora_protocol_config_params_t), and the strict >=
+         * check below used to fail forever -- cfg_ok would never become
+         * true again, so the Home screen's Radio line stays on "no config
+         * yet - press A" even after a successful SET_CONFIG. Accept that
+         * one-byte-short reply too, defaulting rx_boost to false in that
+         * case, so a C6/P4 build skew degrades gracefully instead of
+         * permanently hiding the config readout. */
+        size_t const full_len  = sizeof(lora_protocol_header_t) + sizeof(lora_protocol_config_params_t);
+        size_t const short_len = full_len - sizeof(((lora_protocol_config_params_t *)0)->rx_boost);
+        if (reply_len >= short_len) {
+            lora_protocol_config_params_t const *cp =
+                (lora_protocol_config_params_t const *)(reply_buf + sizeof(lora_protocol_header_t));
+            out_config->frequency                  = cp->frequency;
+            out_config->spreading_factor           = cp->spreading_factor;
+            out_config->bandwidth                  = cp->bandwidth;
+            out_config->coding_rate                = cp->coding_rate;
+            out_config->sync_word                  = cp->sync_word;
+            out_config->preamble_length            = cp->preamble_length;
+            out_config->power                      = cp->power;
+            out_config->ramp_time                  = cp->ramp_time;
+            out_config->crc_enabled                = cp->crc_enabled;
+            out_config->invert_iq                  = cp->invert_iq;
+            out_config->low_data_rate_optimization = cp->low_data_rate_optimization;
+            out_config->rx_boost                   = (reply_len >= full_len) ? cp->rx_boost : false;
+            ok                                     = true;
+        }
     }
     xSemaphoreGive(mutex);
     return ok;
