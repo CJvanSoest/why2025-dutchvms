@@ -1,0 +1,55 @@
+name: Release
+
+# Publishes a GitHub Release with the built firmware attached whenever a
+# version tag (vX.Y.Z) is pushed. The badge's OTA updater
+# (sdk_apps/why2025_ota) polls /releases/latest, compares tag_name against the
+# running PROJECT_VER (derived from git describe, see top-level CMakeLists.txt),
+# and streams the "badgevms.bin" asset straight into esp_ota.
+#
+# Cut a release with:
+#   git tag v1.0.0 && git push origin v1.0.0
+# (the tag drives both PROJECT_VER and the release name; keep them in sync).
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: Build and publish firmware release
+    runs-on: ubuntu-latest
+    container:
+      image: espressif/idf:v5.5.1
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # Full history + tags so `git describe --tags` resolves the exact tag
+          # into PROJECT_VER (the version the badge compares against).
+          fetch-depth: 0
+
+      - name: Mark workspace as safe (container runs as root)
+        run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
+
+      - name: Build firmware
+        shell: bash
+        run: |
+          . "$IDF_PATH/export.sh"
+          idf.py build
+
+      - name: Verify firmware artifact exists
+        shell: bash
+        run: |
+          test -f build/badgevms.bin || { echo "build/badgevms.bin missing"; exit 1; }
+          ls -l build/badgevms.bin
+
+      - name: Publish GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          # Asset name must stay "badgevms.bin" — the badge matches on it exactly
+          # (GITHUB_FIRMWARE_ASSET in sdk_apps/why2025_ota/ota_update.c).
+          files: build/badgevms.bin
+          generate_release_notes: true

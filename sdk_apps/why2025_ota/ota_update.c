@@ -21,6 +21,22 @@
 #define BADGEHUB_DEFAULT_APPS    BADGEHUB_BASE_URL "/project-summaries?category=Default"
 #define BADGEHUB_FIRMWARE_URL    BADGEHUB_BASE_URL "/projects/" FIRMWARE_PROJECT "/rev%i/files/badgevms.bin"
 
+// Firmware OTA is served from GitHub Releases (see docs/PROJECT_SETUP.md §2a).
+// The release-publish CI (.github/workflows/release.yml) attaches the P4
+// firmware image as an asset named exactly GITHUB_FIRMWARE_ASSET; the badge
+// picks the "releases/latest" tag_name as the available version and streams
+// that asset straight into the esp_ota session.
+#define GITHUB_API_BASE          "https://api.github.com"
+#define GITHUB_FIRMWARE_REPO     "CJvanSoest/why2025-dutchvms"
+#define GITHUB_LATEST_RELEASE    GITHUB_API_BASE "/repos/" GITHUB_FIRMWARE_REPO "/releases/latest"
+#define GITHUB_FIRMWARE_ASSET    "badgevms.bin"
+
+// Apps are distributed from the why2025-app-repository (public). The badge polls
+// one index.json (raw content, no auth) instead of a multi-endpoint REST API;
+// each entry carries a version and a direct download_url for the app's ELF.
+#define GITHUB_APP_REPO          "CJvanSoest/why2025-app-repository"
+#define GITHUB_APP_INDEX         "https://raw.githubusercontent.com/" GITHUB_APP_REPO "/main/index.json"
+
 char *source_to_name(application_source_t s) {
     switch (s) {
         case APPLICATION_SOURCE_BADGEHUB: return "Badgehub";
@@ -117,6 +133,9 @@ bool do_http(char const *url, http_data_t *response_data, http_file_t *http_file
     }
 
     curl_easy_setopt(curl, CURLOPT_USERAGENT, HTTP_USERAGENT);
+    // GitHub Release asset URLs (browser_download_url) 302-redirect to a signed
+    // objects.githubusercontent.com URL, so redirects must be followed.
+    curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1L);
     curl_easy_setopt(curl, CURLOPT_VERBOSE, 1L);
 
     CURLcode res = curl_easy_perform(curl);
@@ -283,133 +302,109 @@ out:
     return ret;
 }
 
-bool update_application(application_t *app, char const *version) {
-    FILE       *file             = NULL;
-    char       *application_data = NULL;
-    char       *url              = NULL;
+// Fetch and parse index.json from the app-repository. Returns a cJSON object the
+// caller must cJSON_Delete(); NULL on failure.
+static cJSON *github_fetch_app_index(void) {
     http_data_t response_data;
-
-    cJSON *json             = NULL;
-    cJSON *files_array      = NULL;
-    cJSON *file_item        = NULL;
-    cJSON *app_version      = NULL;
-    cJSON *app_metadata     = NULL;
-    cJSON *app_application  = NULL;
-    cJSON *name_field       = NULL;
-    cJSON *executable_field = NULL;
-    char  *name             = NULL;
-    char  *executable       = NULL;
-    long   file_size        = 0;
-    bool   result           = false;
-
-    int revision = get_project_latest_revision(app->unique_identifier);
-    if (revision < 0) {
-        printf("Failed to get project revision\n");
-        goto out;
+    if (!do_http(GITHUB_APP_INDEX, &response_data, NULL)) {
+        printf("Failed to fetch app index %s\n", GITHUB_APP_INDEX);
+        return NULL;
     }
-
-    asprintf(&url, BADGEHUB_REVISION, app->unique_identifier, revision);
-    if (!do_http(url, &response_data, NULL)) {
-        printf("Failed to read project revision data\n");
-        goto out;
-    }
-
-    json = cJSON_Parse(response_data.memory);
+    cJSON *json = cJSON_Parse(response_data.memory);
+    free(response_data.memory);
     if (!json) {
         char const *error_ptr = cJSON_GetErrorPtr();
         if (error_ptr != NULL) {
-            printf("Error: JSON parse error before: %s\n", error_ptr);
-        }
-        goto out;
-    }
-
-    app_version = cJSON_GetObjectItemCaseSensitive(json, "version");
-    if (!app_version) {
-        printf("Error 'version' object not found in JSON\n");
-        goto out;
-    }
-
-    app_metadata = cJSON_GetObjectItemCaseSensitive(app_version, "app_metadata");
-    if (app_metadata && cJSON_IsObject(app_metadata)) {
-        name_field = cJSON_GetObjectItemCaseSensitive(app_metadata, "name");
-        if (name_field && cJSON_IsString(name_field)) {
-            name = name_field->valuestring;
-        }
-
-        app_application = cJSON_GetObjectItemCaseSensitive(app_metadata, "application");
-        debug_printf("Found 'application' in 'app_metadata'\n");
-        if (app_application && cJSON_IsArray(app_application)) {
-            debug_printf("Found 'application' in 'app_metadata' is array\n");
-            cJSON *application_item = NULL;
-            cJSON_ArrayForEach(application_item, app_application) {
-                debug_printf("ForEach 'application'\n");
-                if (cJSON_IsObject(application_item)) {
-                    executable_field = cJSON_GetObjectItemCaseSensitive(application_item, "executable");
-                    debug_printf("Found 'executable'\n");
-                    if (executable_field && cJSON_IsString(executable_field)) {
-                        executable = executable_field->valuestring;
-                        debug_printf("Executable field %s\n", executable);
-                    }
-                }
-            }
+            printf("Error: index JSON parse error before: %s\n", error_ptr);
         }
     }
+    return json;
+}
 
-    files_array = cJSON_GetObjectItemCaseSensitive(app_version, "files");
-    if (!files_array) {
-        printf("Error: 'files' array not found in JSON\n");
+// Find the entry in index.json whose unique_identifier matches uid. Returns a
+// borrowed pointer into index (do not free separately); NULL if not present.
+static cJSON *index_find_app(cJSON *index, char const *uid) {
+    if (!index || !uid) {
+        return NULL;
+    }
+    cJSON *apps = cJSON_GetObjectItemCaseSensitive(index, "apps");
+    if (!apps || !cJSON_IsArray(apps)) {
+        return NULL;
+    }
+    cJSON *entry = NULL;
+    cJSON_ArrayForEach(entry, apps) {
+        cJSON *e_uid = cJSON_GetObjectItemCaseSensitive(entry, "unique_identifier");
+        if (e_uid && cJSON_IsString(e_uid) && e_uid->valuestring && strcmp(e_uid->valuestring, uid) == 0) {
+            return entry;
+        }
+    }
+    return NULL;
+}
+
+// Normalise a "version" field (string like "1.2.3" or a bare number like 1 for
+// cj_hello) into a freshly-allocated string. Caller frees; NULL if absent.
+static char *index_version_string(cJSON *entry) {
+    cJSON *v = cJSON_GetObjectItemCaseSensitive(entry, "version");
+    if (!v) {
+        return NULL;
+    }
+    if (cJSON_IsString(v) && v->valuestring) {
+        return strdup(v->valuestring);
+    }
+    if (cJSON_IsNumber(v)) {
+        char *s = NULL;
+        asprintf(&s, "%d", (int)v->valuedouble);
+        return s;
+    }
+    return NULL;
+}
+
+bool update_application(application_t *app, char const *version) {
+    if (!app || !app->unique_identifier) {
+        return false;
+    }
+
+    bool   result = false;
+    cJSON *index  = github_fetch_app_index();
+    if (!index) {
+        printf("Failed to fetch app index for update\n");
+        return false;
+    }
+
+    cJSON *entry = index_find_app(index, app->unique_identifier);
+    if (!entry) {
+        printf("App %s not present in index\n", app->unique_identifier);
         goto out;
     }
 
-    if (!cJSON_IsArray(files_array)) {
-        printf("Error: 'files' is not an array\n");
+    cJSON *dl   = cJSON_GetObjectItemCaseSensitive(entry, "download_url");
+    cJSON *bin  = cJSON_GetObjectItemCaseSensitive(entry, "binary_path");
+    cJSON *name = cJSON_GetObjectItemCaseSensitive(entry, "name");
+
+    if (!dl || !cJSON_IsString(dl) || !dl->valuestring) {
+        printf("Missing 'download_url' for %s in index\n", app->unique_identifier);
+        goto out;
+    }
+    if (!bin || !cJSON_IsString(bin) || !bin->valuestring) {
+        printf("Missing 'binary_path' for %s in index\n", app->unique_identifier);
         goto out;
     }
 
+    // Download the single ELF straight into the app directory.
+    if (!update_application_file(app, bin->valuestring, dl->valuestring)) {
+        printf("Unable to download app binary %s\n", bin->valuestring);
+        goto out;
+    }
+
+    application_set_version(app, version);
+    application_set_binary_path(app, bin->valuestring);
+    if (name && cJSON_IsString(name) && name->valuestring) {
+        application_set_name(app, name->valuestring);
+    }
     result = true;
-    cJSON_ArrayForEach(file_item, files_array) {
-        if (!cJSON_IsObject(file_item)) {
-            printf("Warning: Skipping non-object item in files array\n");
-            continue;
-        }
 
-        cJSON *file_url  = cJSON_GetObjectItemCaseSensitive(file_item, "url");
-        cJSON *full_path = cJSON_GetObjectItemCaseSensitive(file_item, "full_path");
-
-        if (!file_url || !cJSON_IsString(file_url)) {
-            printf("Warning: Missing or invalid 'url' field\n");
-            result = false;
-            continue;
-        }
-
-        if (!full_path || !cJSON_IsString(full_path)) {
-            printf("Warning: Missing or invalid 'full_path' field\n");
-            result = false;
-            continue;
-        }
-
-        if (!update_application_file(app, full_path->valuestring, file_url->valuestring)) {
-            printf("Unable to update file %s\n", full_path->valuestring);
-            result = false;
-        }
-    }
-
-    if (result) {
-        application_set_version(app, version);
-        application_set_metadata(app, "metadata.json");
-
-        if (name) {
-            application_set_name(app, name);
-        }
-
-        if (executable) {
-            application_set_binary_path(app, executable);
-        }
-    }
 out:
-    cJSON_Delete(json);
-    free(url);
-    free(response_data.memory);
+    cJSON_Delete(index);
     return result;
 }
 
@@ -467,29 +462,35 @@ out:
 }
 
 bool check_for_updates(application_t *app, char **version) {
-    if (!app) {
+    if (!app || !app->unique_identifier || !version) {
         return false;
     }
 
-    bool ret = false;
+    bool   ret   = false;
+    cJSON *index = github_fetch_app_index();
+    if (!index) {
+        return false;
+    }
 
-    printf("Checking for updates for %s\n", app->unique_identifier);
-    int revision = get_project_latest_revision(app->unique_identifier);
-    if (revision < 0) {
-        printf("Failed to get project revision\n");
+    cJSON *entry = index_find_app(index, app->unique_identifier);
+    if (!entry) {
+        // Not in the store (e.g. a preinstalled/system app) - nothing to update.
         goto out;
     }
 
-    if (!get_project_latest_version(app->unique_identifier, revision, version)) {
-        printf("Failed to get project version\n");
+    *version = index_version_string(entry);
+    if (!*version) {
+        printf("No usable version for %s in index\n", app->unique_identifier);
         goto out;
     }
 
     int vers = strverscmp(app->version, *version);
+    printf("App %s: installed '%s' vs store '%s' (strverscmp=%d)\n", app->unique_identifier, app->version, *version, vers);
     if (vers < 0) {
         ret = true;
     }
 out:
+    cJSON_Delete(index);
     return ret;
 }
 
@@ -514,6 +515,8 @@ bool do_firmware_http(char const *url, ota_handle_t ota_session) {
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, firmware_cb);
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, (void *)ota_session);
     curl_easy_setopt(curl, CURLOPT_USERAGENT, HTTP_USERAGENT);
+    // Follow the GitHub Release asset redirect to objects.githubusercontent.com.
+    curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1L);
     curl_easy_setopt(curl, CURLOPT_VERBOSE, 1L);
 
     CURLcode res = curl_easy_perform(curl);
@@ -544,9 +547,100 @@ out:
     return ret;
 }
 
+// Fetch /repos/<owner>/<repo>/releases/latest and pull out the release version
+// (tag_name, with a leading 'v' stripped) and/or the browser_download_url of the
+// asset named GITHUB_FIRMWARE_ASSET. Either out-param may be NULL. Caller frees
+// any returned strings. Mirrors the cJSON/do_http style used elsewhere here.
+static bool github_get_latest_firmware_release(char **version_out, char **asset_url_out) {
+    bool        ret = false;
+    http_data_t response_data;
+    cJSON      *json = NULL;
+
+    if (version_out) {
+        *version_out = NULL;
+    }
+    if (asset_url_out) {
+        *asset_url_out = NULL;
+    }
+
+    printf("Querying GitHub latest release: %s\n", GITHUB_LATEST_RELEASE);
+    if (!do_http(GITHUB_LATEST_RELEASE, &response_data, NULL)) {
+        printf("Failed to query GitHub releases API\n");
+        return false;
+    }
+
+    json = cJSON_Parse(response_data.memory);
+    if (!json) {
+        char const *error_ptr = cJSON_GetErrorPtr();
+        if (error_ptr != NULL) {
+            printf("Error: JSON parse error before: %s\n", error_ptr);
+        }
+        goto out;
+    }
+
+    if (version_out) {
+        cJSON *tag = cJSON_GetObjectItemCaseSensitive(json, "tag_name");
+        if (!tag || !cJSON_IsString(tag) || !tag->valuestring) {
+            printf("Error: 'tag_name' not found in release JSON\n");
+            goto out;
+        }
+        // Strip a common leading 'v' so it compares against PROJECT_VER.
+        char const *tag_str = tag->valuestring;
+        if (tag_str[0] == 'v' || tag_str[0] == 'V') {
+            ++tag_str;
+        }
+        *version_out = strdup(tag_str);
+    }
+
+    if (asset_url_out) {
+        cJSON *assets = cJSON_GetObjectItemCaseSensitive(json, "assets");
+        if (!assets || !cJSON_IsArray(assets)) {
+            printf("Error: 'assets' array not found in release JSON\n");
+            goto out;
+        }
+
+        cJSON *asset = NULL;
+        cJSON_ArrayForEach(asset, assets) {
+            cJSON *name = cJSON_GetObjectItemCaseSensitive(asset, "name");
+            if (!name || !cJSON_IsString(name) || !name->valuestring) {
+                continue;
+            }
+            if (strcmp(name->valuestring, GITHUB_FIRMWARE_ASSET) != 0) {
+                continue;
+            }
+            cJSON *dl = cJSON_GetObjectItemCaseSensitive(asset, "browser_download_url");
+            if (dl && cJSON_IsString(dl) && dl->valuestring) {
+                *asset_url_out = strdup(dl->valuestring);
+            }
+            break;
+        }
+
+        if (!*asset_url_out) {
+            printf("Error: asset '%s' not found in release assets\n", GITHUB_FIRMWARE_ASSET);
+            goto out;
+        }
+    }
+
+    ret = true;
+out:
+    if (!ret) {
+        if (version_out && *version_out) {
+            free(*version_out);
+            *version_out = NULL;
+        }
+        if (asset_url_out && *asset_url_out) {
+            free(*asset_url_out);
+            *asset_url_out = NULL;
+        }
+    }
+    cJSON_Delete(json);
+    free(response_data.memory);
+    return ret;
+}
+
 bool update_firmware() {
-    bool  ret = false;
-    char *url = NULL;
+    bool  ret       = false;
+    char *asset_url = NULL;
 
     ota_handle_t ota_session = ota_session_open();
     if (!ota_session) {
@@ -554,24 +648,28 @@ bool update_firmware() {
         goto out;
     }
 
-    char const *firmware_name = FIRMWARE_PROJECT;
-    printf("getting revision for %s\n", firmware_name);
-    int revision = get_project_latest_revision(firmware_name);
-    if (revision < 0) {
-        printf("Failed to get firmware revision\n");
+    if (!github_get_latest_firmware_release(NULL, &asset_url)) {
+        printf("Failed to resolve firmware asset URL from GitHub\n");
+        ota_session_abort(ota_session);
         goto out;
     }
 
-    asprintf(&url, BADGEHUB_FIRMWARE_URL, revision);
-    if (!do_firmware_http(url, ota_session)) {
-        printf("Failed to update firmware\n");
+    printf("Downloading firmware from %s\n", asset_url);
+    if (!do_firmware_http(asset_url, ota_session)) {
+        printf("Failed to download firmware\n");
+        ota_session_abort(ota_session);
         goto out;
     }
 
-    ota_session_commit(ota_session);
+    if (!ota_session_commit(ota_session)) {
+        printf("Failed to commit OTA session\n");
+        goto out;
+    }
+
+    ret = true;
     debug_printf("Firmware updated!\n");
 out:
-    free(url);
+    free(asset_url);
     return ret;
 }
 
@@ -583,16 +681,9 @@ bool check_for_firmware_updates(char **version) {
     char *running      = NULL;
     char *running_back = NULL;
 
-    char const *firmware_name = FIRMWARE_PROJECT;
-    printf("Checking for updates for %s\n", firmware_name);
-    int revision = get_project_latest_revision(firmware_name);
-    if (revision < 0) {
-        printf("Failed to get firmware revision\n");
-        goto out;
-    }
-
-    if (!get_project_latest_version(firmware_name, revision, version)) {
-        printf("Failed to get firmware version\n");
+    printf("Checking for firmware updates on GitHub (%s)\n", GITHUB_FIRMWARE_REPO);
+    if (!github_get_latest_firmware_release(version, NULL)) {
+        printf("Failed to get latest firmware version from GitHub\n");
         goto out;
     }
 
@@ -605,6 +696,7 @@ bool check_for_firmware_updates(char **version) {
     ota_get_running_version(&running);
 
     int vers = strverscmp(running, *version);
+    printf("Firmware: running '%s' vs available '%s' (strverscmp=%d)\n", running, *version, vers);
     if (vers < 0) {
         ret = true;
     }

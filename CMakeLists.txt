@@ -12,6 +12,33 @@ include($ENV{IDF_PATH}/tools/cmake/project.cmake)
 #  targets: gen_project_binary
 set(EXTRA_COMPONENT_DIRS badgevms)
 set(COMPONENTS badgevms)
+
+# Derive the firmware version (esp_app_desc_t.version, returned by
+# ota_get_running_version()) from git tags so it can be compared against a
+# GitHub Release tag_name during OTA. A clean tagged build (the release CI
+# checks out the exact tag) yields e.g. "1.0.0"; untagged dev builds yield a
+# "git describe" string like "1.0.0-4-gabcdef" (still a sane strverscmp input).
+# Setting PROJECT_VER here overrides the legacy static version.txt.
+find_package(Git QUIET)
+set(_BADGEVMS_VER "0.0.0")
+if(Git_FOUND)
+    execute_process(
+        COMMAND ${GIT_EXECUTABLE} describe --tags --always --dirty
+        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+        OUTPUT_VARIABLE _GIT_DESCRIBE
+        OUTPUT_STRIP_TRAILING_WHITESPACE
+        ERROR_QUIET
+    )
+    if(_GIT_DESCRIBE)
+        # Strip a leading "v" so it matches the tag-name convention after the
+        # badge-side strips it too (keeps both sides comparing "1.0.0").
+        string(REGEX REPLACE "^v" "" _GIT_DESCRIBE "${_GIT_DESCRIBE}")
+        set(_BADGEVMS_VER "${_GIT_DESCRIBE}")
+    endif()
+endif()
+set(PROJECT_VER "${_BADGEVMS_VER}")
+message(STATUS "BadgeVMS firmware version (PROJECT_VER): ${PROJECT_VER}")
+
 project(badgevms)
 
 if(CMAKE_HOST_SYSTEM_NAME STREQUAL "Linux")
