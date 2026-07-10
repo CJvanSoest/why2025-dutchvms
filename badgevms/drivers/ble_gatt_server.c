@@ -361,6 +361,16 @@ static void host_task(void *arg) {
 
 /* ===== Public API ===== */
 
+/* Bring-up is a strict chain (bt_controller_init -> _enable -> nimble_port_init
+ * -> GATT/name setup) and every step here has a real, documented undo:
+ * esp_hosted_bt_controller_deinit()/_disable() and nimble_port_deinit(). If any
+ * step fails partway, we must run that undo chain in reverse before returning
+ * false — otherwise the co-processor BT controller / nimble host is left
+ * half-initialized and every subsequent ble_gatt_server_init() call (e.g. the
+ * next time the app is launched) re-enters an already-partially-initialized
+ * stack and fails again for a *different* reason, wedging BLE until a full
+ * badge reboot. That was the actual bug: `initialized` was only ever set true
+ * on full success, but nothing rolled back a partial success on failure. */
 bool ble_gatt_server_init(char const *device_name_in) {
     if (initialized)
         return true;
@@ -369,18 +379,29 @@ bool ble_gatt_server_init(char const *device_name_in) {
     if (!ring_lock)
         return false;
 
+    /* Declared up front, not at first use: several `goto`s below jump forward
+     * past this point, and a forward jump into the middle of a block that
+     * skips a variable's initializer is legal C but not something worth
+     * relying on here. */
+    int name_rc;
+
     esp_err_t res = esp_hosted_bt_controller_init();
     if (res != ESP_OK) {
         ESP_LOGE(TAG, "esp_hosted_bt_controller_init failed: %s", esp_err_to_name(res));
-        return false;
+        goto fail_ring_lock;
     }
+
     res = esp_hosted_bt_controller_enable();
     if (res != ESP_OK) {
         ESP_LOGE(TAG, "esp_hosted_bt_controller_enable failed: %s", esp_err_to_name(res));
-        return false;
+        goto fail_controller_init;
     }
 
-    nimble_port_init();
+    res = nimble_port_init();
+    if (res != ESP_OK) {
+        ESP_LOGE(TAG, "nimble_port_init failed: %s", esp_err_to_name(res));
+        goto fail_controller_enable;
+    }
 
     /* LE Secure Connections + bonding + MITM, Passkey Display Entry —
      * identical security posture to Tanmatsu's ble_companion.c. Bonds
@@ -396,16 +417,43 @@ bool ble_gatt_server_init(char const *device_name_in) {
     ble_hs_cfg.sm_our_key_dist   = BLE_SM_PAIR_KEY_DIST_ENC | BLE_SM_PAIR_KEY_DIST_ID;
     ble_hs_cfg.sm_their_key_dist = BLE_SM_PAIR_KEY_DIST_ENC | BLE_SM_PAIR_KEY_DIST_ID;
 
+    /* ble_svc_gap_init()/ble_svc_gatt_init() are void — NimBLE gives them no
+     * way to report failure. ble_svc_gap_device_name_set() does return an
+     * error (e.g. name too long), so it's the last thing checked below. */
     ble_svc_gap_init();
     ble_svc_gatt_init();
 
     strncpy(device_name, device_name_in ? device_name_in : "WHY2025", BLE_DEVICE_NAME_MAX_LEN);
     device_name[BLE_DEVICE_NAME_MAX_LEN] = '\0';
-    ble_svc_gap_device_name_set(device_name);
+    name_rc                              = ble_svc_gap_device_name_set(device_name);
+    if (name_rc != 0) {
+        ESP_LOGE(TAG, "ble_svc_gap_device_name_set failed rc=%d", name_rc);
+        goto fail_nimble_port_init;
+    }
 
     initialized = true;
     ESP_LOGI(TAG, "init OK (name=\"%s\")", device_name);
     return true;
+
+fail_nimble_port_init: {
+    esp_err_t port_res = nimble_port_deinit();
+    ESP_LOGW(TAG, "rollback: nimble_port_deinit rc=%s", esp_err_to_name(port_res));
+}
+fail_controller_enable: {
+    esp_err_t dis_res = esp_hosted_bt_controller_disable();
+    ESP_LOGW(TAG, "rollback: esp_hosted_bt_controller_disable rc=%s", esp_err_to_name(dis_res));
+}
+fail_controller_init: {
+    /* mem_release=false: releasing the co-processor's BT-controller memory
+     * would make it impossible to esp_hosted_bt_controller_init() again this
+     * boot session — exactly what the next retry needs to be able to do. */
+    esp_err_t deinit_res = esp_hosted_bt_controller_deinit(false);
+    ESP_LOGW(TAG, "rollback: esp_hosted_bt_controller_deinit rc=%s", esp_err_to_name(deinit_res));
+}
+fail_ring_lock:
+    vSemaphoreDelete(ring_lock);
+    ring_lock = NULL;
+    return false;
 }
 
 int ble_service_register(ble_service_def_t const *service) {
