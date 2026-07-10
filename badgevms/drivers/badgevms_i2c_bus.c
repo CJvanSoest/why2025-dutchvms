@@ -574,11 +574,17 @@ static void ws2812_set_scaled(int i, uint8_t r, uint8_t g, uint8_t b) {
 /* Status indicator on the 4 RGBW LEDs (GPIO7):
  *   LED0 = LoRa radio  : green = up/active, blue = starting up, red = offline
  *   LED1 = WiFi        : green = connected, blue = enabled/connecting, off = disabled
- *   LED2, LED3 = LED-notify : shared "unread notification" indicator, driven by
- *                the notify.c table (badgevms/notify.h) rather than any single
- *                app - whichever app increments its counter (e.g. cj_meshcore on
- *                a new DM/channel message) lights these up, and they turn off
- *                again automatically once every tracked app is back to 0/clean.
+ *   LED2       = LED-notify (DM)      : notify.c identifier "cj_meshcore.dm"
+ *   LED3       = LED-notify (channel) : notify.c identifier "cj_meshcore.channel"
+ *                Each LED is driven independently off its own notify_get_dirty()
+ *                identifier rather than the shared notify_any_dirty() aggregate,
+ *                so LED2 lights only for unread DMs and LED3 only for unread
+ *                channel messages (e.g. LED2 blinking with LED3 off means "unread
+ *                DMs, no unread channel traffic"). This deliberately couples the
+ *                kernel LED driver to cj_meshcore's specific notify identifiers
+ *                instead of staying app-agnostic like notify_any_dirty() - not
+ *                generic, but acceptable on this personal single-user badge
+ *                where cj_meshcore is the only app that uses LED-notify today.
  *                Slow ~0.5 Hz on/off pulse on the W (white) channel only, so it
  *                reads as clearly distinct from the R/G/B colors used by LED0/
  *                LED1 above, and deliberately exercises the RGBW W-byte (this
@@ -619,20 +625,17 @@ static void ws2812_task(void *arg) {
             ws2812_set_scaled(1, 0, 0, 255); /* blue: enabled / connecting */
         }
 
-        /* LED2, LED3: LED-notify. Cheap poll (once per this task's existing
-         * 1s cadence - no separate task/timer needed) across the shared
-         * notify.c table; on while any app is dirty, off once they've all
-         * been cleared. Dim white, blinking every other second (~0.5 Hz) so
-         * it reads as "waiting for attention" rather than a steady-on light. */
-        if (notify_any_dirty()) {
-            uint8_t const w     = (uint8_t)((255u * LED_BRIGHTNESS) / 100u);
-            uint8_t const pulse = (secs % 2 == 0) ? w : 0;
-            ws2812_set(2, 0, 0, 0, pulse);
-            ws2812_set(3, 0, 0, 0, pulse);
-        } else {
-            ws2812_set(2, 0, 0, 0, 0);
-            ws2812_set(3, 0, 0, 0, 0);
-        }
+        /* LED2, LED3: LED-notify, each on its own cj_meshcore notify.c
+         * identifier (see file header comment above) instead of the shared
+         * notify_any_dirty() aggregate - LED2=DM, LED3=channel, independently
+         * on/off. Cheap poll (once per this task's existing 1s cadence - no
+         * separate task/timer needed). Dim white, blinking every other second
+         * (~0.5 Hz) so it reads as "waiting for attention" rather than a
+         * steady-on light. */
+        uint8_t const w     = (uint8_t)((255u * LED_BRIGHTNESS) / 100u);
+        uint8_t const pulse = (secs % 2 == 0) ? w : 0;
+        ws2812_set(2, 0, 0, 0, notify_get_dirty("cj_meshcore.dm") ? pulse : 0);
+        ws2812_set(3, 0, 0, 0, notify_get_dirty("cj_meshcore.channel") ? pulse : 0);
 
         ws2812_show();
         vTaskDelay(pdMS_TO_TICKS(1000));
