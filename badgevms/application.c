@@ -19,6 +19,8 @@
 #include "badgevms/pathfuncs.h"
 #include "badgevms/process.h"
 #include "esp_log.h"
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
 #include "thirdparty/cJSON.h"
 #include "why_io.h"
 
@@ -42,6 +44,20 @@ extern char *why_strerror(int errnum);
 
 #define APPLICATION_MAGIC 0xDEADBEEF
 #define MAX_PATH_LEN      512
+
+// Manifest reads can transiently fail during rapid, back-to-back enumeration
+// (application_list() opens/reads every <uid>.json in a tight loop). On this
+// ESP32-P4 target the FATFS sector buffers are placed in PSRAM
+// (CONFIG_FATFS_ALLOC_PREFER_EXTRAM=y) and filled by SDMMC DMA
+// (CONFIG_SOC_SDMMC_PSRAM_DMA_CAPABLE=y); under fast sequential opens a
+// cache-coherency race can hand back a "successful" full-size read whose
+// destination buffer is still stale/zeroed, which then fails to JSON-parse at
+// offset 0. The failure is not sticky: a fresh open+read (new fd, new stdio
+// buffer, new heap allocation) reliably returns the real bytes. Retry a few
+// times before giving up so a dropped read never silently loses an installed
+// app from the launcher. See MEMORY: why2025 task #19 follow-up.
+#define METADATA_LOAD_MAX_ATTEMPTS   3
+#define METADATA_LOAD_RETRY_DELAY_MS 2
 
 static char applications_base_dir[MAX_PATH_LEN] = "";
 
@@ -210,73 +226,142 @@ static application_t *load_application_metadata(char const *unique_identifier) {
         return NULL;
     }
 
-    FILE *fp = why_fopen(metadata_path, "r");
-    if (!fp) {
-        ESP_LOGW(TAG, "SKIP %s: fopen(%s) failed: %s", unique_identifier, metadata_path, why_strerror(*why_errno()));
-        why_free(metadata_path);
-        return NULL;
-    }
+    // Retry loop: a transient FATFS/PSRAM-DMA read race (see comment at
+    // METADATA_LOAD_MAX_ATTEMPTS) can yield a zero/garbage buffer on an
+    // otherwise "successful" read. Re-open from scratch on any read/parse
+    // failure so we never silently drop a valid app during enumeration.
+    cJSON *json = NULL;
+    for (int attempt = 1; attempt <= METADATA_LOAD_MAX_ATTEMPTS; ++attempt) {
+        FILE *fp = why_fopen(metadata_path, "r");
+        if (!fp) {
+            // A hard open failure (missing/renamed/permission) is not the
+            // transient class this loop guards against - don't spin on it.
+            ESP_LOGW(
+                TAG,
+                "SKIP %s: fopen(%s) failed: %s",
+                unique_identifier,
+                metadata_path,
+                why_strerror(*why_errno())
+            );
+            break;
+        }
 
-    why_fseek(fp, 0, SEEK_END);
-    long file_size = why_ftell(fp);
-    why_fseek(fp, 0, SEEK_SET);
+        why_fseek(fp, 0, SEEK_END);
+        long file_size = why_ftell(fp);
+        why_fseek(fp, 0, SEEK_SET);
 
-    if (file_size <= 0) {
-        ESP_LOGW(TAG, "SKIP %s: %s is empty or ftell failed (size=%ld)", unique_identifier, metadata_path, file_size);
+        if (file_size <= 0) {
+            ESP_LOGW(
+                TAG,
+                "SKIP %s: %s is empty or ftell failed (size=%ld)",
+                unique_identifier,
+                metadata_path,
+                file_size
+            );
+            why_fclose(fp);
+            break;
+        }
+
+        char *content = why_malloc(file_size + 1);
+        if (!content) {
+            ESP_LOGW(
+                TAG,
+                "SKIP %s: out of memory allocating %ld bytes for %s",
+                unique_identifier,
+                file_size,
+                metadata_path
+            );
+            why_fclose(fp);
+            break;
+        }
+
+        size_t read_bytes   = why_fread(content, 1, file_size, fp);
+        int    read_errno   = *why_errno();
+        content[read_bytes] = '\0';
         why_fclose(fp);
-        why_free(metadata_path);
-        return NULL;
+
+        // Diagnostic: hex-dump the leading bytes of what we actually read. The
+        // observed failure mode is a full-size read (read_bytes == file_size)
+        // whose buffer is all-zero, so cJSON fails at offset 0 with an empty
+        // "near" string. Printing the raw head distinguishes "filesystem
+        // handed back zeros" from "genuinely malformed JSON on disk" and
+        // records errno at the moment of the read.
+        char   head_hex[3 * 16 + 1];
+        size_t head_n = read_bytes < 16 ? read_bytes : 16;
+        for (size_t h = 0; h < head_n; ++h) {
+            snprintf(head_hex + h * 3, 4, "%02x ", (unsigned char)content[h]);
+        }
+        head_hex[head_n ? head_n * 3 - 1 : 0] = '\0';
+
+        bool last_attempt = (attempt == METADATA_LOAD_MAX_ATTEMPTS);
+
+        if (read_bytes != (size_t)file_size) {
+            ESP_LOGW(
+                TAG,
+                "%s %s: short read on %s (expected %ld bytes, got %zu, errno=%d) head=[%s] [attempt %d/%d]",
+                last_attempt ? "SKIP" : "RETRY",
+                unique_identifier,
+                metadata_path,
+                file_size,
+                read_bytes,
+                read_errno,
+                head_hex,
+                attempt,
+                METADATA_LOAD_MAX_ATTEMPTS
+            );
+            why_free(content);
+            if (!last_attempt)
+                vTaskDelay(pdMS_TO_TICKS(METADATA_LOAD_RETRY_DELAY_MS));
+            continue;
+        }
+
+        char const *error_ptr = NULL;
+        json                  = cJSON_ParseWithOpts(content, &error_ptr, false);
+
+        if (!json) {
+            size_t offset = error_ptr ? (size_t)((char const *)error_ptr - content) : 0;
+            ESP_LOGW(
+                TAG,
+                "%s %s: cJSON_Parse failed on %s at offset %zu (read %zu/%ld bytes, errno=%d) head=[%s] near: "
+                "\"%.40s\" [attempt %d/%d]",
+                last_attempt ? "SKIP" : "RETRY",
+                unique_identifier,
+                metadata_path,
+                offset,
+                read_bytes,
+                file_size,
+                read_errno,
+                head_hex,
+                error_ptr ? error_ptr : "(unknown)",
+                attempt,
+                METADATA_LOAD_MAX_ATTEMPTS
+            );
+            why_free(content);
+            if (!last_attempt)
+                vTaskDelay(pdMS_TO_TICKS(METADATA_LOAD_RETRY_DELAY_MS));
+            continue;
+        }
+
+        // Success. Note when a retry rescued us so the intermittent read
+        // race is visible in the logs rather than silently masked.
+        if (attempt > 1) {
+            ESP_LOGI(
+                TAG,
+                "RECOVERED %s: manifest read succeeded on attempt %d/%d",
+                unique_identifier,
+                attempt,
+                METADATA_LOAD_MAX_ATTEMPTS
+            );
+        }
+        why_free(content);
+        break;
     }
 
-    char *content = why_malloc(file_size + 1);
-    if (!content) {
-        ESP_LOGW(
-            TAG,
-            "SKIP %s: out of memory allocating %ld bytes for %s",
-            unique_identifier,
-            file_size,
-            metadata_path
-        );
-        why_fclose(fp);
-        why_free(metadata_path);
-        return NULL;
-    }
-
-    size_t read_bytes   = why_fread(content, 1, file_size, fp);
-    content[read_bytes] = '\0';
-    why_fclose(fp);
-
-    if (read_bytes != (size_t)file_size) {
-        ESP_LOGW(
-            TAG,
-            "WARN %s: short read on %s (expected %ld bytes, got %zu)",
-            unique_identifier,
-            metadata_path,
-            file_size,
-            read_bytes
-        );
-    }
-
-    char const *error_ptr = NULL;
-    cJSON      *json      = cJSON_ParseWithOpts(content, &error_ptr, false);
+    why_free(metadata_path);
 
     if (!json) {
-        size_t offset = error_ptr ? (size_t)((char const *)error_ptr - content) : 0;
-        ESP_LOGW(
-            TAG,
-            "SKIP %s: cJSON_Parse failed on %s at offset %zu, near: \"%.40s\"",
-            unique_identifier,
-            metadata_path,
-            offset,
-            error_ptr ? error_ptr : "(unknown)"
-        );
-        why_free(content);
-        why_free(metadata_path);
         return NULL;
     }
-
-    why_free(content);
-    why_free(metadata_path);
 
     application_t *app = json_to_application(json);
     cJSON_Delete(json);
@@ -526,19 +611,51 @@ application_list_handle application_list(application_t **out) {
         return NULL;
     }
 
-    // Count .json files first
+    // Snapshot every <uid>.json name into an in-memory array in a single
+    // readdir pass, then close the directory handle *before* opening any
+    // manifest file. Previously the directory stayed open across the whole
+    // load loop (one why_fopen per app); collecting names up front means the
+    // enumeration never overlaps the file-open phase, so no directory/file
+    // handle state can compete for a shared resource during the reads.
     struct dirent *entry;
+    char         **unique_ids = NULL;
     size_t         json_count = 0;
+    size_t         capacity   = 0;
 
     while ((entry = why_readdir(dir)) != NULL) {
         size_t len = strlen(entry->d_name);
-        if (len > 5 && strcmp(entry->d_name + len - 5, ".json") == 0) {
-            json_count++;
+        if (len <= 5 || strcmp(entry->d_name + len - 5, ".json") != 0) {
+            continue;
         }
+
+        if (json_count == capacity) {
+            size_t new_capacity = capacity ? capacity * 2 : 8;
+            char **grown        = why_realloc(unique_ids, new_capacity * sizeof(char *));
+            if (!grown) {
+                // Keep whatever we already gathered rather than failing the
+                // whole listing on a transient allocation hiccup.
+                ESP_LOGW(TAG, "application_list: realloc failed at %zu entries, truncating", json_count);
+                break;
+            }
+            unique_ids = grown;
+            capacity   = new_capacity;
+        }
+
+        char *unique_id = why_malloc(len - 4);
+        if (!unique_id) {
+            continue;
+        }
+        strncpy(unique_id, entry->d_name, len - 5);
+        unique_id[len - 5]       = '\0';
+        unique_ids[json_count++] = unique_id;
     }
 
+    // Directory fully enumerated and released; no dirent state is held open
+    // during the manifest reads below.
+    why_closedir(dir);
+
     if (json_count == 0) {
-        why_closedir(dir);
+        why_free(unique_ids);
         if (out)
             *out = NULL;
         return list;
@@ -546,30 +663,27 @@ application_list_handle application_list(application_t **out) {
 
     list->applications = why_calloc(json_count, sizeof(application_t *));
     if (!list->applications) {
-        why_closedir(dir);
+        for (size_t i = 0; i < json_count; ++i) {
+            why_free(unique_ids[i]);
+        }
+        why_free(unique_ids);
         why_free(list);
         return NULL;
     }
 
-    why_rewinddir(dir);
-    while ((entry = why_readdir(dir)) != NULL && list->count < json_count) {
-        size_t len = strlen(entry->d_name);
-        if (len > 5 && strcmp(entry->d_name + len - 5, ".json") == 0) {
-            char *unique_id = why_malloc(len - 4);
-            if (unique_id) {
-                strncpy(unique_id, entry->d_name, len - 5);
-                unique_id[len - 5] = '\0';
+    for (size_t i = 0; i < json_count; ++i) {
+        // Log the enumeration index so an on-device capture shows whether load
+        // failures track absolute position in the pass (pointing at a resource
+        // consumed per-open) or specific manifests (pointing at their bytes).
+        ESP_LOGI(TAG, "Loading manifest %zu/%zu: %s", i + 1, json_count, unique_ids[i]);
 
-                application_t *app = load_application_metadata(unique_id);
-                if (app) {
-                    list->applications[list->count++] = app;
-                }
-                why_free(unique_id);
-            }
+        application_t *app = load_application_metadata(unique_ids[i]);
+        if (app) {
+            list->applications[list->count++] = app;
         }
+        why_free(unique_ids[i]);
     }
-
-    why_closedir(dir);
+    why_free(unique_ids);
 
     if (out && list->count > 0) {
         *out = list->applications[0];

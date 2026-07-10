@@ -585,12 +585,16 @@ static void ws2812_set_scaled(int i, uint8_t r, uint8_t g, uint8_t b) {
  *                instead of staying app-agnostic like notify_any_dirty() - not
  *                generic, but acceptable on this personal single-user badge
  *                where cj_meshcore is the only app that uses LED-notify today.
- *                Slow ~0.5 Hz on/off pulse on the W (white) channel only, so it
- *                reads as clearly distinct from the R/G/B colors used by LED0/
- *                LED1 above, and deliberately exercises the RGBW W-byte (this
- *                add-on's LEDs are XL-5050RGBWC, NOT plain WS2812B - they need
- *                the 4-byte G,R,B,W protocol already implemented in ws2812_set()/
- *                ws2812_show() above; do not bypass those helpers here).
+ *                Slow ~0.5 Hz on/off pulse, LED2=yellow (DM) / LED3=blue
+ *                (channel) via explicit R/G/B (CJ's chosen colors) - NOT the
+ *                W channel: the WHY2025_demo.ino reference sketch for this
+ *                same XL-5050RGBWC hardware never uses W for anything (always
+ *                passes 0), and testing confirmed the W-channel die on this
+ *                part reads as blue-tinted rather than neutral white, so W is
+ *                unreliable for a specific expected color here. Still 4-byte
+ *                G,R,B,W protocol via ws2812_set()/ws2812_show() above (this
+ *                add-on's LEDs are XL-5050RGBWC, NOT plain WS2812B); W is just
+ *                always 0 for these two.
  * State comes from the firmware-internal LoRa/WiFi query APIs plus notify.c. */
 #define LORA_STARTUP_GRACE_S 15
 static void ws2812_task(void *arg) {
@@ -627,15 +631,23 @@ static void ws2812_task(void *arg) {
 
         /* LED2, LED3: LED-notify, each on its own cj_meshcore notify.c
          * identifier (see file header comment above) instead of the shared
-         * notify_any_dirty() aggregate - LED2=DM, LED3=channel, independently
-         * on/off. Cheap poll (once per this task's existing 1s cadence - no
-         * separate task/timer needed). Dim white, blinking every other second
-         * (~0.5 Hz) so it reads as "waiting for attention" rather than a
-         * steady-on light. */
-        uint8_t const w     = (uint8_t)((255u * LED_BRIGHTNESS) / 100u);
-        uint8_t const pulse = (secs % 2 == 0) ? w : 0;
-        ws2812_set(2, 0, 0, 0, notify_get_dirty("cj_meshcore.dm") ? pulse : 0);
-        ws2812_set(3, 0, 0, 0, notify_get_dirty("cj_meshcore.channel") ? pulse : 0);
+         * notify_any_dirty() aggregate - LED2=DM (yellow), LED3=channel
+         * (blue), independently on/off. Cheap poll (once per this task's
+         * existing 1s cadence - no separate task/timer needed). Blinking
+         * every other second (~0.5 Hz) so it reads as "waiting for
+         * attention" rather than a steady-on light. */
+        bool const dm_on = (secs % 2 == 0) && notify_get_dirty("cj_meshcore.dm");
+        bool const ch_on = (secs % 2 == 0) && notify_get_dirty("cj_meshcore.channel");
+        if (dm_on) {
+            ws2812_set_scaled(2, 255, 255, 0); /* yellow: unread DM */
+        } else {
+            ws2812_set_scaled(2, 0, 0, 0);
+        }
+        if (ch_on) {
+            ws2812_set_scaled(3, 0, 0, 255); /* blue: unread channel message */
+        } else {
+            ws2812_set_scaled(3, 0, 0, 0);
+        }
 
         ws2812_show();
         vTaskDelay(pdMS_TO_TICKS(1000));

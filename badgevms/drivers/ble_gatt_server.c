@@ -43,6 +43,7 @@
 #include "esp_log.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/semphr.h"
+#include "freertos/task.h"
 #include "host/ble_hs.h"
 #include "host/ble_uuid.h"
 #include "host/util/util.h"
@@ -454,6 +455,105 @@ fail_ring_lock:
     vSemaphoreDelete(ring_lock);
     ring_lock = NULL;
     return false;
+}
+
+/* Mirror image of ble_gatt_server_init() — see badgevms/ble.h for why this
+ * exists (the close-then-reopen-within-one-boot bug) and the exact rollback
+ * order it must follow (same chain as the fail_* labels above, run
+ * unconditionally here instead of via goto since we're tearing down a
+ * (partially or fully) successful bring-up rather than unwinding a failed
+ * one). */
+void ble_gatt_server_deinit(void) {
+    if (!initialized)
+        return;
+
+    want_advertise = false;
+    if (committed) {
+        ble_gap_adv_stop();
+        if (active_conn != BLE_CONN_INVALID) {
+            /* ble_gap_terminate() only *requests* a disconnect -- it returns
+             * before the peer link actually drops, and BLE_GAP_EVENT_DISCONNECT
+             * (which is what actually clears active_conn, see
+             * gap_event_handler() above) fires later, asynchronously, off the
+             * NimBLE host task.
+             *
+             * A first attempt at this fix cleared active_conn right here,
+             * then called nimble_port_stop() a few times trusting its return
+             * code as the "did it actually stop" signal. That was wrong on
+             * both counts: (1) clearing our own bookkeeping early throws away
+             * the only thing we could actually poll, and (2)
+             * nimble_port_stop() returns 0 whether or not the underlying
+             * ble_hs_stop() call actually tore down the connection --
+             * confirmed on real hardware: "ble_hs_stop: failed to terminate
+             * connection; rc=2" from NimBLE's own log kept firing with zero
+             * corresponding "attempt N/10" retries ever printed, meaning the
+             * retry loop's very first nimble_port_stop() call reported
+             * success despite that failure. So: actually wait for the real
+             * event instead of trusting either signal. */
+            ble_gap_terminate(active_conn, BLE_ERR_REM_USER_CONN_TERM);
+            int waited_ms = 0;
+            while (active_conn != BLE_CONN_INVALID && waited_ms < 2000) {
+                vTaskDelay(pdMS_TO_TICKS(50));
+                waited_ms += 50;
+            }
+            if (active_conn != BLE_CONN_INVALID) {
+                ESP_LOGW(TAG, "disconnect did not complete within 2s - forcing stop anyway");
+                active_conn = BLE_CONN_INVALID;
+            }
+        }
+
+        /* Ask the NimBLE host loop (host_task(), blocked in
+         * nimble_port_run()) to return — it then calls
+         * nimble_port_freertos_deinit() itself (see host_task() above) before
+         * its task exits. Its return code is NOT a reliable signal either way
+         * (see above) -- this is now just a best-effort request, the actual
+         * safety comes from having waited for the real disconnect above. */
+        int rc = nimble_port_stop();
+        if (rc != 0)
+            ESP_LOGW(TAG, "nimble_port_stop rc=%d (non-fatal, proceeding)", rc);
+        /* Give host_task() a moment to actually unwind and call
+         * nimble_port_freertos_deinit() itself before we free the resources
+         * it depends on -- same "good enough, not a hard synchronisation
+         * primitive" tolerance the rest of this driver already accepts (e.g.
+         * ble_companion.c's usleep() between back-to-back notifies). */
+        vTaskDelay(pdMS_TO_TICKS(150));
+    }
+
+    esp_err_t port_res = nimble_port_deinit();
+    if (port_res != ESP_OK)
+        ESP_LOGW(TAG, "deinit: nimble_port_deinit rc=%s", esp_err_to_name(port_res));
+
+    esp_err_t dis_res = esp_hosted_bt_controller_disable();
+    if (dis_res != ESP_OK)
+        ESP_LOGW(TAG, "deinit: esp_hosted_bt_controller_disable rc=%s", esp_err_to_name(dis_res));
+
+    /* mem_release=false, same rationale as the fail_controller_init rollback
+     * above: keep the co-processor's BT-controller memory available so a
+     * later esp_hosted_bt_controller_init() this boot session can succeed
+     * again. */
+    esp_err_t deinit_res = esp_hosted_bt_controller_deinit(false);
+    if (deinit_res != ESP_OK)
+        ESP_LOGW(TAG, "deinit: esp_hosted_bt_controller_deinit rc=%s", esp_err_to_name(deinit_res));
+
+    if (ring_lock) {
+        vSemaphoreDelete(ring_lock);
+        ring_lock = NULL;
+    }
+
+    /* Reset every module-static bring-up flag so a later ble_gatt_server_init()
+     * this boot session starts genuinely fresh instead of short-circuiting on
+     * stale state — this is the actual fix for the reopen bug (see ble.h). */
+    memset(svc_table, 0, sizeof(svc_table));
+    svc_count   = 0;
+    active_conn = BLE_CONN_INVALID;
+    synced      = false;
+    advertising = false;
+    committed   = false;
+    initialized = false;
+    ring_head   = 0;
+    ring_tail   = 0;
+
+    ESP_LOGI(TAG, "deinit complete");
 }
 
 int ble_service_register(ble_service_def_t const *service) {

@@ -41,6 +41,7 @@ include:
   - badgevms/wifi.h
   - badgevms/lora.h
   - badgevms/ble.h
+  - badgevms/nvs.h
   - curl/curl.h
   - wrapped_funcs.h
 
@@ -918,11 +919,15 @@ simple_function:
   - ble_characteristic_set_value
   - ble_clear_bonds
   - ble_disconnect
+  - ble_gatt_server_deinit
   - ble_gatt_server_init
   - ble_get_status
   - ble_pairing_set_passkey
   - ble_poll_event
   - ble_service_register
+  - bv_nvs_get_blob
+  - bv_nvs_get_or_create_key
+  - bv_nvs_set_blob
   - device_get
   - get_mac_address
   - get_num_tasks

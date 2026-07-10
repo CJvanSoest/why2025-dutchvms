@@ -103,6 +103,25 @@ typedef struct {
  * could not be brought up (see docs/PROJECT_SETUP.md §13.7). */
 bool ble_gatt_server_init(char const *device_name);
 
+/* Full teardown, the mirror image of ble_gatt_server_init(): stops
+ * advertising, tears down the NimBLE host stack and the co-processor BT
+ * controller bridge (same rollback chain ble_gatt_server_init() already uses
+ * on a partial-init failure — nimble_port_deinit(), then
+ * esp_hosted_bt_controller_disable(), then esp_hosted_bt_controller_deinit()),
+ * and resets every module-static bring-up flag (committed/svc_count/
+ * svc_table/initialized) so a later ble_gatt_server_init() in the *same* boot
+ * session starts from a genuinely clean slate.
+ *
+ * Without this, closing and reopening a BLE-using app within one boot session
+ * fails silently: ble_gatt_server_init() short-circuits on `initialized`
+ * already being true and returns success, but ble_service_register() then
+ * rejects every registration because `committed` is still true from the
+ * previous session (the GATT table is "frozen" from NimBLE's point of view).
+ * Call this from an app's shutdown path (after ble_advertise_stop()) if it
+ * wants to leave BLE in a state a future reopen can use again. Safe to call
+ * even if bring-up never fully succeeded or was never attempted (no-op). */
+void ble_gatt_server_deinit(void);
+
 /* Register a GATT service and its characteristics. Must be called after
  * ble_gatt_server_init() and before ble_advertise_start() — NimBLE's GATT
  * table is fixed once advertising/serving starts. Returns the service index

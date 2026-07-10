@@ -38,6 +38,7 @@ idf_component_register(
      "init.c"
      "logical_names.c"
      "memory.c"
+     "nvs_bridge.c"
      "memory_heap_caps.c"
      "notify.c"
      "ota.c"
