@@ -818,8 +818,22 @@ void lora_task(void* pvParameters) {
 
         switch (command_status) {
             case SX126X_COMMAND_STATUS_DATA_AVAILABLE:
-                printf("Data available!\r\n");
-                read_data();
+                if (interrupts & (SX126X_IRQ_CRC_ERROR | SX126X_IRQ_HEADER_ERROR)) {
+                    // The chip reports "data available" purely based on an RX_DONE-class
+                    // event having occurred - it says nothing about whether the received
+                    // data actually passed CRC/header validation. Forwarding it anyway
+                    // hands the P4/app layer a corrupted-in-flight reception, which either
+                    // fails to deserialize outright or (worse) parses into a structurally
+                    // valid-looking but semantically bogus packet. Drop it here instead.
+                    ESP_LOGW(
+                        TAG, "Dropping received LoRa data: %s%s",
+                        (interrupts & SX126X_IRQ_CRC_ERROR) ? "CRC error " : "",
+                        (interrupts & SX126X_IRQ_HEADER_ERROR) ? "header error " : ""
+                    );
+                } else {
+                    printf("Data available!\r\n");
+                    read_data();
+                }
 
                 while (1) {
                     res = sx126x_set_op_mode_rx(&lora_handle, 0);
