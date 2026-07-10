@@ -14,7 +14,7 @@
  *   0x03 LIST  payload = [path_len:2 LE][path:N]
  *              response payload = UTF-8 text, one "<name>\t<size>\t<D|F>\n"
  *              line per directory entry (truncated, not erred, if the
- *              directory doesn't fit MAX_PAYLOAD_BYTES)
+ *              directory doesn't fit LIST_BUFFER_BYTES)
  *   0x07 PING  payload empty, response payload = ASCII version string
  *
  * Status codes (response byte):
@@ -65,8 +65,9 @@
  * which resolve through picolibc → ESP-IDF VFS → FATFS without touching
  * BadgeVMS' thread state. */
 
-#define MAX_PAYLOAD_BYTES (2 * 1024 * 1024) /* 2 MB cap */
+#define MAX_PAYLOAD_BYTES (2 * 1024 * 1024) /* 2 MB cap, PUT/GET file transfers */
 #define MAX_PATH_BYTES    256
+#define LIST_BUFFER_BYTES (16 * 1024) /* directory listing text, not a file transfer */
 
 #define CMD_PUT  0x01
 #define CMD_GET  0x02
@@ -389,7 +390,7 @@ static void handle_list(uint8_t const *payload, uint32_t len) {
         return;
     }
 
-    uint8_t *buf = malloc(MAX_PAYLOAD_BYTES);
+    uint8_t *buf = malloc(LIST_BUFFER_BYTES);
     if (!buf) {
         closedir(d);
         send_status(ST_ERR_OOM);
@@ -416,7 +417,7 @@ static void handle_list(uint8_t const *payload, uint32_t len) {
         int  n = snprintf(line, sizeof(line), "%s\t%ld\t%c\n", ent->d_name, size, is_dir ? 'D' : 'F');
         if (n <= 0)
             continue;
-        if (used + (uint32_t)n > MAX_PAYLOAD_BYTES)
+        if (used + (uint32_t)n > LIST_BUFFER_BYTES)
             break; /* truncate silently rather than overflow; list a subdir to page further */
         memcpy(buf + used, line, (size_t)n);
         used += (uint32_t)n;
