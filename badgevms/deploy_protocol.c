@@ -9,6 +9,12 @@
  * Commands:
  *   0x01 PUT   payload = [path_len:2 LE][path:N][file_data:M]
  *              response payload = [bytes_written:4 LE]
+ *   0x02 GET   payload = [path_len:2 LE][path:N]
+ *              response payload = raw file bytes
+ *   0x03 LIST  payload = [path_len:2 LE][path:N]
+ *              response payload = UTF-8 text, one "<name>\t<size>\t<D|F>\n"
+ *              line per directory entry (truncated, not erred, if the
+ *              directory doesn't fit MAX_PAYLOAD_BYTES)
  *   0x07 PING  payload empty, response payload = ASCII version string
  *
  * Status codes (response byte):
@@ -20,6 +26,7 @@
  *   0x05 ERR_WRITE
  *   0x06 ERR_UNKNOWN_CMD
  *   0x07 ERR_TOO_BIG
+ *   0x08 ERR_READ
  *
  * Logs from kernel tasks use esp_rom_printf (ESP_LOG crashes the task on
  * BadgeVMS' picolibc setup even at 4096 stack — see project memory).
@@ -39,6 +46,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 
+#include <dirent.h>
 #include <errno.h>
 #include <fcntl.h>
 #include <string.h>
@@ -61,6 +69,8 @@
 #define MAX_PATH_BYTES    256
 
 #define CMD_PUT  0x01
+#define CMD_GET  0x02
+#define CMD_LIST 0x03
 #define CMD_PING 0x07
 
 #define ST_OK              0x00
@@ -71,6 +81,7 @@
 #define ST_ERR_WRITE       0x05
 #define ST_ERR_UNKNOWN_CMD 0x06
 #define ST_ERR_TOO_BIG     0x07
+#define ST_ERR_READ        0x08
 
 static uint8_t const REQ_MAGIC[4]  = {0xDE, 0xAD, 0xBE, 0xEF};
 static uint8_t const RESP_MAGIC[4] = {0xDE, 0xAD, 0xC0, 0xDE};
@@ -278,6 +289,145 @@ static void handle_put(uint8_t const *payload, uint32_t len) {
     send_response(ST_OK, reply, 4);
 }
 
+/* Shared path-decode step for GET/LIST: both take payload = [path_len:2 LE][path:N]
+ * with no trailing data. Returns 0 and fills out_posix on success, sends an
+ * error response and returns -1 on failure. */
+static int decode_path_only_payload(uint8_t const *payload, uint32_t len, char *out_posix, size_t out_posix_size) {
+    if (len < 2) {
+        send_status(ST_ERR_BAD_FRAME);
+        return -1;
+    }
+    uint16_t path_len = (uint16_t)payload[0] | ((uint16_t)payload[1] << 8);
+    if (path_len == 0 || path_len >= MAX_PATH_BYTES) {
+        send_status(ST_ERR_BAD_PATH);
+        esp_rom_printf("[deploy] bad path_len %u\n", (unsigned)path_len);
+        return -1;
+    }
+    if ((uint32_t)path_len + 2 > len) {
+        send_status(ST_ERR_BAD_FRAME);
+        return -1;
+    }
+
+    char vms_path[MAX_PATH_BYTES];
+    memcpy(vms_path, payload + 2, path_len);
+    vms_path[path_len] = 0;
+
+    if (vms_to_posix(vms_path, out_posix, out_posix_size) != 0) {
+        send_status(ST_ERR_BAD_PATH);
+        esp_rom_printf("[deploy] bad VMS path '%s'\n", vms_path);
+        return -1;
+    }
+    return 0;
+}
+
+static void handle_get(uint8_t const *payload, uint32_t len) {
+    char posix_path[MAX_PATH_BYTES + 32];
+    if (decode_path_only_payload(payload, len, posix_path, sizeof(posix_path)) != 0)
+        return;
+
+    esp_rom_printf("[deploy] GET '%s'\n", posix_path);
+
+    int fd = open(posix_path, O_RDONLY);
+    if (fd < 0) {
+        send_status(ST_ERR_FOPEN);
+        esp_rom_printf("[deploy] GET open failed for '%s' (errno=%d)\n", posix_path, errno);
+        return;
+    }
+
+    struct stat st;
+    if (fstat(fd, &st) != 0 || st.st_size < 0 || (uint32_t)st.st_size > MAX_PAYLOAD_BYTES) {
+        close(fd);
+        send_status(ST_ERR_TOO_BIG);
+        esp_rom_printf("[deploy] GET '%s' too big or stat failed\n", posix_path);
+        return;
+    }
+
+    uint32_t file_len = (uint32_t)st.st_size;
+    uint8_t *buf      = file_len ? malloc(file_len) : NULL;
+    if (file_len && !buf) {
+        close(fd);
+        send_status(ST_ERR_OOM);
+        esp_rom_printf("[deploy] GET OOM for %u bytes\n", (unsigned)file_len);
+        return;
+    }
+
+    uint32_t total = 0;
+    while (total < file_len) {
+        ssize_t n = read(fd, buf + total, file_len - total);
+        if (n <= 0) {
+            close(fd);
+            free(buf);
+            send_status(ST_ERR_READ);
+            esp_rom_printf(
+                "[deploy] GET read failed at %u/%u (errno=%d)\n",
+                (unsigned)total,
+                (unsigned)file_len,
+                errno
+            );
+            return;
+        }
+        total += (uint32_t)n;
+    }
+    close(fd);
+
+    esp_rom_printf("[deploy] GET '%s' -> %u bytes OK\n", posix_path, (unsigned)file_len);
+    send_response(ST_OK, buf, file_len);
+    free(buf);
+}
+
+static void handle_list(uint8_t const *payload, uint32_t len) {
+    char posix_path[MAX_PATH_BYTES + 32];
+    if (decode_path_only_payload(payload, len, posix_path, sizeof(posix_path)) != 0)
+        return;
+
+    esp_rom_printf("[deploy] LIST '%s'\n", posix_path);
+
+    DIR *d = opendir(posix_path);
+    if (!d) {
+        send_status(ST_ERR_FOPEN);
+        esp_rom_printf("[deploy] LIST opendir failed for '%s' (errno=%d)\n", posix_path, errno);
+        return;
+    }
+
+    uint8_t *buf = malloc(MAX_PAYLOAD_BYTES);
+    if (!buf) {
+        closedir(d);
+        send_status(ST_ERR_OOM);
+        return;
+    }
+
+    uint32_t       used = 0;
+    struct dirent *ent;
+    while ((ent = readdir(d)) != NULL) {
+        if (strcmp(ent->d_name, ".") == 0 || strcmp(ent->d_name, "..") == 0)
+            continue;
+
+        char full[MAX_PATH_BYTES + 32 + sizeof(ent->d_name) + 2];
+        snprintf(full, sizeof(full), "%s/%s", posix_path, ent->d_name);
+        struct stat st;
+        long        size   = 0;
+        bool        is_dir = false;
+        if (stat(full, &st) == 0) {
+            size   = (long)st.st_size;
+            is_dir = S_ISDIR(st.st_mode);
+        }
+
+        char line[sizeof(ent->d_name) + 80];
+        int  n = snprintf(line, sizeof(line), "%s\t%ld\t%c\n", ent->d_name, size, is_dir ? 'D' : 'F');
+        if (n <= 0)
+            continue;
+        if (used + (uint32_t)n > MAX_PAYLOAD_BYTES)
+            break; /* truncate silently rather than overflow; list a subdir to page further */
+        memcpy(buf + used, line, (size_t)n);
+        used += (uint32_t)n;
+    }
+    closedir(d);
+
+    esp_rom_printf("[deploy] LIST '%s' -> %u bytes OK\n", posix_path, (unsigned)used);
+    send_response(ST_OK, buf, used);
+    free(buf);
+}
+
 /* ============== Frame reader / dispatcher ============== */
 
 static void process_one_frame(void) {
@@ -334,6 +484,8 @@ static void process_one_frame(void) {
     switch (cmd) {
         case CMD_PING: handle_ping(payload, len); break;
         case CMD_PUT: handle_put(payload, len); break;
+        case CMD_GET: handle_get(payload, len); break;
+        case CMD_LIST: handle_list(payload, len); break;
         default:
             esp_rom_printf("[deploy] unknown cmd 0x%02X\n", cmd);
             send_status(ST_ERR_UNKNOWN_CMD);
