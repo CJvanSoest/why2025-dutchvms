@@ -399,6 +399,7 @@ simple_function:
 #  - setlinebuf
 #  - setlocale
 #  - set_ones
+  - settimeofday
 #  - setvbuf
   - sig2str
 #  - siprintf
