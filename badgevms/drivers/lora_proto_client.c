@@ -41,6 +41,12 @@ typedef struct {
     uint32_t mode;
 } __attribute__((packed)) lora_protocol_mode_params_t;
 
+/* WIRE-COMPATIBILITY WARNING: rx_boost was appended to the end of this struct
+ * after both sides already shipped with the fields above it (same caveat as
+ * lora_protocol_rx_stats_t below — no protocol version field exists). C6 and
+ * P4 firmware must be flashed together as a matching pair; a size mismatch is
+ * rejected loudly by apply_config() on the slave rather than silently
+ * misparsed. */
 typedef struct {
     uint32_t frequency;
     uint8_t  spreading_factor;
@@ -53,6 +59,7 @@ typedef struct {
     bool     crc_enabled;
     bool     invert_iq;
     bool     low_data_rate_optimization;
+    bool     rx_boost;
 } __attribute__((packed)) lora_protocol_config_params_t;
 
 typedef struct {
@@ -286,6 +293,7 @@ bool lora_get_config(lora_config_t *out_config) {
         out_config->crc_enabled                = cp->crc_enabled;
         out_config->invert_iq                  = cp->invert_iq;
         out_config->low_data_rate_optimization = cp->low_data_rate_optimization;
+        out_config->rx_boost                   = cp->rx_boost;
         ok                                     = true;
     }
     xSemaphoreGive(mutex);
@@ -307,6 +315,7 @@ bool lora_set_config(lora_config_t const *config) {
         .crc_enabled                = config->crc_enabled,
         .invert_iq                  = config->invert_iq,
         .low_data_rate_optimization = config->low_data_rate_optimization,
+        .rx_boost                   = config->rx_boost,
     };
     xSemaphoreTake(mutex, portMAX_DELAY);
     bool ok = request_reply(LORA_PROTOCOL_TYPE_SET_CONFIG, &cp, sizeof(cp)) == ESP_OK;

@@ -34,6 +34,15 @@ typedef struct {
     lora_protocol_mode_t mode;
 } __attribute__((packed)) lora_protocol_mode_params_t;
 
+// WIRE-COMPATIBILITY WARNING: rx_boost was appended to the end of this struct
+// after both sides already shipped with the fields above it. There is no
+// protocol version field to gate on (same caveat as lora_protocol_rx_stats_t
+// below). An old P4 host talking to a new C6 slave will send a SET_CONFIG
+// payload that's sizeof(lora_protocol_config_params_t) - 1 bytes too short;
+// apply_config() in lora_protocol_server.c rejects any payload shorter than
+// sizeof(lora_protocol_config_params_t), so this fails loudly (ESP_ERR_INVALID_SIZE)
+// rather than silently misparsing, but the C6 and P4 firmware still MUST be
+// flashed together as a matching pair for LoRa config to work at all.
 typedef struct {
     uint32_t frequency;                   // Frequency in Hz
     uint8_t  spreading_factor;            // 5-12
@@ -46,6 +55,7 @@ typedef struct {
     bool     crc_enabled;                 // CRC enabled/disabled
     bool     invert_iq;                   // Invert IQ enabled/disabled
     bool     low_data_rate_optimization;  // Low data rate optimization enabled/disabled
+    bool     rx_boost;                    // Boosted RX gain (+3 dB sensitivity, +~2 mA) enabled/disabled
 } __attribute__((packed)) lora_protocol_config_params_t;
 
 typedef struct {

@@ -55,6 +55,7 @@ typedef struct {
     bool     crc_enabled;
     bool     invert_iq;
     bool     low_data_rate_optimization;
+    bool     rx_boost; /* Boosted RX gain (+3 dB sensitivity, +~2 mA) */
 } lora_config_t;
 
 typedef struct {

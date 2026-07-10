@@ -295,6 +295,15 @@ static esp_err_t apply_config(uint8_t* config_data, size_t config_length) {
         return res;
     }
 
+    // RX gain mode (SX1262 datasheet section 9.6, RxGain register 0x08AC):
+    // 0x96 = boosted (+3 dB sensitivity, +~2 mA), 0x94 = power-saving default.
+    uint8_t rx_gain = config_params->rx_boost ? 0x96 : 0x94;
+    res             = sx126x_write_register(&lora_handle, 0x08AC, &rx_gain, 1);
+    if (res != ESP_OK) {
+        ESP_LOGE(TAG, "Failed to set LoRa RX gain: %s", esp_err_to_name(res));
+        return res;
+    }
+
     return ESP_OK;
 }
 
