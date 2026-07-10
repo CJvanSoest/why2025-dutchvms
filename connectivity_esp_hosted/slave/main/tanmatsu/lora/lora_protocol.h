@@ -63,3 +63,48 @@ typedef struct {
     uint32_t sequence_number;
     uint32_t type;  // lora_protocol_packet_type_t
 } __attribute__((packed)) lora_protocol_header_t;
+
+// Signal quality of the most recently received packet, straight from the SX126x
+// GetPacketStatus command (LoRa mode). Sent as a fixed-size block immediately
+// after lora_protocol_header_t in every unsolicited LORA_PROTOCOL_TYPE_PACKET_RX
+// event, followed by the raw LoRa payload bytes. There is still no explicit
+// length field for the payload — its length is implied by the total esp-hosted
+// custom_data length minus sizeof(lora_protocol_header_t) minus
+// sizeof(lora_protocol_rx_stats_t), matching the pre-existing PACKET_RX wire
+// convention (see read_data() in lora_protocol_server.c).
+//
+// Field meanings were cross-checked against the Semtech SX1261/62/68 datasheet
+// (SS13.5.4, GetPacketStatus, LoRa mode: response bytes are
+// [status, RssiPkt, SnrPkt, SignalRssiPkt]) AND against Tanmatsu's own
+// meshcore firmware (components/mc_radio/radio.c in CJvanSoest/meshcore),
+// which vendors this identical nicolaielectronics/sx126x driver and already
+// ships a working Coverage/signal-quality feature built on exactly this
+// interpretation. Note that the vendored driver's own
+// sx126x_get_packet_status_lora() out-parameter names
+// (out_rx_status/out_rssi_sync/out_rssi_avg) are MISLEADING: they actually
+// return, in order, raw RssiPkt / raw SnrPkt / raw SignalRssiPkt — not
+// "rx status", "rssi sync" or "rssi avg". Do not rename them here since that
+// driver lives in a component-manager-fetched managed_components/ tree that
+// isn't part of this repo (see connectivity_esp_hosted/slave/main/idf_component.yml,
+// nicolaielectronics/sx126x ~0.0.3) and would be silently reset on the next
+// dependency fetch; the correct interpretation is applied at the call site in
+// lora_protocol_server.c instead.
+//
+// WIRE-COMPATIBILITY WARNING: this struct was newly inserted into the
+// PACKET_RX event payload and there is no protocol version field anywhere in
+// this header to gate on. The C6 slave and P4 host firmware MUST be flashed
+// together as a matching pair — an old P4 host talking to a new C6 slave (or
+// vice versa) will silently misparse every received LoRa packet, since these
+// fields shift where the raw payload bytes start. There is no mechanism today
+// to detect or prevent that skew; if one gets added later (e.g. a version
+// field in lora_protocol_status_params_t), gate this struct's presence on it.
+typedef struct {
+    int16_t rssi_dbm;        // Packet RSSI in dBm. Raw SX126x RssiPkt byte: dbm = -raw / 2.
+    int8_t  snr_db_x4;       // SNR in quarter-dB units. Raw SX126x SnrPkt is already a
+                              // signed byte with LSB = 0.25 dB; actual dB = snr_db_x4 / 4.0.
+                              // Kept in raw quarter-dB units (not pre-divided) to avoid
+                              // losing resolution — matches Tanmatsu's own convention.
+    int16_t signal_rssi_dbm; // Estimated RSSI of the signal alone, ignoring
+                              // interference/blockers. Raw SX126x SignalRssiPkt byte:
+                              // dbm = -raw / 2.
+} __attribute__((packed)) lora_protocol_rx_stats_t;

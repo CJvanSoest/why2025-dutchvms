@@ -707,9 +707,10 @@ void read_data(void) {
         return;
     }
 
-    uint8_t                 data[sizeof(lora_protocol_header_t) + 256] = {0};
-    lora_protocol_header_t* lora_packet                                = (lora_protocol_header_t*)data;
-    uint8_t*                packet                                     = &data[sizeof(lora_protocol_header_t)];
+    uint8_t data[sizeof(lora_protocol_header_t) + sizeof(lora_protocol_rx_stats_t) + 256] = {0};
+    lora_protocol_header_t*   lora_packet = (lora_protocol_header_t*)data;
+    lora_protocol_rx_stats_t* stats       = (lora_protocol_rx_stats_t*)&data[sizeof(lora_protocol_header_t)];
+    uint8_t*                  packet      = &data[sizeof(lora_protocol_header_t) + sizeof(lora_protocol_rx_stats_t)];
     res = sx126x_read_buffer(&lora_handle, start_pointer, packet, packet_length);
     if (res != ESP_OK) {
         ESP_LOGE(TAG, "Failed to read packet from LoRa radio: %s", esp_err_to_name(res));
@@ -722,10 +723,31 @@ void read_data(void) {
     }
     printf("\r\n");
 
+    // Read signal quality of the packet we just pulled out of the RX buffer.
+    // NOTE: the driver's out-parameter names are misleading (see the big comment
+    // on lora_protocol_rx_stats_t in lora_protocol.h) — despite their names,
+    // this call returns raw RssiPkt, raw SnrPkt, raw SignalRssiPkt in that order.
+    uint8_t   raw_rssi_pkt = 0, raw_snr_pkt = 0, raw_signal_rssi_pkt = 0;
+    esp_err_t stats_res =
+        sx126x_get_packet_status_lora(&lora_handle, &raw_rssi_pkt, &raw_snr_pkt, &raw_signal_rssi_pkt);
+    if (stats_res == ESP_OK) {
+        stats->rssi_dbm        = (int16_t)(-(int16_t)raw_rssi_pkt / 2);
+        stats->snr_db_x4       = (int8_t)raw_snr_pkt;  // already a signed quarter-dB value
+        stats->signal_rssi_dbm = (int16_t)(-(int16_t)raw_signal_rssi_pkt / 2);
+    } else {
+        ESP_LOGW(TAG, "Failed to get LoRa packet status: %s", esp_err_to_name(stats_res));
+        // 0 dBm never occurs for a real received LoRa packet, so it doubles as an
+        // "unavailable" sentinel for both RSSI fields; SNR has no such natural
+        // sentinel but 0 is a reasonably neutral default.
+        stats->rssi_dbm        = 0;
+        stats->snr_db_x4       = 0;
+        stats->signal_rssi_dbm = 0;
+    }
+
     lora_packet->sequence_number = 0;  // Sequence number is not used
     lora_packet->type            = LORA_PROTOCOL_TYPE_PACKET_RX;
 
-    size_t total_length = sizeof(lora_protocol_header_t) + packet_length;
+    size_t total_length = sizeof(lora_protocol_header_t) + sizeof(lora_protocol_rx_stats_t) + packet_length;
     generate_custom_event(TANMATSU_EVENT_LORA, data, total_length);
 }
 

@@ -66,6 +66,19 @@ typedef struct {
     uint8_t data[];
 } __attribute__((packed)) lora_protocol_lora_packet_t;
 
+/* Mirror of lora_protocol_rx_stats_t in
+ * connectivity_esp_hosted/slave/main/tanmatsu/lora/lora_protocol.h — MUST match
+ * that struct exactly (layout, types, order). Sent by the C6 immediately after
+ * lora_protocol_header_t in every unsolicited PACKET_RX event, before the raw
+ * LoRa payload bytes. See that header for the full derivation/units comment and
+ * the wire-compatibility warning (no protocol version field exists — C6 and P4
+ * firmware must be flashed together as a matching pair). */
+typedef struct {
+    int16_t rssi_dbm;        /* dBm */
+    int8_t  snr_db_x4;       /* quarter-dB units; dB = snr_db_x4 / 4.0 */
+    int16_t signal_rssi_dbm; /* dBm, ignoring interference/blockers */
+} __attribute__((packed)) lora_protocol_rx_stats_t;
+
 #define LORA_REPLY_BUF_SIZE   (sizeof(lora_protocol_header_t) + LORA_MAX_PACKET_LEN + 32)
 #define LORA_REPLY_TIMEOUT_MS 2000
 
@@ -89,10 +102,11 @@ static lora_packet_t rx_ring[LORA_RX_RING_SLOTS];
 static uint32_t volatile rx_ring_head = 0; /* write index (producer: dispatch) */
 static uint32_t volatile rx_ring_tail = 0; /* read  index (consumer: poll)     */
 
-/* PACKET_RX payload from slave is the raw LoRa packet bytes (NO length-prefix).
- * Slave sends sizeof(header) + N total; master computes N = data_len - sizeof(header)
- * and passes that as payload_len. Use it directly. */
-static void dispatch_rx_packet(uint8_t const *payload, size_t payload_len) {
+/* PACKET_RX payload from slave is: lora_protocol_rx_stats_t followed by the raw
+ * LoRa packet bytes (still NO length-prefix on the packet bytes themselves).
+ * Slave sends sizeof(header) + sizeof(stats) + N total; master computes
+ * N = data_len - sizeof(header) - sizeof(stats) and passes that as payload_len. */
+static void dispatch_rx_packet(lora_protocol_rx_stats_t const *stats, uint8_t const *payload, size_t payload_len) {
     if (payload_len == 0 || payload_len > LORA_MAX_PACKET_LEN) {
         return;
     }
@@ -102,7 +116,10 @@ static void dispatch_rx_packet(uint8_t const *payload, size_t payload_len) {
     if (next == rx_ring_tail) {
         rx_ring_tail = (rx_ring_tail + 1) % LORA_RX_RING_SLOTS;
     }
-    rx_ring[head].length = (uint8_t)payload_len;
+    rx_ring[head].length          = (uint8_t)payload_len;
+    rx_ring[head].rssi_dbm        = stats->rssi_dbm;
+    rx_ring[head].snr_db_x4       = stats->snr_db_x4;
+    rx_ring[head].signal_rssi_dbm = stats->signal_rssi_dbm;
     memcpy(rx_ring[head].data, payload, payload_len);
     rx_ring_head = next;
 }
@@ -118,7 +135,17 @@ static void lora_callback(uint32_t msg_id, uint8_t const *data, size_t data_len)
 
     /* PACKET_RX with seq=0 is an unsolicited event from the radio. */
     if (hdr->type == LORA_PROTOCOL_TYPE_PACKET_RX && hdr->sequence_number == 0) {
-        dispatch_rx_packet(data + sizeof(lora_protocol_header_t), data_len - sizeof(lora_protocol_header_t));
+        size_t const prefix_len = sizeof(lora_protocol_header_t) + sizeof(lora_protocol_rx_stats_t);
+        if (data_len < prefix_len) {
+            /* Too short to contain the stats block — stale C6 firmware from before
+             * this field was added, or a corrupt event. Drop it rather than reading
+             * out of bounds; see the wire-compatibility warning on
+             * lora_protocol_rx_stats_t (C6/P4 firmware must be paired). */
+            ESP_LOGW(TAG, "PACKET_RX event too short for stats block (%u bytes)", (unsigned)data_len);
+            return;
+        }
+        lora_protocol_rx_stats_t const *stats = (lora_protocol_rx_stats_t const *)(data + sizeof(lora_protocol_header_t));
+        dispatch_rx_packet(stats, data + prefix_len, data_len - prefix_len);
         return;
     }
 
@@ -313,7 +340,10 @@ bool lora_poll_packet(lora_packet_t *out) {
     if (tail == rx_ring_head) {
         return false; /* empty */
     }
-    out->length = rx_ring[tail].length;
+    out->length          = rx_ring[tail].length;
+    out->rssi_dbm        = rx_ring[tail].rssi_dbm;
+    out->snr_db_x4       = rx_ring[tail].snr_db_x4;
+    out->signal_rssi_dbm = rx_ring[tail].signal_rssi_dbm;
     memcpy(out->data, rx_ring[tail].data, out->length);
     rx_ring_tail = (tail + 1) % LORA_RX_RING_SLOTS;
     return true;
