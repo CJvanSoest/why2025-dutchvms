@@ -144,7 +144,8 @@ static void lora_callback(uint32_t msg_id, uint8_t const *data, size_t data_len)
             ESP_LOGW(TAG, "PACKET_RX event too short for stats block (%u bytes)", (unsigned)data_len);
             return;
         }
-        lora_protocol_rx_stats_t const *stats = (lora_protocol_rx_stats_t const *)(data + sizeof(lora_protocol_header_t));
+        lora_protocol_rx_stats_t const *stats =
+            (lora_protocol_rx_stats_t const *)(data + sizeof(lora_protocol_header_t));
         dispatch_rx_packet(stats, data + prefix_len, data_len - prefix_len);
         return;
     }

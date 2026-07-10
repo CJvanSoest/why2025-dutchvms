@@ -594,11 +594,7 @@ static void ws2812_task(void *arg) {
         vTaskDelete(NULL);
         return;
     }
-    ESP_LOGW(
-        TAG,
-        "=== RGBW status LEDs (4x on GPIO%d) START: LED0=radio LED1=wifi LED2/3=notify ===",
-        WS_GPIO
-    );
+    ESP_LOGW(TAG, "=== RGBW status LEDs (4x on GPIO%d) START: LED0=radio LED1=wifi LED2/3=notify ===", WS_GPIO);
     uint32_t secs = 0;
     for (;;) {
         /* LED0: LoRa radio status */
@@ -629,7 +625,7 @@ static void ws2812_task(void *arg) {
          * been cleared. Dim white, blinking every other second (~0.5 Hz) so
          * it reads as "waiting for attention" rather than a steady-on light. */
         if (notify_any_dirty()) {
-            uint8_t const w = (uint8_t)((255u * LED_BRIGHTNESS) / 100u);
+            uint8_t const w     = (uint8_t)((255u * LED_BRIGHTNESS) / 100u);
             uint8_t const pulse = (secs % 2 == 0) ? w : 0;
             ws2812_set(2, 0, 0, 0, pulse);
             ws2812_set(3, 0, 0, 0, pulse);

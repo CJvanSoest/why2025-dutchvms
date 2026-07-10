@@ -60,19 +60,19 @@ typedef struct {
 } ble_characteristic_def_t;
 
 typedef struct {
-    ble_service_uuid_t        uuid;
+    ble_service_uuid_t       uuid;
     ble_characteristic_def_t characteristics[BLE_MAX_CHARS_PER_SVC];
-    uint8_t                   characteristic_count;
+    uint8_t                  characteristic_count;
 } ble_service_def_t;
 
 typedef enum {
     BLE_EVENT_NONE = 0,
     BLE_EVENT_CONNECTED,
     BLE_EVENT_DISCONNECTED,
-    BLE_EVENT_WRITE,             /* peer wrote to one of our characteristics */
-    BLE_EVENT_SUBSCRIBED,        /* peer enabled notify on a characteristic */
+    BLE_EVENT_WRITE,      /* peer wrote to one of our characteristics */
+    BLE_EVENT_SUBSCRIBED, /* peer enabled notify on a characteristic */
     BLE_EVENT_UNSUBSCRIBED,
-    BLE_EVENT_PAIRING_PASSKEY,   /* peer needs a passkey displayed to the user */
+    BLE_EVENT_PAIRING_PASSKEY, /* peer needs a passkey displayed to the user */
     BLE_EVENT_PAIRING_COMPLETE,
 } ble_event_type_t;
 
@@ -88,11 +88,11 @@ typedef struct {
 } ble_event_t;
 
 typedef struct {
-    bool     initialized;  /* ble_gatt_server_init() succeeded, NimBLE host is up */
-    bool     advertising;  /* currently advertising (false once a peer is connected) */
-    bool     connected;    /* a peer is currently connected */
-    uint16_t conn_handle;  /* valid when connected */
-    int      bond_count;   /* number of persisted bonds in NVS */
+    bool     initialized; /* ble_gatt_server_init() succeeded, NimBLE host is up */
+    bool     advertising; /* currently advertising (false once a peer is connected) */
+    bool     connected;   /* a peer is currently connected */
+    uint16_t conn_handle; /* valid when connected */
+    int      bond_count;  /* number of persisted bonds in NVS */
 } ble_status_t;
 
 /* Bring up the NimBLE host stack via esp_hosted (BLE radio runs on the C6,
@@ -120,7 +120,9 @@ bool ble_poll_event(ble_event_t *out);
 
 /* Set a characteristic's current value — answers a future READ access and/or
  * becomes the payload of the next ble_characteristic_notify() call. */
-bool ble_characteristic_set_value(uint8_t service_index, uint8_t characteristic_index, uint8_t const *data, uint16_t len);
+bool ble_characteristic_set_value(
+    uint8_t service_index, uint8_t characteristic_index, uint8_t const *data, uint16_t len
+);
 
 /* Notify (or indicate, per characteristic flags) the current value to
  * whichever peer is subscribed. No-op (returns false) if nobody is

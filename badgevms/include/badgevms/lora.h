@@ -72,12 +72,12 @@ typedef struct {
      * flag today. */
     int16_t rssi_dbm;        /* Packet RSSI in dBm. */
     int8_t  snr_db_x4;       /* SNR in quarter-dB units (LoRa SnrPkt LSB = 0.25 dB);
-                               * actual dB = snr_db_x4 / 4.0. Kept unscaled to avoid
-                               * losing resolution — divide in the app if you want a
-                               * float dB value. */
+                              * actual dB = snr_db_x4 / 4.0. Kept unscaled to avoid
+                              * losing resolution — divide in the app if you want a
+                              * float dB value. */
     int16_t signal_rssi_dbm; /* Estimated RSSI of the signal alone, ignoring
-                               * interference/blockers. Usually close to rssi_dbm;
-                               * diverges under interference. */
+                              * interference/blockers. Usually close to rssi_dbm;
+                              * diverges under interference. */
 } lora_packet_t;
 
 typedef void (*lora_rx_callback_t)(lora_packet_t const *packet);

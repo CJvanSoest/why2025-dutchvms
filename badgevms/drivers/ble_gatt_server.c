@@ -39,12 +39,10 @@
  * ble_gatt_server_init() pays that cost lazily instead. */
 
 #include "badgevms/ble.h"
-
 #include "esp_hosted.h"
 #include "esp_log.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/semphr.h"
-
 #include "host/ble_hs.h"
 #include "host/ble_uuid.h"
 #include "host/util/util.h"
@@ -57,7 +55,7 @@
 
 static char const *TAG = "ble_gatt";
 
-#define BLE_CONN_INVALID 0xFFFF
+#define BLE_CONN_INVALID     0xFFFF
 #define BLE_EVENT_RING_SLOTS 16
 #define BLE_DEFAULT_PASSKEY  0
 
@@ -105,7 +103,7 @@ static struct ble_gatt_svc_def svc_defs[BLE_MAX_SERVICES + 1];
 
 /* ===== Event ring (kernel task -> app poll) ===== */
 
-static ble_event_t       event_ring[BLE_EVENT_RING_SLOTS];
+static ble_event_t event_ring[BLE_EVENT_RING_SLOTS];
 static uint32_t volatile ring_head = 0;
 static uint32_t volatile ring_tail = 0;
 static SemaphoreHandle_t ring_lock;
@@ -122,7 +120,7 @@ static void enqueue_event(ble_event_t const *evt) {
         ring_tail = (ring_tail + 1) % BLE_EVENT_RING_SLOTS;
     }
     event_ring[head] = *evt;
-    ring_head         = next;
+    ring_head        = next;
     xSemaphoreGive(ring_lock);
 }
 
@@ -143,13 +141,13 @@ bool ble_poll_event(ble_event_t *out) {
 /* ===== State ===== */
 
 static uint8_t  own_addr_type;
-static uint16_t active_conn   = BLE_CONN_INVALID;
-static bool     initialized   = false;
-static bool     committed     = false; /* GATT table built + host task started */
-static bool     synced        = false; /* on_sync() has fired at least once */
+static uint16_t active_conn    = BLE_CONN_INVALID;
+static bool     initialized    = false;
+static bool     committed      = false; /* GATT table built + host task started */
+static bool     synced         = false; /* on_sync() has fired at least once */
 static bool     want_advertise = false;
-static bool     advertising   = false;
-static uint32_t fixed_passkey = BLE_DEFAULT_PASSKEY;
+static bool     advertising    = false;
+static uint32_t fixed_passkey  = BLE_DEFAULT_PASSKEY;
 static char     device_name[BLE_DEVICE_NAME_MAX_LEN + 1];
 
 static int gap_event_handler(struct ble_gap_event *event, void *arg);
@@ -179,15 +177,14 @@ static int chr_access_cb(uint16_t conn_handle, uint16_t attr_handle, struct ble_
             evt.service_index        = svc_idx;
             evt.characteristic_index = chr_idx;
             uint16_t copied          = 0;
-            int      rc = ble_hs_mbuf_to_flat(ctxt->om, evt.data, sizeof(evt.data), &copied);
+            int      rc              = ble_hs_mbuf_to_flat(ctxt->om, evt.data, sizeof(evt.data), &copied);
             if (rc != 0)
                 return BLE_ATT_ERR_UNLIKELY;
             evt.data_len = copied;
             enqueue_event(&evt);
             return 0;
         }
-        default:
-            return BLE_ATT_ERR_UNLIKELY;
+        default: return BLE_ATT_ERR_UNLIKELY;
     }
 }
 
@@ -216,9 +213,9 @@ static void advertise(void) {
     advertising = false;
 
     struct ble_hs_adv_fields fields = {0};
-    fields.flags                     = BLE_HS_ADV_F_DISC_GEN | BLE_HS_ADV_F_BREDR_UNSUP;
-    fields.tx_pwr_lvl_is_present     = 1;
-    fields.tx_pwr_lvl                = BLE_HS_ADV_TX_PWR_LVL_AUTO;
+    fields.flags                    = BLE_HS_ADV_F_DISC_GEN | BLE_HS_ADV_F_BREDR_UNSUP;
+    fields.tx_pwr_lvl_is_present    = 1;
+    fields.tx_pwr_lvl               = BLE_HS_ADV_TX_PWR_LVL_AUTO;
     if (svc_count > 0) {
         /* Primary adv packet is capped at 31 bytes; a single 128-bit service
          * UUID (18 B) plus flags+txpwr (6 B) leaves no room for a name, so —
@@ -249,10 +246,10 @@ static void advertise(void) {
     }
 
     struct ble_gap_adv_params params = {0};
-    params.conn_mode                  = BLE_GAP_CONN_MODE_UND;
-    params.disc_mode                  = BLE_GAP_DISC_MODE_GEN;
-    params.itvl_min                   = 1600; /* 1 s, Bluetooth units are 0.625 ms */
-    params.itvl_max                   = 1600;
+    params.conn_mode                 = BLE_GAP_CONN_MODE_UND;
+    params.disc_mode                 = BLE_GAP_DISC_MODE_GEN;
+    params.itvl_min                  = 1600; /* 1 s, Bluetooth units are 0.625 ms */
+    params.itvl_max                  = 1600;
 
     rc = ble_gap_adv_start(own_addr_type, NULL, BLE_HS_FOREVER, &params, gap_event_handler, NULL);
     if (rc != 0) {
@@ -273,8 +270,8 @@ static int gap_event_handler(struct ble_gap_event *event, void *arg) {
         case BLE_GAP_EVENT_CONNECT:
             ESP_LOGI(TAG, "connect status=%d handle=%u", event->connect.status, event->connect.conn_handle);
             if (event->connect.status == 0) {
-                active_conn   = event->connect.conn_handle;
-                advertising   = false; /* NimBLE auto-stops advertising on connect */
+                active_conn     = event->connect.conn_handle;
+                advertising     = false; /* NimBLE auto-stops advertising on connect */
                 evt.type        = BLE_EVENT_CONNECTED;
                 evt.conn_handle = active_conn;
                 enqueue_event(&evt);
@@ -313,7 +310,11 @@ static int gap_event_handler(struct ble_gap_event *event, void *arg) {
                 evt.passkey     = pk;
                 enqueue_event(&evt);
             } else {
-                ESP_LOGW(TAG, "unexpected passkey action=%d (only Display-Entry is wired up)", event->passkey.params.action);
+                ESP_LOGW(
+                    TAG,
+                    "unexpected passkey action=%d (only Display-Entry is wired up)",
+                    event->passkey.params.action
+                );
             }
             break;
 
@@ -329,8 +330,7 @@ static int gap_event_handler(struct ble_gap_event *event, void *arg) {
             break;
         }
 
-        default:
-            break;
+        default: break;
     }
     return 0;
 }
@@ -425,7 +425,7 @@ int ble_service_register(ble_service_def_t const *service) {
     slot->used       = true;
 
     for (uint8_t c = 0; c < service->characteristic_count; c++) {
-        chr_slot_t *chr = &slot->chars[c];
+        chr_slot_t *chr         = &slot->chars[c];
         chr->nimble_uuid.u.type = BLE_UUID_TYPE_128;
         memcpy(chr->nimble_uuid.value, service->characteristics[c].uuid.bytes, BLE_UUID128_LEN);
         chr->flags = service->characteristics[c].flags;
@@ -448,11 +448,11 @@ static bool commit_gatt_table(void) {
         for (uint8_t c = 0; c < svc->char_count; c++) {
             chr_slot_t              *chr = &svc->chars[c];
             struct ble_gatt_chr_def *def = &chr_defs[s][c];
-            def->uuid                     = &chr->nimble_uuid.u;
-            def->access_cb                = chr_access_cb;
-            def->arg                      = (void *)(uintptr_t)((s << 8) | c);
-            def->val_handle               = &chr->val_handle;
-            uint16_t f                    = 0;
+            def->uuid                    = &chr->nimble_uuid.u;
+            def->access_cb               = chr_access_cb;
+            def->arg                     = (void *)(uintptr_t)((s << 8) | c);
+            def->val_handle              = &chr->val_handle;
+            uint16_t f                   = 0;
             if (chr->flags & BLE_CHAR_READ)
                 f |= BLE_GATT_CHR_F_READ;
             if (chr->flags & BLE_CHAR_WRITE)
@@ -526,7 +526,9 @@ bool ble_advertise_stop(void) {
     return rc == 0 || rc == BLE_HS_EALREADY;
 }
 
-bool ble_characteristic_set_value(uint8_t service_index, uint8_t characteristic_index, uint8_t const *data, uint16_t len) {
+bool ble_characteristic_set_value(
+    uint8_t service_index, uint8_t characteristic_index, uint8_t const *data, uint16_t len
+) {
     if (!data || service_index >= BLE_MAX_SERVICES || characteristic_index >= BLE_MAX_CHARS_PER_SVC)
         return false;
     if (!svc_table[service_index].used || !svc_table[service_index].chars[characteristic_index].used)
