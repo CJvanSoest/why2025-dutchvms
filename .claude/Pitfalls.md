@@ -133,14 +133,23 @@ clean rebuild rather than trying to hand-edit the corrupted value — this
 config gets regenerated from `sdkconfig.defaults` and is not meant to be
 edited directly.
 
-## The UART deploy protocol has a request-size ceiling
+## The UART deploy protocol's GET/LIST/DELETE paths still malloc a whole payload
 
-`deploy_protocol.c`'s `handle_put()` mallocs the entire incoming payload as
-one contiguous block. Files over roughly 1MB (the C6's ~1.2MB
-`network_adapter.bin`, for instance) fail with `ERR_OOM`. This isn't a bug
-to route around with a bigger malloc — files that size go through the C6's
-own direct-flash path (`docs/guides/Flashing.md`) instead of
-`badge_deploy.py put`.
+`deploy_protocol.c`'s `handle_put()` used to malloc the entire incoming
+payload as one contiguous block, and app binaries growing past what a
+long-uptime badge's fragmented heap could still supply in one block hit
+`ERR_OOM` well below any documented size cap (why2025-apps#1
+hardware-test feedback: an app hit this at ~155KB). PUT now reads+CRCs+
+writes its payload in bounded chunks straight off the wire
+(`handle_put_streamed()`) instead — RAM use is a small constant regardless
+of file size. GET/LIST/DELETE's payloads are still handled through the
+generic malloc-the-whole-payload path in `process_one_frame()` (a bare
+path for LIST/DELETE, the whole file for GET) since nothing has hit a wall
+on those yet — if GET ever does for a large downloaded file, the same
+streaming approach applies there too. The C6's own ~1.2MB
+`network_adapter.bin` still goes through its direct-flash path
+(`docs/guides/Flashing.md`) regardless — that's a different mechanism
+entirely, not something PUT was ever meant to carry.
 
 ## USB port identity changes after a flash+reset, and that's expected
 
