@@ -487,14 +487,37 @@ void lora_protocol_handle_packet(uint8_t* request_buffer, size_t request_length)
         case LORA_PROTOCOL_TYPE_PACKET_RX:
             send_nack(packet->sequence_number);  // We don't expect to receive this from the host, so we NACK it
             break;
-        case LORA_PROTOCOL_TYPE_PACKET_TX:
-            if (transmit_packet(request_buffer + sizeof(lora_protocol_header_t),
-                                request_length - sizeof(lora_protocol_header_t)) == ESP_OK) {
+        case LORA_PROTOCOL_TYPE_PACKET_TX: {
+            // Params are a lora_protocol_lora_packet_t (length + data[]), not the raw
+            // payload directly -- the host prepends that length byte (see
+            // lora_send_packet() in the P4's lora_proto_client.c). This case used to pass
+            // the whole params blob straight to transmit_packet(), radiating that length
+            // byte as the *first byte of the actual over-the-air LoRa payload* and
+            // shifting every following byte by one -- every packet ever sent had this
+            // off-by-one, which is why real MeshCore receivers never recognized our
+            // adverts/messages as valid despite correct crypto/header content one byte
+            // later.
+            size_t params_len = request_length - sizeof(lora_protocol_header_t);
+            lora_protocol_lora_packet_t const* pkt =
+                (lora_protocol_lora_packet_t const*)(request_buffer + sizeof(lora_protocol_header_t));
+            if (params_len < sizeof(lora_protocol_lora_packet_t) ||
+                pkt->length != params_len - sizeof(lora_protocol_lora_packet_t)) {
+                ESP_LOGW(
+                    TAG,
+                    "PACKET_TX malformed params (params_len=%u, pkt->length=%u)",
+                    (unsigned)params_len,
+                    params_len >= sizeof(lora_protocol_lora_packet_t) ? (unsigned)pkt->length : 0
+                );
+                send_nack(packet->sequence_number);
+                break;
+            }
+            if (transmit_packet(pkt->data, pkt->length) == ESP_OK) {
                 send_ack(packet->sequence_number);
             } else {
                 send_nack(packet->sequence_number);
             }
             break;
+        }
         default:
             ESP_LOGW(TAG, "Unknown command: %d\r\n", packet->type);
             send_nack(packet->sequence_number);

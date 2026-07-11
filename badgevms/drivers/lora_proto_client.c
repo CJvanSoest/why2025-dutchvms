@@ -186,8 +186,22 @@ static esp_err_t request_reply(uint32_t type, void const *params, size_t params_
         my_seq = seq_ctr++; /* never use 0 — that's the unsolicited PACKET_RX marker */
     }
 
-    uint8_t buf[sizeof(lora_protocol_header_t) + 64];
+    /* Must fit the largest possible request: PACKET_TX's params are
+     * 1 (length prefix) + up to LORA_MAX_PACKET_LEN bytes (see
+     * lora_send_packet() below) -- far bigger than the small fixed-size
+     * control messages (GET_CONFIG/SET_CONFIG/SET_MODE) this buffer was
+     * originally sized for. A too-small buffer here made this size check
+     * fail *silently* (no log) for every PACKET_TX whose payload exceeded
+     * the old 64-byte allowance -- e.g. every ~114-byte MeshCore advert. */
+    uint8_t buf[sizeof(lora_protocol_header_t) + 1 + LORA_MAX_PACKET_LEN];
     if (sizeof(lora_protocol_header_t) + params_len > sizeof(buf)) {
+        ESP_LOGE(
+            TAG,
+            "request type=0x%02x params_len=%u exceeds request buffer (%u)",
+            (unsigned)type,
+            (unsigned)params_len,
+            (unsigned)sizeof(buf)
+        );
         return ESP_ERR_INVALID_SIZE;
     }
     lora_protocol_header_t *hdr = (lora_protocol_header_t *)buf;
@@ -216,6 +230,14 @@ static esp_err_t request_reply(uint32_t type, void const *params, size_t params_
     outstanding_seq = 0;
 
     if (reply_len < sizeof(lora_protocol_header_t)) {
+        ESP_LOGW(
+            TAG,
+            "request type=0x%02x seq=%u short reply (%u bytes, need %u)",
+            (unsigned)type,
+            (unsigned)my_seq,
+            (unsigned)reply_len,
+            (unsigned)sizeof(lora_protocol_header_t)
+        );
         return ESP_FAIL;
     }
     lora_protocol_header_t const *rh = (lora_protocol_header_t const *)reply_buf;

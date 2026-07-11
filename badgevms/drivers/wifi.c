@@ -18,6 +18,7 @@
 #include "esp_attr.h"
 #include "esp_event.h"
 #include "esp_log.h"
+#include "esp_netif_sntp.h"
 #include "esp_wifi.h"
 #include "freertos/FreeRTOS.h"
 #include "lora_proto_client.h"
@@ -249,7 +250,20 @@ static void event_handler(void *arg, esp_event_base_t event_base, int32_t event_
         esp_wifi_sta_get_ap_info(&ap);
         result_to_station(&status.current, &ap);
         xEventGroupSetBits(wifi_event_group, WIFI_CONNECTED_BIT);
+
+        /* Kick an NTP sync every time we get an IP (first connect and every
+         * reconnect) -- the system clock otherwise stays at its power-on
+         * default (seconds since boot, not real UTC), which silently breaks
+         * anything that stamps outgoing data with time(NULL) (e.g. MeshCore
+         * adverts get rejected by peers as implausibly stale). Best-effort:
+         * esp_netif_sntp_start() just (re)kicks the lwIP SNTP task, no need
+         * to block here or handle failure -- sync_time_cb() logs success. */
+        esp_netif_sntp_start();
     }
+}
+
+static void sync_time_cb(struct timeval *tv) {
+    ESP_LOGW(TAG, "NTP time synced: %lld", (long long)tv->tv_sec);
 }
 
 static void hermes_do_disconnect() {
@@ -609,6 +623,17 @@ static void start_wifi() {
 
     ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_STA));
     ESP_ERROR_CHECK(esp_wifi_start());
+
+    /* Set up (but don't block on) an SNTP client -- start=false because
+     * there's no network yet at this point; the IP_EVENT_STA_GOT_IP handler
+     * above kicks the actual sync once we have a route. No blocking wait
+     * anywhere here: this is a badge-wide, best-effort background fixup for
+     * the "clock stuck at seconds-since-boot" problem, not a hard dependency
+     * of WiFi bring-up. */
+    esp_sntp_config_t sntp_cfg = ESP_NETIF_SNTP_DEFAULT_CONFIG("pool.ntp.org");
+    sntp_cfg.start             = false;
+    sntp_cfg.sync_cb           = sync_time_cb;
+    ESP_ERROR_CHECK(esp_netif_sntp_init(&sntp_cfg));
 }
 
 /* CJ-PATCH 2026-05-17: compile-time switch. Set to 0 to skip ESP-Hosted/SDIO
