@@ -66,10 +66,23 @@ void bv_status_led_clear(void);
 
 /* Brightness for app-driven colors, 0-100 (clamped), applied as a percentage
  * scale to whatever bv_status_led_set() is called with next. Independent of
- * the firmware's own fixed status-indicator brightness. Persists across
+ * the firmware's own status-indicator brightness below. Persists across
  * take()/release() (same as bv_led_matrix_set_brightness() for the matrix -
  * it's a global setting, not reset on release). */
 void bv_status_led_set_brightness(int pct);
+
+/* Per-LED brightness (0-100, clamped) for the FIRMWARE'S OWN status/notify
+ * drawing (radio=0/wifi=1/DM-notify=2/channel-notify=3) -- separate from
+ * bv_status_led_set_brightness() above, which only affects colors an app
+ * pushes itself after take()ing the chain. Use this instead when you want
+ * to dim one of the firmware-owned indicators (e.g. the DM/channel notify
+ * LEDs) without taking over the whole chain and reimplementing radio/wifi
+ * status drawing yourself. Session-only (not persisted by the kernel) --
+ * an app that wants this to survive a reboot should re-apply it at
+ * startup from its own settings, same convention bv_display_set_brightness()
+ * etc. already use. Out-of-range index is a no-op / returns 0. */
+void bv_status_led_set_brightness_for(int index, int pct);
+int  bv_status_led_get_brightness_for(int index);
 
 #ifdef __cplusplus
 }

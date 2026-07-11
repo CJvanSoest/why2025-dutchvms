@@ -40,4 +40,16 @@ void status_led_show(void);
 void status_led_clear(void);
 void status_led_set_brightness(int pct);
 
+/* Per-LED brightness for the firmware's OWN status/notify drawing
+ * (ws2812_task's LED0=radio/LED1=wifi/LED2=DM-notify/LED3=channel-notify,
+ * see status_led_ws2812.c's file header) -- separate from
+ * status_led_set_brightness() above, which only scales colors an app pushes
+ * itself via status_led_set() after taking the chain with bv_led_app_control.
+ * why2025-apps#1 hardware-test feedback: cj_meshcore never takes the chain
+ * (it just lets the firmware draw LED2/3 normally), so making its DM/channel
+ * notify brightness independently adjustable needs this instead. Index
+ * out-of-range is silently ignored, same convention status_led_set() uses. */
+void status_led_set_index_brightness(int index, int pct);
+int  status_led_get_index_brightness(int index);
+
 extern bool volatile bv_led_app_control;
