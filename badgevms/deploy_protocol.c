@@ -234,30 +234,60 @@ static int vms_to_posix(char const *vms, char *out, size_t out_size) {
     return 0;
 }
 
-static void handle_put(uint8_t const *payload, uint32_t len) {
+/* PUT reads+CRCs+writes its payload in bounded chunks straight off the
+ * wire instead of malloc()ing the whole thing up front (the rest of this
+ * file's PING/GET/LIST/DELETE handlers still go through
+ * process_one_frame()'s generic malloc-the-whole-payload path below --
+ * their payloads are either a bare path (<=MAX_PATH_BYTES) or, for GET,
+ * bounded by SD-card file sizes nobody has hit a wall on yet). This is
+ * what actually removes the "app binary big enough hits ERR_OOM" ceiling
+ * (why2025-apps#1 hardware-test feedback, hit at ~155KB well under this
+ * project's own documented "~1MB, and that's an accepted limit" -- see
+ * .claude/Pitfalls.md's "UART deploy protocol has a request-size ceiling"
+ * entry, now stale for PUT specifically): RAM use is bounded by
+ * PUT_CHUNK_BYTES regardless of file size, not by the whole file fitting
+ * in one contiguous heap block (which, worse, competes with every other
+ * subsystem's allocations after a long uptime -- see that same feedback
+ * thread for why a 2MB MAX_PAYLOAD_BYTES cap didn't save us: heap
+ * fragmentation can fail a malloc() far below the cap).
+ *
+ * Frame layout is unchanged (see the file header comment) -- this handler
+ * is just a different way of *reading* the same bytes. hdr is the already-
+ * read [cmd:1][len:4] header (still hashed into the CRC, same as the
+ * generic path). Malformed-frame error paths deliberately don't try to
+ * drain the rest of the frame before returning -- same tolerance
+ * process_one_frame()'s own len>MAX_PAYLOAD_BYTES case already has;
+ * deploy_listener_task()'s scan_for_magic() re-syncs on the next frame
+ * regardless. */
+#define PUT_CHUNK_BYTES 4096
+
+static void handle_put_streamed(uint8_t const hdr[5], uint32_t len) {
+    uint16_t crc = 0xFFFF;
+    crc          = esp_rom_crc16_le(crc, hdr, 5);
+
     if (len < 2) {
         send_status(ST_ERR_BAD_FRAME);
         esp_rom_printf("[deploy] PUT: len<2\n");
         return;
     }
-    uint16_t path_len = (uint16_t)payload[0] | ((uint16_t)payload[1] << 8);
-    if (path_len == 0 || path_len >= MAX_PATH_BYTES) {
-        send_status(ST_ERR_BAD_PATH);
+
+    uint8_t path_len_bytes[2];
+    rx_blocking(path_len_bytes, 2);
+    crc                = esp_rom_crc16_le(crc, path_len_bytes, 2);
+    uint16_t path_len  = (uint16_t)path_len_bytes[0] | ((uint16_t)path_len_bytes[1] << 8);
+    uint32_t remaining = len - 2; /* path + file data, not yet read */
+
+    if (path_len == 0 || path_len >= MAX_PATH_BYTES || (uint32_t)path_len > remaining) {
+        send_status(path_len > remaining ? ST_ERR_BAD_FRAME : ST_ERR_BAD_PATH);
         esp_rom_printf("[deploy] PUT: bad path_len %u\n", (unsigned)path_len);
-        return;
-    }
-    if ((uint32_t)path_len + 2 > len) {
-        send_status(ST_ERR_BAD_FRAME);
-        esp_rom_printf("[deploy] PUT: path_len overruns payload\n");
         return;
     }
 
     char vms_path[MAX_PATH_BYTES];
-    memcpy(vms_path, payload + 2, path_len);
+    rx_blocking((uint8_t *)vms_path, path_len);
+    crc                = esp_rom_crc16_le(crc, (uint8_t const *)vms_path, path_len);
     vms_path[path_len] = 0;
-
-    uint8_t const *data     = payload + 2 + path_len;
-    uint32_t       data_len = len - 2 - path_len;
+    uint32_t data_len  = remaining - path_len;
 
     char posix_path[MAX_PATH_BYTES + 32];
     if (vms_to_posix(vms_path, posix_path, sizeof(posix_path)) != 0) {
@@ -266,7 +296,7 @@ static void handle_put(uint8_t const *payload, uint32_t len) {
         return;
     }
 
-    esp_rom_printf("[deploy] PUT '%s' -> '%s' %u bytes\n", vms_path, posix_path, (unsigned)data_len);
+    esp_rom_printf("[deploy] PUT '%s' -> '%s' %u bytes (streamed)\n", vms_path, posix_path, (unsigned)data_len);
 
     /* mkdir -p: create any missing parent directories. We mutate posix_path
      * temporarily by null-terminating at each '/' and calling mkdir. */
@@ -285,25 +315,43 @@ static void handle_put(uint8_t const *payload, uint32_t len) {
         return;
     }
 
-    size_t   total  = 0;
-    uint32_t remain = data_len;
+    uint8_t  chunk[PUT_CHUNK_BYTES];
+    uint32_t remain   = data_len;
+    bool     write_ok = true;
     while (remain > 0) {
-        ssize_t n = write(fd, data + total, remain);
-        if (n <= 0) {
-            close(fd);
-            send_status(ST_ERR_WRITE);
-            esp_rom_printf(
-                "[deploy] PUT write failed at %u/%u (errno=%d)\n",
-                (unsigned)total,
-                (unsigned)data_len,
-                errno
-            );
-            return;
+        uint32_t n = remain < sizeof(chunk) ? remain : sizeof(chunk);
+        rx_blocking(chunk, n);
+        crc = esp_rom_crc16_le(crc, chunk, n);
+        if (write_ok) {
+            size_t written = 0;
+            while (written < n) {
+                ssize_t w = write(fd, chunk + written, n - written);
+                if (w <= 0) {
+                    write_ok = false;
+                    break;
+                }
+                written += (size_t)w;
+            }
         }
-        total  += (size_t)n;
-        remain -= (uint32_t)n;
+        remain -= n;
     }
     close(fd);
+
+    uint8_t crc_bytes[2];
+    rx_blocking(crc_bytes, 2);
+    uint16_t crc_wire = (uint16_t)crc_bytes[0] | ((uint16_t)crc_bytes[1] << 8);
+
+    if (crc != crc_wire) {
+        unlink(posix_path); /* don't leave a corrupt partial file behind */
+        send_status(ST_ERR_BAD_FRAME);
+        esp_rom_printf("[deploy] PUT CRC mismatch: wire=0x%04X calc=0x%04X\n", crc_wire, crc);
+        return;
+    }
+    if (!write_ok) {
+        send_status(ST_ERR_WRITE);
+        esp_rom_printf("[deploy] PUT write failed for '%s' (errno=%d)\n", posix_path, errno);
+        return;
+    }
 
     uint8_t reply[4] = {
         (uint8_t)(data_len & 0xFF),
@@ -518,6 +566,16 @@ static void process_one_frame(void) {
         return;
     }
 
+    /* PUT reads its own payload straight off the wire in bounded chunks
+     * instead of through the generic malloc-the-whole-payload path below --
+     * see handle_put_streamed()'s own comment for why. Every other command's
+     * payload is small (a bare path) or, for GET, still goes through the
+     * generic path -- see MAX_PAYLOAD_BYTES's own scope. */
+    if (cmd == CMD_PUT) {
+        handle_put_streamed(hdr, len);
+        return;
+    }
+
     uint8_t *payload = NULL;
     if (len > 0) {
         payload = malloc(len);
@@ -554,7 +612,6 @@ static void process_one_frame(void) {
 
     switch (cmd) {
         case CMD_PING: handle_ping(payload, len); break;
-        case CMD_PUT: handle_put(payload, len); break;
         case CMD_GET: handle_get(payload, len); break;
         case CMD_LIST: handle_list(payload, len); break;
         case CMD_DELETE: handle_delete(payload, len); break;
