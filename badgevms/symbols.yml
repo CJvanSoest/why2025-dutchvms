@@ -43,6 +43,7 @@ include:
   - badgevms/lora.h
   - badgevms/ble.h
   - badgevms/nvs.h
+  - badgevms/keyboard_backlight.h
   - badgevms/led_matrix.h
   - badgevms/status_led.h
   - badgevms/meminfo.h
@@ -931,6 +932,7 @@ simple_function:
   - ble_service_register
   - bv_display_get_brightness
   - bv_display_set_brightness
+  - bv_keyboard_set_backlight
   - bv_led_matrix_clear
   - bv_led_matrix_fill
   - bv_led_matrix_release
