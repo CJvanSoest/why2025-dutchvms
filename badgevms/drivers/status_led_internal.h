@@ -40,4 +40,4 @@ void status_led_show(void);
 void status_led_clear(void);
 void status_led_set_brightness(int pct);
 
-extern volatile bool bv_led_app_control;
+extern bool volatile bv_led_app_control;

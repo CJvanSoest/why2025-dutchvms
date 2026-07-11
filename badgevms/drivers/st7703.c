@@ -221,9 +221,9 @@ void get_framebuffer(void *dev, int num, void **pixels) {
  * value round-trips through NVS correctly even while no confirmed local pin
  * exists (see the comment above); the LEDC duty cycle is only ever touched
  * when BADGE_BACKLIGHT_GPIO >= 0. */
-static uint8_t   backlight_percent     = 100;
+static uint8_t backlight_percent = 100;
 #if BADGE_BACKLIGHT_GPIO >= 0
-static bool      backlight_ledc_ready  = false;
+static bool backlight_ledc_ready = false;
 
 static void backlight_ledc_init(void) {
     ledc_timer_config_t timer_cfg = {

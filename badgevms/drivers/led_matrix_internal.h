@@ -42,4 +42,4 @@ void led_matrix_row(int r, uint32_t mask);
 void led_matrix_fill(bool on);
 void led_matrix_brightness(int pct);
 
-extern volatile bool bv_mtx_app_control;
+extern bool volatile bv_mtx_app_control;

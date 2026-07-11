@@ -411,7 +411,7 @@ static int           mtx_sda = 22, mtx_scl = 9;
  * owns mtx_fb and mtx_demo_task below must not touch it. The multiplex
  * refresh task (mtx_refresh_task_hw/bb) keeps running unconditionally either
  * way — it only reads mtx_fb, so the app's last-drawn frame stays on screen. */
-volatile bool bv_mtx_app_control = false;
+bool volatile bv_mtx_app_control = false;
 
 void led_matrix_clear(void) {
     for (int i = 0; i < MTX_ROWS; i++) mtx_fb[i] = 0;
@@ -612,7 +612,7 @@ static void ws2812_set_scaled(int i, uint8_t r, uint8_t g, uint8_t b) {
  * write), so the app's last-pushed frame stays exactly as drawn. On
  * release, the task's next ~1s tick recomputes real status and redraws it,
  * same as the matrix's mtx_demo_task resuming once bv_mtx_app_control drops. */
-volatile bool bv_led_app_control = false;
+bool volatile bv_led_app_control = false;
 
 /* Global brightness for app-driven status-LED writes, independent of the
  * firmware's own fixed LED_BRIGHTNESS - mirrors led_matrix_brightness()'s
