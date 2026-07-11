@@ -6,7 +6,7 @@ badge operating system, for the ESP32-P4-based WHY2025 badge. See
 [DUTCHVMS.md](DUTCHVMS.md) for exactly what this fork changes versus
 upstream and why.
 
-![BadgeVMS Logo](misc/BadgeVMS.png)
+![DutchVMS logo](Assets/dutchvms-logo.svg)
 
 Some feature highlights (inherited from BadgeVMS):
 
