@@ -943,9 +943,11 @@ simple_function:
   - bv_nvs_get_or_create_key
   - bv_nvs_set_blob
   - bv_status_led_clear
+  - bv_status_led_get_brightness_for
   - bv_status_led_release
   - bv_status_led_set
   - bv_status_led_set_brightness
+  - bv_status_led_set_brightness_for
   - bv_status_led_show
   - bv_status_led_take
   - device_get

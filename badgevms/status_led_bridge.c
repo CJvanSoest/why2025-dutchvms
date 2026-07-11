@@ -48,3 +48,11 @@ void bv_status_led_clear(void) {
 void bv_status_led_set_brightness(int pct) {
     status_led_set_brightness(pct);
 }
+
+void bv_status_led_set_brightness_for(int index, int pct) {
+    status_led_set_index_brightness(index, pct);
+}
+
+int bv_status_led_get_brightness_for(int index) {
+    return status_led_get_index_brightness(index);
+}

@@ -100,10 +100,36 @@ static void ws2812_show(void) {
     rmt_transmit(ws_chan, ws_enc, ws_grbw, sizeof(ws_grbw), &tc);
     rmt_tx_wait_all_done(ws_chan, 100);
 }
-/* Scale an RGB triple to ~LED_BRIGHTNESS% and push to one LED (W=0). */
-#define LED_BRIGHTNESS 15
+/* Scale an RGB triple to this LED's own brightness% and push it (W=0).
+ * Per-LED (not one shared constant) since v0.19.4/why2025-apps#1
+ * hardware-test feedback -- LED2 (DM notify) and LED3 (channel notify)
+ * already blink independently off separate notify.c identifiers (see the
+ * file header comment), brightness was the one thing still shared. Default
+ * matches the previous flat LED_BRIGHTNESS=15 for all 4. */
+#define LED_BRIGHTNESS_DEFAULT 15
+static uint8_t led_brightness_pct[WS_COUNT] = {
+    LED_BRIGHTNESS_DEFAULT, LED_BRIGHTNESS_DEFAULT, LED_BRIGHTNESS_DEFAULT, LED_BRIGHTNESS_DEFAULT
+};
+
+void status_led_set_index_brightness(int index, int pct) {
+    if ((unsigned)index >= WS_COUNT)
+        return;
+    if (pct < 0)
+        pct = 0;
+    if (pct > 100)
+        pct = 100;
+    led_brightness_pct[index] = (uint8_t)pct;
+}
+
+int status_led_get_index_brightness(int index) {
+    if ((unsigned)index >= WS_COUNT)
+        return 0;
+    return led_brightness_pct[index];
+}
+
 static void ws2812_set_scaled(int i, uint8_t r, uint8_t g, uint8_t b) {
-    ws2812_set(i, (r * LED_BRIGHTNESS) / 100, (g * LED_BRIGHTNESS) / 100, (b * LED_BRIGHTNESS) / 100, 0);
+    int pct = ((unsigned)i < WS_COUNT) ? led_brightness_pct[i] : LED_BRIGHTNESS_DEFAULT;
+    ws2812_set(i, (uint8_t)((r * pct) / 100), (uint8_t)((g * pct) / 100), (uint8_t)((b * pct) / 100), 0);
 }
 
 /* ---- App-facing control of the 4 RGBW status LEDs (see
@@ -122,9 +148,9 @@ static void ws2812_set_scaled(int i, uint8_t r, uint8_t g, uint8_t b) {
 bool volatile bv_led_app_control = false;
 
 /* Global brightness for app-driven status-LED writes, independent of the
- * firmware's own fixed LED_BRIGHTNESS - mirrors led_matrix_brightness()'s
+ * firmware's own per-LED brightness above - mirrors led_matrix_brightness()'s
  * "persists across take()/release(), not reset on release" precedent. */
-static int status_led_app_brightness = LED_BRIGHTNESS;
+static int status_led_app_brightness = LED_BRIGHTNESS_DEFAULT;
 
 void status_led_set(int i, uint8_t r, uint8_t g, uint8_t b) {
     ws2812_set(
