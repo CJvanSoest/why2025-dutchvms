@@ -19,6 +19,20 @@ static const char* TAG = "tanmatsu";
 #define WHY_PWM_RESOLUTION LEDC_TIMER_8_BIT
 #define WHY_PWM_FREQ_HZ    25000  // Above audible
 
+// Sets an already-configured LEDC channel's duty from a 0-100 percent value
+// (same 10-80 duty-code floor/ceiling why_pwm_init_channel() always applied,
+// factored out here so why2025_KEYBOARD_BL's runtime callback below can
+// reuse it instead of only ever being set once at boot).
+static void why_pwm_set_duty_percent(ledc_channel_t channel, int duty_percent) {
+    if (duty_percent < 0) duty_percent = 0;
+    if (duty_percent > 100) duty_percent = 100;
+    uint32_t duty = (uint32_t)((1U << WHY_PWM_RESOLUTION) * duty_percent / 100);
+    if (duty < 10 && duty != 0) duty = 10;
+    if (duty > 80) duty = 80;
+    ESP_ERROR_CHECK(ledc_set_duty(LEDC_LOW_SPEED_MODE, channel, duty));
+    ESP_ERROR_CHECK(ledc_update_duty(LEDC_LOW_SPEED_MODE, channel));
+}
+
 static void why_pwm_init_channel(int gpio_num, ledc_channel_t channel, int duty_percent) {
     ledc_timer_config_t timer_conf = {
         .speed_mode      = LEDC_LOW_SPEED_MODE,
@@ -40,11 +54,22 @@ static void why_pwm_init_channel(int gpio_num, ledc_channel_t channel, int duty_
     };
     ESP_ERROR_CHECK(ledc_channel_config(&channel_conf));
 
-    uint32_t duty = (uint32_t)((1U << WHY_PWM_RESOLUTION) * duty_percent / 100);
-    if (duty < 10 && duty != 0) duty = 10;
-    if (duty > 80) duty = 80;
-    ESP_ERROR_CHECK(ledc_set_duty(LEDC_LOW_SPEED_MODE, channel, duty));
-    ESP_ERROR_CHECK(ledc_update_duty(LEDC_LOW_SPEED_MODE, channel));
+    why_pwm_set_duty_percent(channel, duty_percent);
+}
+
+// ---------- Keyboard backlight RPC (why2025-apps#1) ----------
+// P4-side sender: badgevms/drivers/keyboard_backlight_client.c
+// (bv_keyboard_set_backlight() -> esp_hosted_send_custom_data()).
+static void keyboard_bl_protocol_packet_callback(uint32_t msg_id, const uint8_t* data, size_t data_len) {
+    if (msg_id != TANMATSU_EVENT_KEYBOARD_BL) {
+        ESP_LOGW(TAG, "Received message with unexpected ID: %d", msg_id);
+        return;
+    }
+    if (data_len < 1) {
+        ESP_LOGW(TAG, "Keyboard backlight message too short (%d bytes)", (int)data_len);
+        return;
+    }
+    why_pwm_set_duty_percent(LEDC_CHANNEL_1, data[0]);
 }
 
 // ---------- LoRa SPI bus + TXEN switch ----------
@@ -113,6 +138,11 @@ void app_main(void) {
     res = esp_hosted_register_custom_callback(TANMATSU_EVENT_ECHO, echo_protocol_packet_callback);
     if (res != ESP_OK) {
         ESP_LOGE(TAG, "Failed to register echo protocol callback: %s", esp_err_to_name(res));
+    }
+
+    res = esp_hosted_register_custom_callback(TANMATSU_EVENT_KEYBOARD_BL, keyboard_bl_protocol_packet_callback);
+    if (res != ESP_OK) {
+        ESP_LOGE(TAG, "Failed to register keyboard backlight callback: %s", esp_err_to_name(res));
     }
 
     // IR is not wired on WHY badge — skip if BSP_IR_TX is sentinel

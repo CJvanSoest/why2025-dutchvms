@@ -31,6 +31,7 @@ idf_component_register(
      "drivers/esp-serial-flasher/slave_c6_flasher.c"
      "drivers/esp-serial-flasher/why2025_firmware.c"
      "drivers/fatfs.c"
+     "drivers/keyboard_backlight_client.c"
      "drivers/led_matrix_pca9698.c"
      "drivers/lora_proto_client.c"
      "drivers/socket.c"
