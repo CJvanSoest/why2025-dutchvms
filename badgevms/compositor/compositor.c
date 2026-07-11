@@ -1130,7 +1130,7 @@ void window_present(window_t *window, bool block, window_rect_t *rects, int num_
         back_buffer  = window->framebuffers[window->back_fb];
 
         if (!front_buffer || !back_buffer) {
-            abort();
+            why_die("window_present: front/back framebuffer missing on a double-buffered window");
         }
 
         compositor_message_t message = {

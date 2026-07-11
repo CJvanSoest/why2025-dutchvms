@@ -122,6 +122,14 @@ __attribute__((always_inline)) inline static task_info_t *get_task_info() {
     return &kernel_task;
 }
 
+/* Unrecoverable kernel-level error (e.g. a portMAX_DELAY-guarded mutex take
+ * somehow failed -- should be unreachable in normal operation, but if the
+ * core kernel state backing it is corrupted there's no safe way to keep
+ * running). Reboots the whole badge, same as a bare abort(), but logs
+ * `reason` first via esp_system_abort() so the cause is visible in the
+ * panic output instead of just "abort()". Defined in wrapped_funcs.c. */
+void why_die(char const *reason) __attribute__((noreturn));
+
 bool         task_init();
 pid_t        run_task(void const *buffer, uint16_t stack_size, task_type_t type, int argc, char *argv[]);
 pid_t        run_task_path(char const *path, uint16_t stack_size, task_type_t type, int argc, char *argv[]);

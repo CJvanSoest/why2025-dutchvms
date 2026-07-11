@@ -1,0 +1,5 @@
+# sdkconfig fragment for the "ESP-IDF build (badgelink)" CI job.
+# Applied on top of sdkconfig.defaults to compile-check the experimental
+# BadgeLink UART transport, which is off by default (see
+# badgevms/Kconfig.projbuild). Not used for local/release builds.
+CONFIG_CJ_BADGEVMS_ENABLE_BADGELINK=y

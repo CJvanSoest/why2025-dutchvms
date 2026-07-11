@@ -8,6 +8,7 @@
 #include "esp_hosted_peer_data.h"
 #include "esp_log.h"
 #include "freertos/FreeRTOS.h"
+#include "freertos/queue.h"
 #include "freertos/semphr.h"
 #include "interface.h"
 #include "lora_protocol.h"
@@ -22,6 +23,29 @@ static uint8_t                       reply_buffer[512];
 static lora_protocol_config_params_t current_config = {0};
 static SemaphoreHandle_t             tx_semaphore   = NULL;
 
+// Owns the whole logical SPI sequence for a radio operation (config apply,
+// packet transmit, or lora_task's own post-RX mode re-arm) -- held for the
+// operation's full duration, not just per-transaction. The low-level SX126x
+// driver only mutexes individual SPI transactions (sx126x.c's spi_semaphore),
+// which isn't enough on its own: e.g. an RX_DONE IRQ firing mid-transmit_packet()
+// could otherwise let lora_task's RX-rearm interleave chip-mode/config calls
+// with the in-flight TX sequence and corrupt it.
+static SemaphoreHandle_t radio_op_mutex = NULL;
+
+// PACKET_TX arrives on the esp-hosted Rx thread, which has a documented
+// "no blocking calls" contract (see handle_custom_rpc_request() in
+// slave_control.c) -- transmit_packet() waits up to 1000ms for TX_DONE, so it
+// cannot run there directly. The Rx-thread handler enqueues the request here
+// instead and returns immediately; lora_tx_task does the actual transmit and
+// sends the ACK/NACK once it's actually done.
+typedef struct {
+    uint32_t sequence_number;
+    uint8_t  length;
+    uint8_t  data[255];
+} lora_tx_request_t;
+
+static QueueHandle_t tx_request_queue = NULL;
+
 static void generate_custom_event(uint32_t event_id, uint8_t* event_data, size_t event_data_len) {
     esp_err_t res = esp_hosted_send_custom_data(event_id, event_data, event_data_len);
     if (res != ESP_OK) {
@@ -29,20 +53,18 @@ static void generate_custom_event(uint32_t event_id, uint8_t* event_data, size_t
     }
 }
 
+// ACK/NACK use their own on-stack buffer rather than the shared reply_buffer:
+// unlike every other sender here (Rx-thread-only), these two are also called
+// from lora_tx_task (see LORA_PROTOCOL_TYPE_PACKET_TX below), so reply_buffer
+// would otherwise be a cross-task data race.
 static void send_nack(uint32_t sequence_number) {
-    lora_protocol_header_t* nack_packet = (lora_protocol_header_t*)reply_buffer;
-    nack_packet->sequence_number        = sequence_number;
-    nack_packet->type                   = LORA_PROTOCOL_TYPE_NACK;
-    size_t nack_length                  = sizeof(lora_protocol_header_t);
-    generate_custom_event(TANMATSU_EVENT_LORA, reply_buffer, nack_length);
+    lora_protocol_header_t nack_packet = {.sequence_number = sequence_number, .type = LORA_PROTOCOL_TYPE_NACK};
+    generate_custom_event(TANMATSU_EVENT_LORA, (uint8_t*)&nack_packet, sizeof(nack_packet));
 }
 
 static void send_ack(uint32_t sequence_number) {
-    lora_protocol_header_t* ack_packet = (lora_protocol_header_t*)reply_buffer;
-    ack_packet->sequence_number        = sequence_number;
-    ack_packet->type                   = LORA_PROTOCOL_TYPE_ACK;
-    size_t ack_length                  = sizeof(lora_protocol_header_t);
-    generate_custom_event(TANMATSU_EVENT_LORA, reply_buffer, ack_length);
+    lora_protocol_header_t ack_packet = {.sequence_number = sequence_number, .type = LORA_PROTOCOL_TYPE_ACK};
+    generate_custom_event(TANMATSU_EVENT_LORA, (uint8_t*)&ack_packet, sizeof(ack_packet));
 }
 
 static void send_mode(uint32_t sequence_number) {
@@ -127,7 +149,7 @@ static void send_config(uint32_t sequence_number) {
     generate_custom_event(TANMATSU_EVENT_LORA, reply_buffer, config_length);
 }
 
-static esp_err_t apply_config(uint8_t* config_data, size_t config_length) {
+static esp_err_t apply_config_locked(uint8_t* config_data, size_t config_length) {
     if (config_length < sizeof(lora_protocol_config_params_t)) {
         ESP_LOGW(TAG, "SET_CONFIG command received with insufficient data length: %zu bytes", config_length);
         return ESP_ERR_INVALID_SIZE;
@@ -307,6 +329,13 @@ static esp_err_t apply_config(uint8_t* config_data, size_t config_length) {
     return ESP_OK;
 }
 
+static esp_err_t apply_config(uint8_t* config_data, size_t config_length) {
+    xSemaphoreTake(radio_op_mutex, portMAX_DELAY);
+    esp_err_t res = apply_config_locked(config_data, config_length);
+    xSemaphoreGive(radio_op_mutex);
+    return res;
+}
+
 static void send_status(uint32_t sequence_number) {
     lora_protocol_header_t* status_packet = (lora_protocol_header_t*)reply_buffer;
     status_packet->sequence_number        = sequence_number;
@@ -341,7 +370,7 @@ static void send_status(uint32_t sequence_number) {
     generate_custom_event(TANMATSU_EVENT_LORA, reply_buffer, status_length);
 }
 
-static esp_err_t transmit_packet(uint8_t* packet_data, size_t packet_length) {
+static esp_err_t transmit_packet_locked(uint8_t* packet_data, size_t packet_length) {
     ESP_LOGI(TAG, "Transmitting LoRa packet of length %d", packet_length);
 
     // Check packet size limits
@@ -448,6 +477,27 @@ static esp_err_t transmit_packet(uint8_t* packet_data, size_t packet_length) {
     return ESP_OK;
 }
 
+static esp_err_t transmit_packet(uint8_t* packet_data, size_t packet_length) {
+    xSemaphoreTake(radio_op_mutex, portMAX_DELAY);
+    esp_err_t res = transmit_packet_locked(packet_data, packet_length);
+    xSemaphoreGive(radio_op_mutex);
+    return res;
+}
+
+static void lora_tx_task(void* pvParameters) {
+    lora_tx_request_t req;
+    while (1) {
+        if (xQueueReceive(tx_request_queue, &req, portMAX_DELAY) != pdTRUE) {
+            continue;
+        }
+        if (transmit_packet(req.data, req.length) == ESP_OK) {
+            send_ack(req.sequence_number);
+        } else {
+            send_nack(req.sequence_number);
+        }
+    }
+}
+
 void lora_protocol_handle_packet(uint8_t* request_buffer, size_t request_length) {
     if (request_length < sizeof(lora_protocol_header_t)) {
         ESP_LOGW(TAG, "Received LoRa protocol packet is too short: %zu bytes", request_length);
@@ -511,9 +561,17 @@ void lora_protocol_handle_packet(uint8_t* request_buffer, size_t request_length)
                 send_nack(packet->sequence_number);
                 break;
             }
-            if (transmit_packet(pkt->data, pkt->length) == ESP_OK) {
-                send_ack(packet->sequence_number);
-            } else {
+            // Hand off to lora_tx_task instead of transmitting inline: this
+            // callback runs on the esp-hosted Rx thread, which must not
+            // block, and transmit_packet() waits up to 1000ms for TX_DONE.
+            // The ACK/NACK is sent asynchronously by lora_tx_task once the
+            // transmit actually completes (or fails).
+            lora_tx_request_t req;
+            req.sequence_number = packet->sequence_number;
+            req.length          = pkt->length;
+            memcpy(req.data, pkt->data, pkt->length);
+            if (xQueueSend(tx_request_queue, &req, 0) != pdTRUE) {
+                ESP_LOGW(TAG, "TX queue full, dropping PACKET_TX seq=%" PRIu32, packet->sequence_number);
                 send_nack(packet->sequence_number);
             }
             break;
@@ -536,12 +594,37 @@ static void lora_protocol_packet_callback(uint32_t msg_id, const uint8_t* data, 
     lora_protocol_handle_packet((uint8_t*)data, data_len);
 }
 
+static void log_device_errors(uint16_t errors) {
+    ESP_LOGE(TAG, "LoRa radio device errors detected: 0x%04x", errors);
+
+    if (errors & SX126X_ERROR_RC64K_CALIB_ERR) ESP_LOGE(TAG, "RC64K calibration error");
+    if (errors & SX126X_ERROR_RC13M_CALIB_ERR) ESP_LOGE(TAG, "RC13M calibration error");
+    if (errors & SX126X_ERROR_PLL_CALIB_ERR) ESP_LOGE(TAG, "PLL calibration error");
+    if (errors & SX126X_ERROR_ADC_CALIB_ERR) ESP_LOGE(TAG, "ADC calibration error");
+    if (errors & SX126X_ERROR_IMG_CALIB_ERR) ESP_LOGE(TAG, "Image calibration error");
+    if (errors & SX126X_XOSC_START_ERR) ESP_LOGE(TAG, "XOSC start error");
+    if (errors & SX126X_PLL_LOCK_ERR) ESP_LOGE(TAG, "PLL lock error");
+    if (errors & SX126X_PA_RAMP_ERR) ESP_LOGE(TAG, "PA ramp error");
+}
+
 esp_err_t lora_initialize(void) {
     esp_err_t res;
 
     tx_semaphore = xSemaphoreCreateBinary();
     if (tx_semaphore == NULL) {
         ESP_LOGE(TAG, "Failed to create TX semaphore");
+        return ESP_ERR_NO_MEM;
+    }
+
+    radio_op_mutex = xSemaphoreCreateMutex();
+    if (radio_op_mutex == NULL) {
+        ESP_LOGE(TAG, "Failed to create radio operation mutex");
+        return ESP_ERR_NO_MEM;
+    }
+
+    tx_request_queue = xQueueCreate(2, sizeof(lora_tx_request_t));
+    if (tx_request_queue == NULL) {
+        ESP_LOGE(TAG, "Failed to create TX request queue");
         return ESP_ERR_NO_MEM;
     }
 
@@ -669,16 +752,7 @@ esp_err_t lora_initialize(void) {
     }
 
     if (errors != 0) {
-        ESP_LOGE(TAG, "LoRa radio device errors detected: 0x%04x", errors);
-
-        if (errors & SX126X_ERROR_RC64K_CALIB_ERR) ESP_LOGE(TAG, "RC64K calibration error");
-        if (errors & SX126X_ERROR_RC13M_CALIB_ERR) ESP_LOGE(TAG, "RC13M calibration error");
-        if (errors & SX126X_ERROR_PLL_CALIB_ERR) ESP_LOGE(TAG, "PLL calibration error");
-        if (errors & SX126X_ERROR_ADC_CALIB_ERR) ESP_LOGE(TAG, "ADC calibration error");
-        if (errors & SX126X_ERROR_IMG_CALIB_ERR) ESP_LOGE(TAG, "Image calibration error");
-        if (errors & SX126X_XOSC_START_ERR) ESP_LOGE(TAG, "XOSC start error");
-        if (errors & SX126X_PLL_LOCK_ERR) ESP_LOGE(TAG, "PLL lock error");
-        if (errors & SX126X_PA_RAMP_ERR) ESP_LOGE(TAG, "PA ramp error");
+        log_device_errors(errors);
         return ESP_FAIL;
     }
 
@@ -806,6 +880,12 @@ void lora_task(void* pvParameters) {
 
     ESP_LOGI(TAG, "LoRa task started");
 
+    // Only safe to start once lora_initialize() above has actually created
+    // tx_request_queue/radio_op_mutex -- starting it from start_lora_task()
+    // alongside this task would race lora_tx_task's first xQueueReceive()
+    // against their creation.
+    xTaskCreatePinnedToCore(lora_tx_task, "lora_tx_task", 4096, NULL, 10, NULL, CONFIG_SOC_CPU_CORES_NUM - 1);
+
     while (1) {
         res = sx126x_irq_wait(&lora_handle, portMAX_DELAY);
         if (res != ESP_OK) {
@@ -858,6 +938,11 @@ void lora_task(void* pvParameters) {
                     read_data();
                 }
 
+                // Mutexed against transmit_packet()/apply_config(): without this,
+                // an RX_DONE IRQ landing mid-transmit (or mid-config-apply) could
+                // let this re-arm race the other task's own chip-mode/config SPI
+                // calls and corrupt whichever operation was in flight.
+                xSemaphoreTake(radio_op_mutex, portMAX_DELAY);
                 while (1) {
                     res = sx126x_set_op_mode_rx(&lora_handle, 0);
                     if (res != ESP_OK) {
@@ -867,6 +952,7 @@ void lora_task(void* pvParameters) {
                         break;
                     }
                 }
+                xSemaphoreGive(radio_op_mutex);
                 break;
             case SX126X_COMMAND_STATUS_TIMEOUT:
                 printf("Operation timed out!\r\n");
@@ -916,17 +1002,7 @@ void lora_task(void* pvParameters) {
         }
 
         if (errors != 0) {
-            ESP_LOGE(TAG, "LoRa radio device errors detected: 0x%04x", errors);
-
-            if (errors & SX126X_ERROR_RC64K_CALIB_ERR) ESP_LOGE(TAG, "RC64K calibration error");
-            if (errors & SX126X_ERROR_RC13M_CALIB_ERR) ESP_LOGE(TAG, "RC13M calibration error");
-            if (errors & SX126X_ERROR_PLL_CALIB_ERR) ESP_LOGE(TAG, "PLL calibration error");
-            if (errors & SX126X_ERROR_ADC_CALIB_ERR) ESP_LOGE(TAG, "ADC calibration error");
-            if (errors & SX126X_ERROR_IMG_CALIB_ERR) ESP_LOGE(TAG, "Image calibration error");
-            if (errors & SX126X_XOSC_START_ERR) ESP_LOGE(TAG, "XOSC start error");
-            if (errors & SX126X_PLL_LOCK_ERR) ESP_LOGE(TAG, "PLL lock error");
-            if (errors & SX126X_PA_RAMP_ERR) ESP_LOGE(TAG, "PA ramp error");
-
+            log_device_errors(errors);
             continue;
         }
     }

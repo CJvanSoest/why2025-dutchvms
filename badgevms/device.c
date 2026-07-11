@@ -19,6 +19,7 @@
 #include "esp_log.h"
 #include "freertos/FreeRTOS.h"
 #include "hash_helper.h"
+#include "task.h"
 #include "thirdparty/khash.h"
 
 KHASH_MAP_INIT_STR(devtable, void *);
@@ -34,8 +35,7 @@ bool device_register(char const *name, device_t *device) {
     }
 
     if (xSemaphoreTake(device_table_lock, portMAX_DELAY) != pdTRUE) {
-        ESP_LOGE(TAG, "Failed to get device table mutex");
-        abort();
+        why_die("device_register: failed to get device table mutex");
     }
 
     khash_insert_unique_str(devtable, device_table, name, device, "The device already exists");
@@ -47,8 +47,7 @@ bool device_register(char const *name, device_t *device) {
 
 device_t *device_get(char const *name) {
     if (xSemaphoreTake(device_table_lock, portMAX_DELAY) != pdTRUE) {
-        ESP_LOGE(TAG, "Failed to get device table mutex");
-        abort();
+        why_die("device_get: failed to get device table mutex");
     }
 
     khash_get_str(device_t *, device, devtable, device_table, name, "The device does not exist");

@@ -16,14 +16,14 @@
 
 /* Kernel-internal contract for the PCA9698 LED-matrix add-on (rows PB0-11 x
  * cols PA0-19, monochrome/on-off — NOT the 4x RGBW status LEDs on GPIO7,
- * those are a separate ws2812-style chain, see ws2812_set()/ws2812_show() in
- * badgevms_i2c_bus.c). led_matrix_clear/pixel/row/fill/brightness are
- * defined (non-static) in badgevms_i2c_bus.c; this header just gives
+ * those are a separate ws2812-style chain, see status_led_internal.h /
+ * status_led_ws2812.c). led_matrix_clear/pixel/row/fill/brightness are
+ * defined (non-static) in led_matrix_pca9698.c; this header just gives
  * led_matrix_bridge.c (the app-facing wrapper, see badgevms/led_matrix.h) a
  * declaration to call them against.
  *
  * bv_mtx_app_control lets an app take exclusive ownership of the shared
- * mtx_fb framebuffer: while true, badgevms_i2c_bus.c's own boot-time demo
+ * mtx_fb framebuffer: while true, led_matrix_pca9698.c's own boot-time demo
  * task (mtx_demo_task, the bouncing-pixel/border animation) stops writing to
  * mtx_fb so the app's own writes aren't clobbered every ~120ms. The
  * multiplex refresh task keeps running regardless — it only reads mtx_fb —

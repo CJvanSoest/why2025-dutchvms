@@ -91,8 +91,7 @@ typedef struct {
 
 static pid_t pid_allocate() {
     if (xSemaphoreTake(pid_table_lock, portMAX_DELAY) != pdTRUE) {
-        ESP_LOGE(TAG, "Failed to get pid table mutex");
-        abort();
+        why_die("pid_allocate: failed to get pid table mutex");
     }
 
     pid_t pid = pid_table[head];
@@ -113,8 +112,7 @@ static void pid_free(pid_t pid) {
     }
 
     if (xSemaphoreTake(pid_table_lock, portMAX_DELAY) != pdTRUE) {
-        ESP_LOGE(TAG, "Failed to get pid table mutex");
-        abort();
+        why_die("pid_free: failed to get pid table mutex");
     }
 
     pid_table[tail] = pid;
@@ -129,8 +127,7 @@ task_info_t *get_taskinfo_for_pid(pid_t pid) {
 
 static void process_table_add_task(task_info_t *task_info) {
     if (xSemaphoreTake(process_table_lock, portMAX_DELAY) != pdTRUE) {
-        ESP_LOGE(TAG, "Failed to get process table mutex");
-        abort();
+        why_die("process_table_add_task: failed to get process table mutex");
     }
 
     process_table[task_info->pid] = task_info;
@@ -140,8 +137,7 @@ static void process_table_add_task(task_info_t *task_info) {
 
 static void process_table_remove_task(task_info_t *task_info) {
     if (xSemaphoreTake(process_table_lock, portMAX_DELAY) != pdTRUE) {
-        ESP_LOGE(TAG, "Failed to get process table mutex");
-        abort();
+        why_die("process_table_remove_task: failed to get process table mutex");
     }
 
     process_table[task_info->pid] = NULL;
@@ -612,8 +608,7 @@ static void IRAM_ATTR hades(void *ignored) {
                 task_info_delete(task_info);
 
                 if (xSemaphoreTake(process_table_lock, portMAX_DELAY) != pdTRUE) {
-                    ESP_LOGE(TAG, "Failed to get process table mutex");
-                    abort();
+                    why_die("hades: failed to get process table mutex");
                 }
 
                 // If this process had a parent, and it is still alive, signal it.
@@ -623,15 +618,31 @@ static void IRAM_ATTR hades(void *ignored) {
                     }
                 }
 
-                // Clean up any child processes or threads this process might have left behind
+                // Snapshot the handles of any child processes/threads this
+                // process left behind here (under the lock -- just a table
+                // read), but defer the actual vTaskDelete() calls until after
+                // process_table_lock is released below. vTaskDelete() kills a
+                // task instantly, mid-instruction, with no chance for it to
+                // run its own unwind code; if an orphan happened to be inside
+                // a kernel critical section elsewhere (e.g. holding
+                // device_table_lock) at that exact moment, that lock would
+                // stay orphaned for good. Doing the kill outside our own lock
+                // at least avoids compounding that with process_table_lock
+                // itself, and keeps this lock's hold time to table reads only.
+                static TaskHandle_t orphan_handles[MAX_PID];
+                int                 orphan_count = 0;
                 for (int i = 1; i < MAX_PID; ++i) {
                     if (process_table[i] && process_table[i]->parent == dead_pid) {
-                        // See you soon...
-                        vTaskDelete(process_table[i]->handle);
+                        orphan_handles[orphan_count++] = process_table[i]->handle;
                     }
                 }
 
                 xSemaphoreGive(process_table_lock);
+
+                // See you soon...
+                for (int i = 0; i < orphan_count; ++i) {
+                    vTaskDelete(orphan_handles[i]);
+                }
 
                 // Don't free our PID until the last moment
                 pid_free(dead_pid);
@@ -815,8 +826,7 @@ bool task_application_is_running(char const *unique_id) {
     }
 
     if (xSemaphoreTake(process_table_lock, portMAX_DELAY) != pdTRUE) {
-        ESP_LOGE(TAG, "Failed to get process table mutex");
-        abort();
+        why_die("task_application_is_running: failed to get process table mutex");
     }
 
     bool ret = false;

@@ -131,7 +131,7 @@ event_t scancode_to_event(tca8418_device_t *device, uint8_t scancode) {
     uint8_t             key = scancode & 0x7F;
     keyboard_scancode_t s   = KEY_SCANCODE_UNKNOWN;
 
-    if (key <= 0x50) {
+    if (key > 0 && key <= 0x50) {
         s = keymap[key - 1];
     }
 
@@ -220,7 +220,7 @@ static ssize_t tca8418_read(void *dev, int fd, void *buf, size_t count) {
             if (written + sizeof(event_t) > count) {
                 break;
             }
-            memcpy(buf, &event, sizeof(event_t));
+            memcpy((uint8_t *)buf + written, &event, sizeof(event_t));
             written += sizeof(event_t);
         } else {
             break;

@@ -29,5 +29,18 @@ menu "WHY2025 Custom Board Selection"
                 The screens have a black border where the ribbon cable is connected
     endchoice
 
+    config CJ_BADGEVMS_ENABLE_BADGELINK
+        bool "Enable BadgeLink UART protocol instead of deploy_protocol.c"
+        default n
+        help
+            Starts the experimental BadgeLink protocol (badgevms/drivers/badgelink/)
+            over UART0/CH340 at boot instead of this project's own
+            deploy_protocol.c. Mutually exclusive with deploy_protocol.c: both
+            listeners would otherwise race to read the same UART0 RX byte
+            stream. Off by default -- deploy_protocol.c is the proven,
+            already-working workflow badge_deploy.py relies on today. See
+            badgelink_transport_uart.h. A dedicated CI job builds with this
+            enabled so it doesn't silently bit-rot.
+
 endmenu
 

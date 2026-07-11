@@ -13,7 +13,7 @@ storage viewer, WiFi analyzer, launcher, etc.) live in a separate repo,
 kept apart so this fork stays a clean diff against upstream:
 
 - **Firmware** — this repo, GitHub: [why2025-dutchvms](https://github.com/CJvanSoest/why2025-dutchvms) (public, GPL-3.0-or-later)
-- **Apps** — [why2025-apps](https://github.com/CJvanSoest/why2025-apps) (private, MIT) — source for every `cj_*` app plus `tools/badge_deploy.py`
+- **Apps** — [why2025-apps](https://github.com/CJvanSoest/why2025-apps) (MIT) — source for every `cj_*` app plus `tools/badge_deploy.py`
 - **App store** — [why2025-app-repository](https://github.com/CJvanSoest/why2025-app-repository) (public) — the distribution index the launcher's APP REPO tile browses/installs from
 
 GitHub is primary for both code and docs on all three. A separate NAS Gitea

@@ -12,7 +12,8 @@
  *
  * Mutually exclusive with deploy_protocol_init(): both would otherwise race
  * to read the same UART0 RX byte stream. Exactly one of the two should be
- * started at boot — see CJ_BADGEVMS_ENABLE_BADGELINK in why2025_firmware.c.
+ * started at boot — see CJ_BADGEVMS_ENABLE_BADGELINK in
+ * badgevms/Kconfig.projbuild.
  */
 
 #pragma once
