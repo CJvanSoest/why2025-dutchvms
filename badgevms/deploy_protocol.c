@@ -214,6 +214,23 @@ static int vms_to_posix(char const *vms, char *out, size_t out_size) {
         }
     }
     out[pos] = 0;
+
+    /* Reject '.' / '..' path segments anywhere in the result, so PUT/GET/
+     * LIST/DELETE (incl. recursive delete) can never escape the intended
+     * SD0:/FLASH0: root via a crafted VMS path. */
+    char const *seg = out;
+    while (*seg == '/') seg++;
+    while (*seg) {
+        char const *seg_end = strchr(seg, '/');
+        size_t      seg_len = seg_end ? (size_t)(seg_end - seg) : strlen(seg);
+        if ((seg_len == 1 && seg[0] == '.') || (seg_len == 2 && seg[0] == '.' && seg[1] == '.'))
+            return -1;
+        if (!seg_end)
+            break;
+        seg = seg_end + 1;
+        while (*seg == '/') seg++;
+    }
+
     return 0;
 }
 

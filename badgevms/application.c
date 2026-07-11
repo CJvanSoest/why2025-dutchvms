@@ -536,14 +536,33 @@ bool application_destroy(application_t *app) {
     if (!unique_id)
         return false;
 
-    bool  success = false;
+    bool success = true;
+
+    /* Delete the manifest first: it lives as a sibling <uid>.json in
+     * applications_base_dir, not inside app_dir, so rm_rf(app_dir) below
+     * never touches it. Leaving it behind would keep application_list()
+     * showing a listable-but-broken ghost entry, and permanently block
+     * this unique_identifier from being reused. */
+    char *metadata_path = get_metadata_path(unique_id);
+    if (metadata_path) {
+        if (why_unlink(metadata_path) != 0 && errno != ENOENT) {
+            ESP_LOGW(TAG, "Could not remove manifest %s\n", metadata_path);
+            success = false;
+        }
+        why_free(metadata_path);
+    } else {
+        ESP_LOGW(TAG, "No valid metadata path for %s\n", app->unique_identifier);
+        success = false;
+    }
+
     char *app_dir = get_application_dir(unique_id);
     if (app_dir) {
         ESP_LOGI(TAG, "Attempting to recursively delete %s\n", app_dir);
-        success = rm_rf(app_dir);
+        success = rm_rf(app_dir) && success;
         why_free(app_dir);
     } else {
         ESP_LOGW(TAG, "No valid app_dir for %s\n", app->unique_identifier);
+        success = false;
     }
 
     return success;

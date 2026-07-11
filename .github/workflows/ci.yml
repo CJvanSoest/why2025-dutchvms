@@ -69,3 +69,25 @@ jobs:
           # legitimate outlier (badgelink_fs.c's fs_copy_file(), which holds
           # a deliberate 4 KB on-stack copy buffer) at ~4.1 KB.
           python3 scripts/check_stack_usage.py --threshold 5120 --root build/esp-idf/badgevms
+
+  build-badgelink:
+    name: ESP-IDF build (badgelink)
+    runs-on: ubuntu-latest
+    container:
+      image: espressif/idf:v5.5.1
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Mark workspace as safe (container runs as root)
+        run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
+
+      # Not a required check — this is coverage, not a release gate. It
+      # exists so the experimental BadgeLink transport (badgevms/drivers/
+      # badgelink/, off by default) can't silently bit-rot against the rest
+      # of badgevms/ the way the always-off #define it replaced could.
+      # See CJ_BADGEVMS_ENABLE_BADGELINK in badgevms/Kconfig.projbuild.
+      - name: Build with CJ_BADGEVMS_ENABLE_BADGELINK=y
+        shell: bash
+        run: |
+          . "$IDF_PATH/export.sh"
+          idf.py -D SDKCONFIG_DEFAULTS="sdkconfig.defaults;sdkconfig.ci-badgelink" build
