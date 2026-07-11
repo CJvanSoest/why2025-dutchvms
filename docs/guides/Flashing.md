@@ -90,6 +90,10 @@ python -m esptool --chip esp32p4 -b 460800 --port /dev/ttyUSB0 \
 4. Do **not** flash `storage.bin` — that would erase installed apps and
    saved settings (see above).
 
+This is the only supported path today. An SD-card-based installer and a real
+OTA-over-WiFi path (no esptool, no computer) are proposed but not yet built —
+see [docs/design/SD-and-OTA-Updates.md](../design/SD-and-OTA-Updates.md).
+
 ### Installing/updating individual apps
 
 Apps (the `cj_*` apps in the separate
@@ -122,4 +126,5 @@ flow.
 
 - [Releases.md](Releases.md) — how a release is cut and versioned
 - [DUTCHVMS.md](../../DUTCHVMS.md) — what this fork changes vs upstream BadgeVMS
+- [docs/design/SD-and-OTA-Updates.md](../design/SD-and-OTA-Updates.md) — proposed SD-card install + OTA path
 - [README.md](../../README.md) — building from source, SDK, example apps
