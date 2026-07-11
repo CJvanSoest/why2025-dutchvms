@@ -17,12 +17,12 @@
 /* Kernel-internal contract for the 4x RGBW status LEDs (SK6812/XL-5050RGBWC
  * on WS-DATA = GPIO7 - NOT the 12x20 PCA9698 matrix, see
  * drivers/led_matrix_internal.h for that one). status_led_set/show/clear/
- * set_brightness are defined (non-static) in badgevms_i2c_bus.c; this header
- * just gives status_led_bridge.c (the app-facing wrapper, see
+ * set_brightness are defined (non-static) in status_led_ws2812.c; this
+ * header just gives status_led_bridge.c (the app-facing wrapper, see
  * badgevms/status_led.h) a declaration to call them against.
  *
  * bv_led_app_control lets an app take exclusive ownership of the shared
- * ws_grbw chain: while true, badgevms_i2c_bus.c's own ws2812_task (which
+ * ws_grbw chain: while true, status_led_ws2812.c's own ws2812_task (which
  * otherwise drives LED0-3 off LoRa/WiFi/notify status every ~1s) skips both
  * its own status computation and its own ws2812_show() call, so the app's
  * last-pushed frame stays exactly as drawn. On release, the task's next tick
