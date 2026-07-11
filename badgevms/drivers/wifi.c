@@ -636,13 +636,20 @@ static void start_wifi() {
     ESP_ERROR_CHECK(esp_netif_sntp_init(&sntp_cfg));
 }
 
-/* CJ-PATCH 2026-05-17: compile-time switch. Set to 0 to skip ESP-Hosted/SDIO
- * because the C6 runs MeshCore instead. Returns a valid device shell so
- * device_register() succeeds (avoids OTA rollback), but WiFi status stays
- * DISABLED and no SDIO transport is started.
+/* CJ-PATCH 2026-05-17: compile-time switch, kept for the rare case of
+ * needing to bring a badge up without any C6 co-processor traffic at all
+ * (e.g. bench-testing the P4 alone). Set to 0 to skip ESP-Hosted/SDIO
+ * bring-up entirely; returns a valid device shell so device_register()
+ * still succeeds (avoids OTA rollback), but WiFi status stays DISABLED and
+ * no SDIO transport is started.
  *
- * To restore WiFi: set this to 1, flash backup/c6_factory_backup.bin back
- * to the C6, then idf.py build && idf.py flash. */
+ * Normally leave this at 1: the C6 runs this fork's own
+ * connectivity_esp_hosted/slave firmware (flashed by
+ * flash_slave_c6_if_needed() below from the SD-staged
+ * why2025_firmware_ota_c6 image), which serves ESP-Hosted WiFi/BT *and* the
+ * custom LoRa protocol server (lora_protocol_server.c) at the same time --
+ * WiFi and MeshCore/LoRa are not mutually exclusive on this fork, they run
+ * on the same C6 firmware image. */
 #define CJ_BADGEVMS_ENABLE_WIFI 1
 
 device_t *wifi_create() {

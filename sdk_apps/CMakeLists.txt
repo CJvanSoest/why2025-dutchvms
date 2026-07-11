@@ -155,25 +155,11 @@ endfunction()
 # Core apps
 #
 
-# Old OTA updater preinstalled at handout, doesn't build anymore due to api changes
-#build_app(ota_wifi_update
-#    SOURCES
-#     ota_wifi_update.c
-#     thirdparty/microui.c
-#)
-
-# Current updater app — disabled in PREINSTALL per user request.
-# WHY-team's OTA is not used; we drive updates manually via badge_deploy.
-# Re-enable by changing the comment marker back to active CMake call.
-#build_app(why2025_ota PREINSTALL
-#    SOURCES
-#     main.c
-#     window.c
-#     ota_update.c
-#     thirdparty/cJSON.c
-#    LIBRARIES
-#     sdl3
-#)
+# ota_wifi_update (WHY-team's original handout OTA app, didn't build against
+# current APIs) and why2025_ota (its replacement, dropped in favour of
+# manual updates via badge_deploy) both moved to Archive/sdk_apps/ -- see
+# Archive/README.md. Updates now ship via GitHub Releases + badge_deploy.py,
+# not an on-device updater app.
 
 build_app(badgevms_launcher PREINSTALL
     SOURCES

@@ -1,14 +1,17 @@
 name: Release
 
 # Publishes a GitHub Release with the built firmware attached whenever a
-# version tag (vX.Y.Z) is pushed. The badge's OTA updater
-# (sdk_apps/why2025_ota) polls /releases/latest, compares tag_name against the
-# running PROJECT_VER (derived from git describe, see top-level CMakeLists.txt),
-# and streams the "badgevms.bin" asset straight into esp_ota.
+# version tag (vX.Y.Z) is pushed. There is no on-device updater polling this
+# (sdk_apps/why2025_ota, the WHY-team app that would have done that, is
+# archived -- Archive/sdk_apps/why2025_ota/ -- and was never enabled here):
+# the release exists as a versioned, CI-built artifact for provenance, and
+# flashing badgevms.bin onto a badge is a manual esptool step -- see
+# docs/guides/Flashing.md for the exact command.
 #
 # Cut a release with:
 #   git tag v1.0.0 && git push origin v1.0.0
 # (the tag drives both PROJECT_VER and the release name; keep them in sync).
+# See docs/guides/Releases.md for the full cut-a-release checklist.
 
 on:
   push:
