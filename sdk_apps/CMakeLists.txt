@@ -180,30 +180,9 @@ build_app(badgevms_launcher PREINSTALL
      main.c
 )
 
-build_app(badgevms_settings PREINSTALL
-    SOURCES
-     main.c
-    LIBRARIES
-     sdl3
-)
-
 #
 # Regular apps
 #
-
-# CJ-PATCH: PREINSTALL_CATALOG — apps land in /FLASH0/BADGEVMS/CATALOG/
-# instead of /APPS/. Not auto-loaded; launcher catalog view offers install.
-build_app(why2025_sponsors PREINSTALL_CATALOG
-    SOURCES
-     main.c
-     image.c
-)
-
-build_app(why2025_namebadge PREINSTALL_CATALOG
-    SOURCES
-     main.c
-     image.c
-)
 
 build_app(doomgeneric
     SOURCES
@@ -350,11 +329,6 @@ build_app(framebuffer_test
      framebuffer_test_a.c
 )
 
-build_app(hello PREINSTALL_CATALOG
-    SOURCES
-     main.c
-)
-
 build_app(process_test
     SOURCES
      main.c
@@ -368,21 +342,6 @@ build_app(readdir_test
 build_app(socket_test
     SOURCES
      socket_test.c
-)
-
-# AKA Snake (CJ-PATCH: catalog)
-build_app(sdl_test PREINSTALL_CATALOG
-    SOURCES
-     sdl_test.c
-    LIBRARIES
-     sdl3
-)
-
-build_app(sdl2_test PREINSTALL_CATALOG
-    SOURCES
-     sdl2_test.c
-    LIBRARIES
-     sdl2
 )
 
 build_app(thread_test

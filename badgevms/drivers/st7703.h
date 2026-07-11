@@ -186,6 +186,12 @@ extern "C" {
 
 device_t *st7703_create();
 
+/* Backlight brightness (task #31) — see the BADGE_BACKLIGHT_GPIO comment in
+ * st7703.c for why this is currently plumbing without a confirmed local pin.
+ * `percent` is clamped to 0..100. */
+void    st7703_set_brightness(uint8_t percent);
+uint8_t st7703_get_brightness(void);
+
 #ifdef __cplusplus
 }
 #endif

@@ -33,6 +33,7 @@ include:
   - badgevms/application.h
   - badgevms/compositor.h
   - badgevms/device.h
+  - badgevms/display.h
   - badgevms/event.h
   - badgevms/misc_funcs.h
   - badgevms/notify.h
@@ -42,6 +43,9 @@ include:
   - badgevms/lora.h
   - badgevms/ble.h
   - badgevms/nvs.h
+  - badgevms/led_matrix.h
+  - badgevms/status_led.h
+  - badgevms/meminfo.h
   - curl/curl.h
   - wrapped_funcs.h
 
@@ -925,9 +929,25 @@ simple_function:
   - ble_pairing_set_passkey
   - ble_poll_event
   - ble_service_register
+  - bv_display_get_brightness
+  - bv_display_set_brightness
+  - bv_led_matrix_clear
+  - bv_led_matrix_fill
+  - bv_led_matrix_release
+  - bv_led_matrix_set_brightness
+  - bv_led_matrix_set_pixel
+  - bv_led_matrix_set_row
+  - bv_led_matrix_take
+  - bv_psram_get_usage
   - bv_nvs_get_blob
   - bv_nvs_get_or_create_key
   - bv_nvs_set_blob
+  - bv_status_led_clear
+  - bv_status_led_release
+  - bv_status_led_set
+  - bv_status_led_set_brightness
+  - bv_status_led_show
+  - bv_status_led_take
   - device_get
   - get_mac_address
   - get_num_tasks

@@ -53,3 +53,19 @@ jobs:
         run: |
           . "$IDF_PATH/export.sh"
           idf.py build
+
+      - name: Check stack usage (fail on oversized frames)
+        shell: bash
+        run: |
+          # badgevms/CMakeLists.txt compiles this component with
+          # -fstack-usage, which emits a .su sidecar file per translation
+          # unit under build/esp-idf/badgevms/ (file:line:col:function <TAB>
+          # stack-frame-bytes <TAB> qualifier). This catches the class of bug
+          # that shipped once already: a large struct (Launcher_Context)
+          # declared as a plain stack-local compiled cleanly but blew the
+          # stack at runtime on the physical badge. 5120 bytes is set from
+          # the real distribution observed across all of badgevms/: the
+          # large majority of functions sit under ~2.4 KB, with one
+          # legitimate outlier (badgelink_fs.c's fs_copy_file(), which holds
+          # a deliberate 4 KB on-stack copy buffer) at ~4.1 KB.
+          python3 scripts/check_stack_usage.py --threshold 5120 --root build/esp-idf/badgevms

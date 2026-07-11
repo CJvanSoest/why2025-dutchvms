@@ -15,6 +15,12 @@
  *              response payload = UTF-8 text, one "<name>\t<size>\t<D|F>\n"
  *              line per directory entry (truncated, not erred, if the
  *              directory doesn't fit LIST_BUFFER_BYTES)
+ *   0x04 DELETE payload = [path_len:2 LE][path:N]
+ *              removes a single file, or a directory and everything under
+ *              it (recursive). response payload empty. Meant for surgical
+ *              cleanup of individual stale files/app-dirs (e.g. on FLASH0,
+ *              which a full storage.bin reflash doesn't reliably clear) -
+ *              not a bulk wipe primitive.
  *   0x07 PING  payload empty, response payload = ASCII version string
  *
  * Status codes (response byte):
@@ -69,10 +75,11 @@
 #define MAX_PATH_BYTES    256
 #define LIST_BUFFER_BYTES (16 * 1024) /* directory listing text, not a file transfer */
 
-#define CMD_PUT  0x01
-#define CMD_GET  0x02
-#define CMD_LIST 0x03
-#define CMD_PING 0x07
+#define CMD_PUT    0x01
+#define CMD_GET    0x02
+#define CMD_LIST   0x03
+#define CMD_DELETE 0x04
+#define CMD_PING   0x07
 
 #define ST_OK              0x00
 #define ST_ERR_BAD_FRAME   0x01
@@ -429,6 +436,52 @@ static void handle_list(uint8_t const *payload, uint32_t len) {
     free(buf);
 }
 
+/* Recursively remove a file or directory tree at a POSIX path. Plain
+ * opendir/readdir/unlink/rmdir like the rest of this file (see the header
+ * comment on why_fopen/why_open are off-limits from a kernel task) - not
+ * the app-side rm_rf() in pathfuncs.c, which goes through why_* wrappers. */
+static bool delete_recursive(char const *posix_path) {
+    struct stat st;
+    if (stat(posix_path, &st) != 0)
+        return errno == ENOENT; /* already gone counts as success */
+
+    if (!S_ISDIR(st.st_mode))
+        return unlink(posix_path) == 0;
+
+    DIR *d = opendir(posix_path);
+    if (!d)
+        return false;
+
+    bool           ok = true;
+    struct dirent *ent;
+    while (ok && (ent = readdir(d)) != NULL) {
+        if (strcmp(ent->d_name, ".") == 0 || strcmp(ent->d_name, "..") == 0)
+            continue;
+        char child[MAX_PATH_BYTES + 32 + sizeof(ent->d_name) + 2];
+        snprintf(child, sizeof(child), "%s/%s", posix_path, ent->d_name);
+        ok = delete_recursive(child);
+    }
+    closedir(d);
+    return ok && rmdir(posix_path) == 0;
+}
+
+static void handle_delete(uint8_t const *payload, uint32_t len) {
+    char posix_path[MAX_PATH_BYTES + 32];
+    if (decode_path_only_payload(payload, len, posix_path, sizeof(posix_path)) != 0)
+        return;
+
+    esp_rom_printf("[deploy] DELETE '%s'\n", posix_path);
+
+    if (!delete_recursive(posix_path)) {
+        send_status(ST_ERR_WRITE);
+        esp_rom_printf("[deploy] DELETE failed for '%s' (errno=%d)\n", posix_path, errno);
+        return;
+    }
+
+    esp_rom_printf("[deploy] DELETE '%s' OK\n", posix_path);
+    send_response(ST_OK, NULL, 0);
+}
+
 /* ============== Frame reader / dispatcher ============== */
 
 static void process_one_frame(void) {
@@ -487,6 +540,7 @@ static void process_one_frame(void) {
         case CMD_PUT: handle_put(payload, len); break;
         case CMD_GET: handle_get(payload, len); break;
         case CMD_LIST: handle_list(payload, len); break;
+        case CMD_DELETE: handle_delete(payload, len); break;
         default:
             esp_rom_printf("[deploy] unknown cmd 0x%02X\n", cmd);
             send_status(ST_ERR_UNKNOWN_CMD);

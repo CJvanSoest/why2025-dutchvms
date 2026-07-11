@@ -31,6 +31,39 @@
 #define LCD_BK_LIGHT_ON_LEVEL  (1)
 #define LCD_BK_LIGHT_OFF_LEVEL !LCD_BK_LIGHT_ON_LEVEL
 
+/* --- Backlight brightness (task #31) ---------------------------------------
+ * TODO CONFIRM PIN. Schematic research (2026-07-10, src/hardware/Carrier):
+ * the LCD backlight *is* dimmable in hardware — display.kicad_sch has a real
+ * AP3032 boost-converter (U16) driving the panel's LED string, and its CTRL
+ * (dimming) pin is wired to a hierarchical net "BL_PWM" (root-level alias
+ * "DISPLAY_BL"). Tracing that net at the badgeCarrierCard.kicad_sch root
+ * (via the sheet's own wires/labels, not just coordinate guesswork) shows it
+ * is fed by "DISPLAY_PWM" from the "Connectivity (C6 + LoRa)" sub-sheet,
+ * which lands — through series resistor R23 — directly on GPIO10 of U4, the
+ * ESP32-C6-WROOM-1 co-processor (connectivity.kicad_sch). That pin is *not*
+ * on the ESP32-P4 this firmware runs on, so it cannot be driven with a local
+ * gpio_set_level()/LEDC channel the way LCD_IO_RST (P4 GPIO17, confirmed via
+ * the DSI.RESET net) is. A DNP (not-populated) 0R jumper, R16, shows there
+ * was also an option to tie a local P4 pin (GPIO1) onto this same net, but
+ * it isn't stuffed on production boards, so that path is open/unconfirmed
+ * too. Bottom line: no local P4 GPIO is confirmed to control the backlight
+ * today. Real dimming would need a command sent to the C6 (e.g. over the
+ * existing P4<->C6 ESP-Hosted link) — out of scope here. Leaving this at -1
+ * (matching PIN_NUM_BK_LIGHT above) is the safe choice: it documents the
+ * finding instead of guessing a P4 pin number that would silently toggle an
+ * unrelated, possibly-live GPIO. Only ever change this to a real gpio_num_t
+ * after physically confirming a LOCAL P4 pin drives the backlight. */
+#define BADGE_BACKLIGHT_GPIO (-1) /* TODO CONFIRM PIN — see comment above */
+
+#if BADGE_BACKLIGHT_GPIO >= 0
+#include "driver/ledc.h"
+#define BACKLIGHT_LEDC_MODE    LEDC_LOW_SPEED_MODE
+#define BACKLIGHT_LEDC_TIMER   LEDC_TIMER_2
+#define BACKLIGHT_LEDC_CHANNEL LEDC_CHANNEL_2
+#define BACKLIGHT_LEDC_RES_BIT LEDC_TIMER_8_BIT
+#define BACKLIGHT_LEDC_FREQ_HZ 5000
+#endif
+
 #define MIPI_DSI_PHY_PWR_LDO_CHAN       (3) // LDO_VO3 is connected to VDD_MIPI_DPHY
 #define MIPI_DSI_PHY_PWR_LDO_VOLTAGE_MV (2500)
 #define LCD_MIPI_DSI_BUS_ID             (0)
@@ -178,6 +211,76 @@ void get_framebuffer(void *dev, int num, void **pixels) {
     if (num == 2)
         *pixels = fb2;
 #endif
+}
+
+/* --- Backlight brightness API (task #31) -----------------------------------
+ * Kept as free functions (not on lcd_device_t's vtable) since there is only
+ * ever one LCD on this hardware — same reasoning as e.g. bv_led_matrix_*
+ * addressing a single shared panel directly rather than through a device
+ * handle. `percent` is stored regardless of BADGE_BACKLIGHT_GPIO so the
+ * value round-trips through NVS correctly even while no confirmed local pin
+ * exists (see the comment above); the LEDC duty cycle is only ever touched
+ * when BADGE_BACKLIGHT_GPIO >= 0. */
+static uint8_t   backlight_percent     = 100;
+#if BADGE_BACKLIGHT_GPIO >= 0
+static bool      backlight_ledc_ready  = false;
+
+static void backlight_ledc_init(void) {
+    ledc_timer_config_t timer_cfg = {
+        .speed_mode      = BACKLIGHT_LEDC_MODE,
+        .duty_resolution = BACKLIGHT_LEDC_RES_BIT,
+        .timer_num       = BACKLIGHT_LEDC_TIMER,
+        .freq_hz         = BACKLIGHT_LEDC_FREQ_HZ,
+        .clk_cfg         = LEDC_AUTO_CLK,
+    };
+    if (ledc_timer_config(&timer_cfg) != ESP_OK) {
+        ESP_LOGW(TAG, "backlight: ledc_timer_config failed");
+        return;
+    }
+
+    ledc_channel_config_t chan_cfg = {
+        .gpio_num   = BADGE_BACKLIGHT_GPIO,
+        .speed_mode = BACKLIGHT_LEDC_MODE,
+        .channel    = BACKLIGHT_LEDC_CHANNEL,
+        .timer_sel  = BACKLIGHT_LEDC_TIMER,
+        .duty       = 0,
+        .hpoint     = 0,
+    };
+    if (ledc_channel_config(&chan_cfg) != ESP_OK) {
+        ESP_LOGW(TAG, "backlight: ledc_channel_config failed");
+        return;
+    }
+
+    backlight_ledc_ready = true;
+}
+#endif
+
+void st7703_set_brightness(uint8_t percent) {
+    if (percent > 100)
+        percent = 100;
+    backlight_percent = percent;
+
+#if BADGE_BACKLIGHT_GPIO >= 0
+    if (!backlight_ledc_ready)
+        backlight_ledc_init();
+    if (backlight_ledc_ready) {
+        uint32_t max_duty = (1u << BACKLIGHT_LEDC_RES_BIT) - 1;
+        uint32_t duty     = (max_duty * percent) / 100;
+        ledc_set_duty(BACKLIGHT_LEDC_MODE, BACKLIGHT_LEDC_CHANNEL, duty);
+        ledc_update_duty(BACKLIGHT_LEDC_MODE, BACKLIGHT_LEDC_CHANNEL);
+    }
+#else
+    ESP_LOGI(
+        TAG,
+        "set_brightness(%u%%): no confirmed local backlight GPIO (BADGE_BACKLIGHT_GPIO=-1); "
+        "value stored but hardware unaffected, see comment near the top of this file",
+        (unsigned)percent
+    );
+#endif
+}
+
+uint8_t st7703_get_brightness(void) {
+    return backlight_percent;
 }
 
 void set_refresh_cb(void *dev, void *user_data, void (*callback)(void *user_data)) {

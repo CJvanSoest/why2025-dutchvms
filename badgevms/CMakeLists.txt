@@ -11,6 +11,7 @@ idf_component_register(
      "curl.c"
      "deploy_protocol.c"
      "device.c"
+     "display_bridge.c"
      "drivers/badgelink/badgelink.c"
      "drivers/badgelink/badgelink.pb.c"
      "drivers/badgelink/badgelink_appfs.c"
@@ -36,13 +37,16 @@ idf_component_register(
      "drivers/tty.c"
      "drivers/wifi.c"
      "init.c"
+     "led_matrix_bridge.c"
      "logical_names.c"
+     "meminfo_bridge.c"
      "memory.c"
      "nvs_bridge.c"
      "memory_heap_caps.c"
      "notify.c"
      "ota.c"
      "pathfuncs.c"
+     "status_led_bridge.c"
      "task.c"
      "thirdparty/cJSON.c"
      "thirdparty/dlmalloc.c"
@@ -131,6 +135,11 @@ target_compile_options(${COMPONENT_LIB} PRIVATE
     -Wno-empty-body
     -Wno-stringop-overflow
     -Wno-char-subscripts # For toml
+
+    # Emit a .su sidecar file per translation unit (file:line:col:function
+    # <TAB> stack-frame-bytes <TAB> {static,dynamic,bounded}) so CI can catch
+    # oversized stack frames in kernel code -- see scripts/check_stack_usage.py.
+    -fstack-usage
 )
 
 #

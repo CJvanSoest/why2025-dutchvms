@@ -360,7 +360,22 @@ static bool bb_write_regs(int sda, int scl, uint8_t addr7, uint8_t reg, uint8_t 
 }
 /* Build the 5 output-port bytes for one scanned row.
  * Cols PA = anodes (drive HIGH to light); rows PB = cathodes (active row LOW,
- * all other rows HIGH = off). col_on = 20-bit mask of LEDs to light in this row. */
+ * all other rows HIGH = off). col_on = 20-bit mask of LEDs to light in this row.
+ *
+ * col_on bit c is API column c (0 = leftmost, per badgevms/led_matrix.h and
+ * every app built against it - e.g. cj_ledmatrix's text scroller, whose
+ * on-screen preview mirror and gfont5x7 glyph-column extraction were both
+ * double-checked and are internally consistent with "increasing column index
+ * = further right"). The kicad-geometry comment above only confirmed which
+ * global IO bits are the PA (col) bank vs the PB (row) bank and their
+ * polarity - it never pinned down which physical end of the PA0..PA19 run is
+ * left vs right on the mounted panel. That direction was in fact backwards:
+ * PA0..PA19 run right-to-left, so API column c lives at PA(19-c), not PA(c).
+ * Solid/border/checkerboard/wipe patterns don't reveal a pure horizontal
+ * mirror at a glance (checkerboard just looks phase-shifted, a symmetric
+ * border is unaffected, a sweeping bar just seems to move the "wrong" way
+ * without a reference), which is why this only became obvious once
+ * human-readable scrolling text came out mirrored. */
 static void mtx_build_op(uint8_t op[5], int row, uint32_t col_on) {
     op[0] = 0xFF; /* PB0-7 rows off (high) */
     op[1] = 0x0F; /* PB8-11 off (low nibble high), PA0-3 off (high nibble low) */
@@ -373,7 +388,8 @@ static void mtx_build_op(uint8_t op[5], int row, uint32_t col_on) {
         op[1] &= (uint8_t) ~(1u << (row - 8));
     for (int c = 0; c < 20; c++) {
         if (col_on & (1u << c)) {
-            int g      = 12 + c;
+            int pa     = 19 - c; /* API col c -> physical PA(19-c), see comment above */
+            int g      = 12 + pa;
             op[g / 8] |= (uint8_t)(1u << (g % 8)); /* lit col -> HIGH */
         }
     }
@@ -389,6 +405,13 @@ static uint8_t const mtx_blank[5] = {0xFF, 0x0F, 0x00, 0x00, 0x00};
 /* ---- Framebuffer + background multiplex refresh ---- */
 static uint32_t      mtx_fb[MTX_ROWS]; /* bit c set in row r = LED (r,c) on */
 static int           mtx_sda = 22, mtx_scl = 9;
+
+/* Set by bv_led_matrix_take()/bv_led_matrix_release() (see
+ * drivers/led_matrix_internal.h + led_matrix_bridge.c): while true, an app
+ * owns mtx_fb and mtx_demo_task below must not touch it. The multiplex
+ * refresh task (mtx_refresh_task_hw/bb) keeps running unconditionally either
+ * way — it only reads mtx_fb, so the app's last-drawn frame stays on screen. */
+volatile bool bv_mtx_app_control = false;
 
 void led_matrix_clear(void) {
     for (int i = 0; i < MTX_ROWS; i++) mtx_fb[i] = 0;
@@ -506,6 +529,12 @@ static void mtx_demo_task(void *arg) {
     (void)arg;
     int px = 5, py = 3, vx = 1, vy = 1;
     for (;;) {
+        if (bv_mtx_app_control) {
+            /* An app has taken control of the matrix framebuffer — leave it
+             * alone and just idle (still yielding so idle/WDT are fed). */
+            vTaskDelay(pdMS_TO_TICKS(120));
+            continue;
+        }
         led_matrix_clear();
         led_matrix_row(0, 0xFFFFFu);
         led_matrix_row(MTX_ROWS - 1, 0xFFFFFu);
@@ -571,6 +600,53 @@ static void ws2812_set_scaled(int i, uint8_t r, uint8_t g, uint8_t b) {
     ws2812_set(i, (r * LED_BRIGHTNESS) / 100, (g * LED_BRIGHTNESS) / 100, (b * LED_BRIGHTNESS) / 100, 0);
 }
 
+/* ---- App-facing control of the 4 RGBW status LEDs (see
+ * badgevms/status_led.h + status_led_bridge.c, exposed here non-static via
+ * drivers/status_led_internal.h - same pattern as led_matrix_clear/pixel/
+ * row/fill/brightness above and bv_mtx_app_control's take()/release()
+ * arbitration for the matrix). bv_led_app_control lets an app take exclusive
+ * ownership of the shared ws_grbw chain: while true, ws2812_task below skips
+ * its own radio/wifi/notify computation AND its own ws2812_show() entirely
+ * (not just the color computation - otherwise it would still stomp the
+ * app's frame every ~1s by calling show() with a buffer the app didn't
+ * write), so the app's last-pushed frame stays exactly as drawn. On
+ * release, the task's next ~1s tick recomputes real status and redraws it,
+ * same as the matrix's mtx_demo_task resuming once bv_mtx_app_control drops. */
+volatile bool bv_led_app_control = false;
+
+/* Global brightness for app-driven status-LED writes, independent of the
+ * firmware's own fixed LED_BRIGHTNESS - mirrors led_matrix_brightness()'s
+ * "persists across take()/release(), not reset on release" precedent. */
+static int status_led_app_brightness = LED_BRIGHTNESS;
+
+void status_led_set(int i, uint8_t r, uint8_t g, uint8_t b) {
+    ws2812_set(
+        i,
+        (uint8_t)((r * status_led_app_brightness) / 100),
+        (uint8_t)((g * status_led_app_brightness) / 100),
+        (uint8_t)((b * status_led_app_brightness) / 100),
+        0
+    );
+}
+
+void status_led_show(void) {
+    if (!ws_chan) /* ws2812_task hasn't finished RMT init yet - nothing to push to */
+        return;
+    ws2812_show();
+}
+
+void status_led_clear(void) {
+    for (int i = 0; i < WS_COUNT; i++) ws2812_set(i, 0, 0, 0, 0);
+}
+
+void status_led_set_brightness(int pct) {
+    if (pct < 0)
+        pct = 0;
+    if (pct > 100)
+        pct = 100;
+    status_led_app_brightness = pct;
+}
+
 /* Status indicator on the 4 RGBW LEDs (GPIO7):
  *   LED0 = LoRa radio  : green = up/active, blue = starting up, red = offline
  *   LED1 = WiFi        : green = connected, blue = enabled/connecting, off = disabled
@@ -607,6 +683,16 @@ static void ws2812_task(void *arg) {
     ESP_LOGW(TAG, "=== RGBW status LEDs (4x on GPIO%d) START: LED0=radio LED1=wifi LED2/3=notify ===", WS_GPIO);
     uint32_t secs = 0;
     for (;;) {
+        if (bv_led_app_control) {
+            /* An app has taken control of the shared ws_grbw chain (see
+             * status_led_set()/status_led_show() above) - don't touch it,
+             * don't even call ws2812_show(), just idle (still yielding so
+             * idle/WDT are fed), same as mtx_demo_task's bv_mtx_app_control
+             * handling for the matrix. */
+            vTaskDelay(pdMS_TO_TICKS(120));
+            continue;
+        }
+
         /* LED0: LoRa radio status */
         lora_mode_t   mode;
         lora_status_t lst;
