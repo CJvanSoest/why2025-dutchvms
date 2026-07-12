@@ -28,6 +28,7 @@ idf_component_register(
      "drivers/board_bringup.c"
      "drivers/bosch_bmi270.c"
      "drivers/bosch_bme690.c"
+     "drivers/display_backlight_client.c"
      "drivers/esp-serial-flasher/slave_c6_flasher.c"
      "drivers/esp-serial-flasher/why2025_firmware.c"
      "drivers/fatfs.c"

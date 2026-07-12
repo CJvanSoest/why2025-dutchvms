@@ -14,19 +14,18 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-/* Minimal app-facing display-brightness API (task #31) — analogous in shape
- * to badgevms/nvs.h: one get + one set, no device handle, since there is
- * only ever one LCD on this hardware.
+/* Minimal app-facing display-brightness API (task #31, actually dims the
+ * screen as of task #38) — analogous in shape to badgevms/nvs.h: one get +
+ * one set, no device handle, since there is only ever one LCD on this
+ * hardware.
  *
- * IMPORTANT caveat: schematic research (see the BADGE_BACKLIGHT_GPIO comment
- * in badgevms/drivers/st7703.c) found that the LCD backlight's dimming
- * circuit (an AP3032 boost converter) is driven from a GPIO on the ESP32-C6
- * co-processor, not a locally-confirmed pin on the ESP32-P4 this kernel runs
- * on. Until that gap is closed (e.g. a P4<->C6 remote-GPIO bridge over the
- * existing ESP-Hosted link), bv_display_set_brightness() stores/returns the
- * requested percentage correctly, but may not visibly change the physical
- * backlight. Callers should treat it as "the badge remembers your preferred
- * brightness" rather than "the screen dims today". */
+ * The LCD backlight's dimming circuit (an AP3032 boost converter) is driven
+ * from a GPIO on the ESP32-C6 co-processor, not a pin on the ESP32-P4 this
+ * kernel runs on (confirmed via KiCad schematic, see the BADGE_BACKLIGHT_GPIO
+ * comment in badgevms/drivers/st7703.c) — bv_display_set_brightness()
+ * forwards the value to the C6 over the existing ESP-Hosted custom_data
+ * channel (display_backlight_client.h), fire-and-forget, same shape as the
+ * keyboard backlight's own RPC. */
 #pragma once
 
 #include <stdint.h>
@@ -36,8 +35,7 @@ extern "C" {
 #endif
 
 /* Sets the LCD backlight brightness, 0 (dimmest) - 100 (brightest). Values
- * above 100 are clamped. See the caveat above about current hardware
- * support. */
+ * above 100 are clamped. */
 void bv_display_set_brightness(uint8_t percent);
 
 /* Returns the last value passed to bv_display_set_brightness() (100 =
