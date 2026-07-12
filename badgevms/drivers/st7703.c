@@ -16,6 +16,7 @@
 
 #include "st7703.h"
 
+#include "display_backlight_client.h"
 #include "driver/gpio.h"
 #include "esp_lcd_mipi_dsi.h"
 #include "esp_lcd_panel_io.h"
@@ -31,29 +32,22 @@
 #define LCD_BK_LIGHT_ON_LEVEL  (1)
 #define LCD_BK_LIGHT_OFF_LEVEL !LCD_BK_LIGHT_ON_LEVEL
 
-/* --- Backlight brightness (task #31) ---------------------------------------
- * TODO CONFIRM PIN. Schematic research (2026-07-10, src/hardware/Carrier):
- * the LCD backlight *is* dimmable in hardware — display.kicad_sch has a real
- * AP3032 boost-converter (U16) driving the panel's LED string, and its CTRL
- * (dimming) pin is wired to a hierarchical net "BL_PWM" (root-level alias
- * "DISPLAY_BL"). Tracing that net at the badgeCarrierCard.kicad_sch root
- * (via the sheet's own wires/labels, not just coordinate guesswork) shows it
- * is fed by "DISPLAY_PWM" from the "Connectivity (C6 + LoRa)" sub-sheet,
- * which lands — through series resistor R23 — directly on GPIO10 of U4, the
- * ESP32-C6-WROOM-1 co-processor (connectivity.kicad_sch). That pin is *not*
- * on the ESP32-P4 this firmware runs on, so it cannot be driven with a local
- * gpio_set_level()/LEDC channel the way LCD_IO_RST (P4 GPIO17, confirmed via
- * the DSI.RESET net) is. A DNP (not-populated) 0R jumper, R16, shows there
- * was also an option to tie a local P4 pin (GPIO1) onto this same net, but
- * it isn't stuffed on production boards, so that path is open/unconfirmed
- * too. Bottom line: no local P4 GPIO is confirmed to control the backlight
- * today. Real dimming would need a command sent to the C6 (e.g. over the
- * existing P4<->C6 ESP-Hosted link) — out of scope here. Leaving this at -1
- * (matching PIN_NUM_BK_LIGHT above) is the safe choice: it documents the
- * finding instead of guessing a P4 pin number that would silently toggle an
- * unrelated, possibly-live GPIO. Only ever change this to a real gpio_num_t
- * after physically confirming a LOCAL P4 pin drives the backlight. */
-#define BADGE_BACKLIGHT_GPIO (-1) /* TODO CONFIRM PIN — see comment above */
+/* --- Backlight brightness (task #31, wired up for real in task #38) --------
+ * Schematic research (2026-07-10, src/hardware/Carrier) found the LCD
+ * backlight *is* dimmable in hardware — display.kicad_sch has a real AP3032
+ * boost-converter (U16) driving the panel's LED string, and its CTRL
+ * (dimming) pin traces to the ESP32-C6-WROOM-1 co-processor (U4), not a pin
+ * on the ESP32-P4 this firmware runs on. That first net-trace concluded
+ * GPIO10, which turned out to be the *keyboard* backlight net traced by
+ * mistake — corrected 2026-07-12 directly from the KiCad schematic's
+ * badgeCarrierCard > Connectivity sheet: **display backlight = GPIO15,
+ * keyboard backlight = GPIO10**, matching
+ * connectivity_esp_hosted/slave/main/tanmatsu/tanmatsu_hardware.h's
+ * BSP_DISPLAY_BL_GPIO/BSP_KEYBOARD_BL_GPIO all along. No local P4 GPIO
+ * drives this (BADGE_BACKLIGHT_GPIO stays -1, matching PIN_NUM_BK_LIGHT
+ * above) — real dimming goes over the P4<->C6 ESP-Hosted custom_data
+ * channel via display_backlight_client.h (TANMATSU_EVENT_DISPLAY_BL). */
+#define BADGE_BACKLIGHT_GPIO (-1) /* confirmed: backlight PWM lives on the C6, see comment above */
 
 #if BADGE_BACKLIGHT_GPIO >= 0
 #include "driver/ledc.h"
@@ -269,14 +263,11 @@ void st7703_set_brightness(uint8_t percent) {
         ledc_set_duty(BACKLIGHT_LEDC_MODE, BACKLIGHT_LEDC_CHANNEL, duty);
         ledc_update_duty(BACKLIGHT_LEDC_MODE, BACKLIGHT_LEDC_CHANNEL);
     }
-#else
-    ESP_LOGI(
-        TAG,
-        "set_brightness(%u%%): no confirmed local backlight GPIO (BADGE_BACKLIGHT_GPIO=-1); "
-        "value stored but hardware unaffected, see comment near the top of this file",
-        (unsigned)percent
-    );
 #endif
+    // Real backlight PWM lives on the C6 (see comment above) -- send it
+    // there regardless of BADGE_BACKLIGHT_GPIO, which only ever covers a
+    // hypothetical local P4 pin that isn't populated on this board.
+    bv_display_backlight_send(percent);
 }
 
 uint8_t st7703_get_brightness(void) {
