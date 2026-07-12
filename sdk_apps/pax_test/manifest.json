@@ -1,0 +1,10 @@
+{
+    "unique_identifier": "pax_test",
+    "name": "PAX Test",
+    "author": "CJ van Soest",
+    "version": "0.1.0",
+    "interpreter": "",
+    "metadata_file": "",
+    "binary_path": "pax_test.elf",
+    "source": 1
+}
