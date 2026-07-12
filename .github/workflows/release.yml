@@ -1,12 +1,16 @@
 name: Release
 
 # Publishes a GitHub Release with the built firmware attached whenever a
-# version tag (vX.Y.Z) is pushed. There is no on-device updater polling this
-# (sdk_apps/why2025_ota, the WHY-team app that would have done that, is
-# archived -- Archive/sdk_apps/why2025_ota/ -- and was never enabled here):
-# the release exists as a versioned, CI-built artifact for provenance, and
-# flashing badgevms.bin onto a badge is a manual esptool step -- see
-# docs/guides/Flashing.md for the exact command.
+# version tag (vX.Y.Z) is pushed.
+#
+# why2025-apps' cj_launcher (task #73, "Update Firmware" in Settings) polls
+# this release: it flashes badgevms.bin via the OTA partition API, then syncs
+# the three C6 co-processor binaries below into the SD-side of the APPS:
+# search list so flash_slave_c6_if_needed() reflashes the C6 automatically on
+# next boot (docs/design/SD-and-OTA-Updates.md §3) -- no C6/kernel changes
+# needed for that half. esptool-over-cable (docs/guides/Flashing.md) remains
+# the only path for a genuinely blank/bricked badge that can't already run an
+# OTA-capable image.
 #
 # Cut a release with:
 #   git tag v1.0.0 && git push origin v1.0.0
@@ -43,16 +47,45 @@ jobs:
           . "$IDF_PATH/export.sh"
           idf.py build
 
-      - name: Verify firmware artifact exists
+      - name: Verify firmware artifacts exist
         shell: bash
         run: |
           test -f build/badgevms.bin || { echo "build/badgevms.bin missing"; exit 1; }
-          ls -l build/badgevms.bin
+          for f in bootloader.bin partition-table.bin network_adapter.bin; do
+            test -f "build/c6firmware/$f" || { echo "build/c6firmware/$f missing"; exit 1; }
+          done
+          ls -l build/badgevms.bin build/c6firmware/
+
+      - name: Generate .md5 sidecars for the C6 bundle
+        shell: bash
+        # cj_launcher's C6 sync (task #73) fetches these alongside each binary
+        # and writes both straight into APPS:[why2025_firmware_ota_c6] --
+        # matching get_why2025_binaries()'s own <name>.bin + <name>.bin.md5
+        # sidecar convention (badgevms/drivers/esp-serial-flasher/
+        # why2025_firmware.c), the same shape CMakeLists.txt's
+        # storage_staging_add_connectivity target already generates for a
+        # factory flash -- including no trailing newline, matching CMake's
+        # file(WRITE) exactly, since the vendored esp-serial-flasher's MD5
+        # compare isn't known to tolerate one.
+        run: |
+          cd build/c6firmware
+          for f in bootloader.bin partition-table.bin network_adapter.bin; do
+            md5sum "$f" | awk '{printf "%s", $1}' > "$f.md5"
+          done
+          ls -l
 
       - name: Publish GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          # Asset name must stay "badgevms.bin" — the badge matches on it exactly
-          # (GITHUB_FIRMWARE_ASSET in sdk_apps/why2025_ota/ota_update.c).
-          files: build/badgevms.bin
+          # Asset names must stay exactly these -- cj_launcher's do_firmware_update()/
+          # sync_c6_bundle() (why2025-apps/apps/cj_launcher/main.c) match on them
+          # literally (FW_ASSET_P4/FW_ASSET_C6_BOOT/FW_ASSET_C6_PART/FW_ASSET_C6_APP).
+          files: |
+            build/badgevms.bin
+            build/c6firmware/bootloader.bin
+            build/c6firmware/bootloader.bin.md5
+            build/c6firmware/partition-table.bin
+            build/c6firmware/partition-table.bin.md5
+            build/c6firmware/network_adapter.bin
+            build/c6firmware/network_adapter.bin.md5
           generate_release_notes: true
