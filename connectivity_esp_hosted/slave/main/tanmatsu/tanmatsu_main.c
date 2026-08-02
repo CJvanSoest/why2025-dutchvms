@@ -11,6 +11,8 @@
 #include "priv_events.h"
 #include "tanmatsu_hardware.h"
 
+#include <math.h>
+
 static const char* TAG = "tanmatsu";
 
 // ---------- WHY backlight PWM ----------
@@ -26,9 +28,23 @@ static const char* TAG = "tanmatsu";
 static void why_pwm_set_duty_percent(ledc_channel_t channel, int duty_percent) {
     if (duty_percent < 0) duty_percent = 0;
     if (duty_percent > 100) duty_percent = 100;
-    uint32_t duty = (uint32_t)((1U << WHY_PWM_RESOLUTION) * duty_percent / 100);
-    if (duty < 10 && duty != 0) duty = 10;
-    if (duty > 80) duty = 80;
+    // Panel needs a duty floor/ceiling of 10-80 (out of 256): below 10 the
+    // backlight doesn't visibly light, above 80 it doesn't get meaningfully
+    // brighter. A *linear* interpolation of pct across that 10-80 window
+    // still looked flat near 100% on real hardware -- human perceived
+    // brightness vs. LED PWM duty isn't linear, it's closer to duty^(1/2.2)
+    // (the usual gamma-2.2 relationship), so equal steps in physical duty
+    // read as much bigger jumps near the low end than near the ceiling.
+    // Apply the inverse (pct^2.2) so equal steps in the 0-100 input read as
+    // equal steps to the eye across the whole range.
+    uint32_t duty;
+    if (duty_percent == 0) {
+        duty = 0;
+    } else {
+        const uint32_t floor = 10, ceil = 80;
+        float gamma = powf((float)duty_percent / 100.0f, 2.2f);
+        duty         = floor + (uint32_t)((ceil - floor) * gamma + 0.5f);
+    }
     ESP_ERROR_CHECK(ledc_set_duty(LEDC_LOW_SPEED_MODE, channel, duty));
     ESP_ERROR_CHECK(ledc_update_duty(LEDC_LOW_SPEED_MODE, channel));
 }
