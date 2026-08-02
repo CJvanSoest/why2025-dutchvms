@@ -483,8 +483,28 @@ void IRAM_ATTR NOINLINE_ATTR *why_sbrk(intptr_t increment) {
         }
         critical_exit();
     } else {
-        // increment is negative
-        int32_t  decrement_amount = task_info->thread->size + increment;
+        // increment is negative: shrink the heap *by* -increment bytes.
+        //
+        // This used to compute the amount to release as (size + increment),
+        // which is the requested *new* size, not the delta - so a request to
+        // give back 2.5 MB out of an 8.5 MB heap unmapped 6 MB, including
+        // pages dlmalloc was still handing out. Because the MMU entries for
+        // those vaddrs are simply invalidated, a process does not fault on
+        // them: writes are dropped and reads return zeros, so every later
+        // allocation in that process silently yields a buffer that never
+        // holds what was written to it. That is the "full-size read, all-zero
+        // buffer" manifest-load failure the launcher hits after N app
+        // launches (see load_application_metadata() in application.c).
+        //
+        // Never release more than is actually mapped either. dlmalloc copes
+        // fine with MORECORE releasing *less* than asked - sys_trim() re-reads
+        // the break with MORECORE(0) and adjusts its top chunk to match - but
+        // it has no defence against getting back more than it gave up.
+        size_t requested = (size_t)(-(intptr_t)increment);
+        if (requested > task_info->thread->size) {
+            requested = task_info->thread->size;
+        }
+        int32_t  decrement_amount = (int32_t)requested;
         int32_t  to_decrement     = decrement_amount;
         uint32_t mmu_id           = why_mmu_hal_get_id_from_target(MMU_TARGET_PSRAM0);
 
@@ -541,8 +561,14 @@ void IRAM_ATTR NOINLINE_ATTR *why_sbrk(intptr_t increment) {
                 to_decrement = 0;
             }
         }
-        task_info->thread->size -= decrement_amount;
-        task_info->thread->end  -= decrement_amount;
+        // The loop stops early if the page list runs out before to_decrement
+        // does; only account for what was really unmapped so thread->size and
+        // thread->end keep matching thread->pages. They are the ranges
+        // unmap_task()/remap_task() write back and invalidate on every context
+        // switch, so letting them drift is its own class of silent corruption.
+        size_t released          = (size_t)(decrement_amount - to_decrement);
+        task_info->thread->size -= released;
+        task_info->thread->end  -= released;
     }
 
 out:

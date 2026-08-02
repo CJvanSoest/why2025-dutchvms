@@ -45,17 +45,23 @@ extern char *why_strerror(int errnum);
 #define APPLICATION_MAGIC 0xDEADBEEF
 #define MAX_PATH_LEN      512
 
-// Manifest reads can transiently fail during rapid, back-to-back enumeration
-// (application_list() opens/reads every <uid>.json in a tight loop). On this
-// ESP32-P4 target the FATFS sector buffers are placed in PSRAM
-// (CONFIG_FATFS_ALLOC_PREFER_EXTRAM=y) and filled by SDMMC DMA
-// (CONFIG_SOC_SDMMC_PSRAM_DMA_CAPABLE=y); under fast sequential opens a
-// cache-coherency race can hand back a "successful" full-size read whose
-// destination buffer is still stale/zeroed, which then fails to JSON-parse at
-// offset 0. The failure is not sticky: a fresh open+read (new fd, new stdio
-// buffer, new heap allocation) reliably returns the real bytes. Retry a few
-// times before giving up so a dropped read never silently loses an installed
-// app from the launcher. See MEMORY: why2025 task #19 follow-up.
+// Manifest reads can come back as a "successful" full-size read whose buffer
+// is entirely zero, which then fails to JSON-parse at offset 0.
+//
+// The sticky, never-recovers form of that was a kernel bug, not a filesystem
+// one: why_sbrk()'s shrink path released the wrong number of pages, so once
+// dlmalloc trimmed a process heap the process kept allocating out of vaddrs
+// whose MMU entries had been invalidated - writes dropped, reads zero. Fixed
+// in badgevms/memory.c; that is the failure mode where every retry, and every
+// launch after it, produces the same all-zero buffer.
+//
+// The retries stay as cheap insurance against the transient form (a dropped
+// read during rapid back-to-back enumeration - application_list() opens and
+// reads every <uid>.json in a tight loop), where a fresh open+read with a new
+// fd, stdio buffer and heap allocation does return the real bytes. Losing a
+// manifest silently drops an installed app from the launcher, so it is worth
+// paying for. A RECOVERED line in the log means the transient form is real;
+// three failures in a row means look at the allocator, not the SD card.
 #define METADATA_LOAD_MAX_ATTEMPTS   3
 #define METADATA_LOAD_RETRY_DELAY_MS 2
 
