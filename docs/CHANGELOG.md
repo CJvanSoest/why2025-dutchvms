@@ -21,6 +21,33 @@ Entries from here on are the source of truth going forward.
 
 ## [Unreleased]
 
+## [1.3.8] - 2026-08-03
+
+### Fixed
+- **A WiFi firmware update needing a C6 radio reflash could still crash and
+  roll back after v1.3.7** -- v1.3.7 correctly stopped `flash_slave_c6_if_needed()`
+  from touching the C6 while the P4 partition was still unconfirmed, but a
+  second, independent problem remained: ESP-Hosted's own SDIO transport
+  unconditionally resets the C6 again right before bring-up on every boot,
+  with only a ~1.5s budget to talk to it again afterward -- discarding
+  whatever settle time the C6 had already been given and re-triggering the
+  same too-soon-after-reset race. Switched to ESP-Hosted's own
+  `RESET_ONLY_IF_NECESSARY` strategy (`CONFIG_ESP_HOSTED_SLAVE_RESET_ONLY_IF_NECESSARY`)
+  instead of the default reset-on-every-boot, so the host tries talking to
+  the (already-settled) C6 first and only resets+retries if that genuinely
+  fails -- plus `CONFIG_ESP_HOSTED_HOST_RESTART_NO_COMMUNICATION_WITH_SLAVE`
+  as a safety net (self-restart instead of a hard abort) if the C6 truly
+  isn't responding.
+- **A C6 radio-firmware image staged for flashing could get corrupted, causing
+  a bad-MD5 write and contributing to the same crash-and-rollback symptom** --
+  `flash_binary()` read each chunk of the image from the badge's internal
+  flash storage without checking whether the read actually returned the full
+  chunk. A short read (the same flaky-read class `application.c`'s manifest
+  retry loop already works around) left stale bytes from the previous chunk
+  mixed into what got flashed to the C6. Short reads are now retried (seeking
+  back to the start of the chunk first) up to 3 times before giving up outright
+  -- the C6 is never flashed from a chunk that isn't known to be complete.
+
 ## [1.3.7] - 2026-08-03
 
 ### Fixed

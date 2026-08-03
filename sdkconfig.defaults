@@ -77,6 +77,20 @@ CONFIG_ESP_HOSTED_PRIV_SDIO_PIN_D1_4BIT_BUS_SLOT_1=31
 CONFIG_ESP_HOSTED_PRIV_SDIO_PIN_D2_4BIT_BUS_SLOT_1=30
 CONFIG_ESP_HOSTED_PRIV_SDIO_PIN_D3_4BIT_BUS_SLOT_1=29
 CONFIG_ESP_HOSTED_SDIO_GPIO_RESET_SLAVE=13
+
+# Root cause of the C6-reflash-triggered crash-loop (see slave_c6_flasher.c's
+# C6_POST_RESET_SETTLE_MS comment): ESP-Hosted defaults to unconditionally
+# resetting the C6 on every P4 boot right before SDIO bring-up, then
+# immediately calling transport_card_init() with only a ~1.5s budget
+# (CARD_INIT_TIMEOUT_MS in sdio_drv.c) -- discarding whatever settle time
+# flash_slave_c6_if_needed() already gave it and re-triggering the same
+# too-soon-after-reset SDIO race. RESET_ONLY_IF_NECESSARY instead tries
+# talking to the (already-settled) C6 first and only resets+retries if that
+# genuinely fails, avoiding the redundant blind reset entirely.
+CONFIG_ESP_HOSTED_SLAVE_RESET_ONLY_IF_NECESSARY=y
+# Safety net if the C6 truly is unresponsive: self-restart instead of the
+# ESP_ERROR_CHECK abort() this used to hit.
+CONFIG_ESP_HOSTED_HOST_RESTART_NO_COMMUNICATION_WITH_SLAVE=y
 CONFIG_WIFI_RMT_STATIC_TX_BUFFER=y
 # CONFIG_WIFI_RMT_IRAM_OPT is not set
 # CONFIG_WIFI_RMT_EXTRA_IRAM_OPT is not set
