@@ -21,6 +21,15 @@ Entries from here on are the source of truth going forward.
 
 ## [Unreleased]
 
+## [1.3.2] - 2026-08-03
+
+### Changed
+- **`docs/guides/Flashing.md` no longer claims WiFi-OTA is "proposed but not
+  yet built"** — Settings → Update Firmware has been the real update path
+  since task #73; the doc is corrected to point there for routine updates
+  and reserve the manual `esptool` steps for first flash, recovery, and C6
+  radio-firmware changes.
+
 ## [1.3.1] - 2026-08-03
 
 ### Fixed

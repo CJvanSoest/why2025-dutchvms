@@ -1,9 +1,14 @@
 # Flashing
 
-How to get DutchVMS onto a badge for the first time, and how to update an
-already-flashed badge to a newer release. There is no on-device updater —
-every flash here is a manual `esptool` step (see `docs/CHANGELOG.md`'s
-"Removed" entry for why).
+How to get DutchVMS onto a badge for the first time, and how to recover a
+badge that can't already run an OTA-capable image. If the badge is already
+running DutchVMS and has WiFi, Launcher → Settings → **Update Firmware** is
+the easier path for routine updates (see
+[why2025-apps/docs/UPDATE_GUIDE.md](https://github.com/CJvanSoest/why2025-apps/blob/main/docs/UPDATE_GUIDE.md))
+— everything below is the manual `esptool` path this repo still needs for a
+genuinely blank/bricked badge, or for a C6 radio-firmware update (WiFi-OTA
+only updates the P4 automatically; the C6 bundle still needs the badge to
+already be able to reach it, see step 3 under "Updating an existing badge").
 
 The badge has two USB-C ports that talk to two different chips:
 
@@ -155,9 +160,12 @@ a merged image):
    `-factory-erases-storage` image for a normal update — either would erase
    installed apps and saved settings (see "Storage" above).
 
-This is the only supported path today. An SD-card-based installer and a real
-OTA-over-WiFi path (no esptool, no computer) are proposed but not yet built —
-see [docs/design/SD-and-OTA-Updates.md](../design/SD-and-OTA-Updates.md).
+This manual esptool path is what's needed for a blank/bricked badge or a C6
+radio-firmware change. A real OTA-over-WiFi path for routine P4 updates now
+exists (Launcher → Settings → Update Firmware, which also syncs the C6
+bundle) — see [docs/design/SD-and-OTA-Updates.md](../design/SD-and-OTA-Updates.md)
+for how that's implemented. An SD-card-based installer (no esptool, no WiFi,
+no computer at all) is still only a proposal, not built.
 
 ### Installing/updating individual apps
 
