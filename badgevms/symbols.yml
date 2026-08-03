@@ -1109,6 +1109,7 @@ wrapped_function:
   - _Exit
   - abort
   - accept
+  - aligned_alloc
   - asctime
   - asnprintf
   - asprintf

@@ -109,6 +109,25 @@ for src in "${APP_C_SRCS[@]}"; do
     OBJS+=("$obj")
 done
 
+# PAX's fixed-point header (vendor/pax-graphics/core/include/pax_fixpt.hpp)
+# does runtime `long double` arithmetic in _from()/_to(), which pulls in the
+# soft-float TF-mode libgcc helpers (__getf2, __multf3, ...). Those aren't in
+# badgevms/symbols.yml, so the ELF loader can't resolve them at launch
+# ("Can't find common __getf2"). `-lgcc` is not an option: libgcc.a isn't
+# built -fPIC and ld refuses it wholesale in a shared object. These seven
+# objects specifically are PIC-clean (text-local relocations only; their sole
+# external reference, __clzsi2, IS exported by the kernel), so extract and
+# link just those instead of exporting them from the kernel.
+LIBGCC=$(riscv32-esp-elf-gcc "${COMMON_FLAGS[@]}" -print-libgcc-file-name)
+mkdir -p "$OBJ_DIR/libgcc_tf"
+(
+    cd "$OBJ_DIR/libgcc_tf"
+    riscv32-esp-elf-ar x "$LIBGCC" \
+        extenddftf2.o extendsftf2.o fixtfsi.o floatsitf.o \
+        getf2.o multf3.o trunctfsf2.o
+)
+OBJS+=("$OBJ_DIR"/libgcc_tf/*.o)
+
 echo "LINK pax_test.elf"
 riscv32-esp-elf-g++ "${COMMON_FLAGS[@]}" "${LINK_FLAGS[@]}" -o "$OUT_DIR/pax_test.elf" "${OBJS[@]}"
 

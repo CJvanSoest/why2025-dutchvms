@@ -25,6 +25,7 @@
 void *why_malloc(size_t size);
 void  why_free(void *_Nullable ptr);
 void *why_calloc(size_t nmemb, size_t size);
+void *why_aligned_alloc(size_t alignment, size_t size);
 void *why_realloc(void *_Nullable ptr, size_t size);
 void *why_reallocarray(void *_Nullable ptr, size_t nmemb, size_t size);
 
