@@ -26,9 +26,8 @@ Some feature highlights (inherited from BadgeVMS):
 * **Cutting a release**: see [docs/guides/Releases.md](docs/guides/Releases.md).
 * **What changed recently**: see [docs/CHANGELOG.md](docs/CHANGELOG.md).
 * **Apps** (the actual user-facing programs — MeshCore, storage viewer,
-  WiFi analyzer, etc.) live in a separate repo,
-  [why2025-apps](https://github.com/CJvanSoest/why2025-apps), and are
-  distributed via [why2025-app-repository](https://github.com/CJvanSoest/why2025-app-repository).
+  WiFi analyzer, etc.) live in a separate (private) repo, why2025-apps, and
+  are distributed via [why2025-app-repository](https://github.com/CJvanSoest/why2025-app-repository).
   This repo is firmware only.
 
 # Building from source
@@ -54,8 +53,8 @@ changes to `sdkconfig.defaults` are picked up._
 
 The directory [sdk_apps](sdk_apps) has several small programs demonstrating
 the BadgeVMS SDK. These are generic BadgeVMS examples, not this fork's actual
-apps (those are in the separate [why2025-apps](https://github.com/CJvanSoest/why2025-apps)
-repo — see [DUTCHVMS.md](DUTCHVMS.md)).
+apps (those are in the separate (private) why2025-apps repo — see
+[DUTCHVMS.md](DUTCHVMS.md)).
 
 * [framebuffer_test](sdk_apps/framebuffer_test) shows you how to directly interact with the windowing system and keyboard input.
 * [curl_test](sdk_apps/curl_test) shows you how to do http(s) calls.
