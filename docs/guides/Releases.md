@@ -79,7 +79,11 @@ them and never invent new section names.
    ```
    This triggers `.github/workflows/release.yml`, which builds the firmware
    in the same `espressif/idf:v5.5.1` container CI uses and publishes a
-   GitHub Release with `badgevms.bin` attached.
+   GitHub Release with `badgevms.bin`, the C6 bundle, and three merged
+   flash-ready images (`esp32p4-update.bin`, `esp32p4-factory-erases-storage.bin`,
+   `esp32c6-update.bin` — see
+   [docs/design/merged-flash-images-proposal.md](../design/merged-flash-images-proposal.md))
+   attached.
 4. Edit the published GitHub Release notes to be the CHANGELOG section body
    verbatim (the workflow auto-generates notes from commit history by
    default — replace them), so the release notes and the changelog entry
