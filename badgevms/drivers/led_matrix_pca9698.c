@@ -379,12 +379,21 @@ void led_matrix_pca9698_start(void) {
         mtx_scl = 22;
     }
     led_matrix_clear();
+    /* App processes are always spawned pinned to core 1 (zeus(), task.c) --
+     * mtx_refresh_task_hw in particular has no vTaskDelay in its per-row
+     * loop and relies on blocking briefly and predictably on an I2C ISR
+     * semaphore each row for its ~460 Hz refresh (see the "no flicker"
+     * comment above); left unpinned it can land on core 1 too, and any
+     * CPU-heavy app work there (confirmed: a WiFi firmware download) steals
+     * its time-slices at equal priority and makes it visibly flicker/tear.
+     * Pinning the whole LED subsystem to core 0 keeps it off the core app
+     * processes actually run on. */
     if (mtx_hw_init()) {
         mtx_oe_pwm_init(60); /* default global brightness 60% (OE PWM) */
-        xTaskCreate(mtx_refresh_task_hw, "mtxrfsh", 4096, NULL, 5, NULL);
+        xTaskCreatePinnedToCore(mtx_refresh_task_hw, "mtxrfsh", 4096, NULL, 5, NULL, 0);
     } else {
         ESP_LOGW(TAG, "  HW i2c (I2C_NUM_1) init failed -> bit-bang fallback");
-        xTaskCreate(mtx_refresh_task_bb, "mtxrfsh", 4096, NULL, 2, NULL);
+        xTaskCreatePinnedToCore(mtx_refresh_task_bb, "mtxrfsh", 4096, NULL, 2, NULL, 0);
     }
-    xTaskCreate(mtx_demo_task, "mtxdemo", 4096, NULL, 2, NULL);
+    xTaskCreatePinnedToCore(mtx_demo_task, "mtxdemo", 4096, NULL, 2, NULL, 0);
 }
