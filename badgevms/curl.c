@@ -578,9 +578,9 @@ CURL *curl_easy_init(void) {
     curl->header_function = default_header_callback;
 
     memset(&curl->config, 0, sizeof(esp_http_client_config_t));
-    curl->config.event_handler = http_event_handler;
-    curl->config.user_data     = curl;
-    curl->config.timeout_ms    = 30000;
+    curl->config.event_handler  = http_event_handler;
+    curl->config.user_data      = curl;
+    curl->config.timeout_ms     = 30000;
     // esp_http_client parses status line + headers into this single buffer
     // before handing control back to us; left at 0 it defaults to 512 bytes,
     // which a GitHub release-asset redirect response (Location header
