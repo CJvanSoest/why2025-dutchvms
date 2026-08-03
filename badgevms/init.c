@@ -354,6 +354,20 @@ bool update_flash0_init() {
 }
 
 void run_init(void) {
+    /* Confirm the running OTA partition as valid (cancelling ESP-IDF's
+     * pending-rollback state) as the very first thing this function does,
+     * unconditionally -- reaching this point at all is already sufficient
+     * evidence the running image is good. Previously this was the last
+     * thing run_init() did, after NVS/config-loading steps that have their
+     * own, unrelated failure modes and early-return on failure; if any of
+     * those failed on a given boot (confirmed: a real, hardware-observed
+     * case), validate_ota_partition() never ran for that boot, leaving the
+     * partition stuck at ESP_OTA_IMG_PENDING_VERIFY -- which ESP-IDF's own
+     * bootloader then silently rolls back to the previous partition on the
+     * *next* boot, regardless of how many releases had shipped since. */
+    printf("Bootup successful, marking OTA partition valid\n");
+    validate_ota_partition();
+
     nvs_handle_t nvs_handle;
     esp_err_t    err = nvs_open("badgevms_init", NVS_READWRITE, &nvs_handle);
     if (err != ESP_OK) {
@@ -396,9 +410,6 @@ void run_init(void) {
             printf("%s (%s) will start in %lu seconds\n", app->name, app->path, app->start_delay);
         }
     }
-
-    printf("Bootup successful, marking OTA partition valid\n");
-    validate_ota_partition();
 
     printf("Entering main supervision loop...\n");
 
