@@ -21,6 +21,25 @@ Entries from here on are the source of truth going forward.
 
 ## [Unreleased]
 
+## [1.3.7] - 2026-08-03
+
+### Fixed
+- **A WiFi firmware update that also needed a C6 radio reflash could crash
+  and permanently roll the P4 firmware back**, with no error visible to the
+  user beyond a badge that appeared to hang and restart repeatedly. Root
+  cause, confirmed on real hardware: `flash_slave_c6_if_needed()` reset the
+  C6 co-processor and immediately let `wifi_create()` proceed to
+  `start_wifi()`, which tried to bring the SDIO link back up before the
+  freshly-reflashed C6 had finished booting its own firmware —
+  `esp_wifi_init()` failed, aborting the whole system before
+  `validate_ota_partition()` (`run_init()`) ever got a chance to confirm the
+  new P4 partition as valid, so ESP-IDF's bootloader rolled it back on the
+  next boot. Fixed the same way Tanmatsu's own update flow separates these
+  two steps: `flash_slave_c6_if_needed()` now skips the C6 reflash entirely
+  while the P4 partition is still unconfirmed, deferring it to the next
+  (already-stable) boot, and waits 3 seconds after resetting the C6 before
+  returning to give it real time to boot before SDIO bring-up is attempted.
+
 ## [1.3.6] - 2026-08-03
 
 ### Changed

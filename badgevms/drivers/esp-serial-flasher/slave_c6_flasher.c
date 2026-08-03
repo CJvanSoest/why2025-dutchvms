@@ -5,12 +5,43 @@
 #include "esp32_port.h"
 #include "esp_loader.h"
 #include "esp_log.h"
+#include "esp_ota_ops.h"
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
 #include "why2025_firmware.h"
 #include "why_io.h"
 
 static char const *TAG = "slave_c6_flasher";
 
+/* The C6 needs real wall-clock time after esp_loader_reset_target() below to
+ * finish booting its own firmware before its SDIO slave function is ready to
+ * respond -- confirmed on real hardware: without this, start_wifi()'s
+ * esp_wifi_init() (called right after this function returns, from the same
+ * wifi_create()) tries to bring up the SDIO link too soon, fails
+ * repeatedly ("sdio_card_fn_init failed" x N), and the resulting
+ * ESP_ERROR_CHECK(esp_wifi_init(...)) abort()s the whole system. */
+#define C6_POST_RESET_SETTLE_MS 3000
+
 esp_err_t flash_slave_c6_if_needed() {
+    // Mirrors Tanmatsu's own update flow (confirm new firmware first, only
+    // reflash the radio co-processor on a later, already-stable boot):
+    // skip the C6 reflash entirely while the running P4 OTA partition is
+    // still ESP_OTA_IMG_PENDING_VERIFY. A crash during C6/SDIO bring-up
+    // (see C6_POST_RESET_SETTLE_MS above) would otherwise happen before
+    // validate_ota_partition() (run_init(), badgevms/init.c) ever gets a
+    // chance to confirm this boot as valid, so ESP-IDF's bootloader rolls
+    // the P4 back to the previous release on the next boot -- confirmed on
+    // real hardware to reproduce every time a WiFi-OTA update also needed a
+    // C6 reflash. Skipping here just defers to the next boot (the SD-staged
+    // files causing the MD5 mismatch aren't touched, so this check will
+    // naturally pass and proceed once this boot validates normally).
+    esp_ota_img_states_t   ota_state;
+    esp_partition_t const *running = esp_ota_get_running_partition();
+    if (esp_ota_get_state_partition(running, &ota_state) == ESP_OK && ota_state == ESP_OTA_IMG_PENDING_VERIFY) {
+        ESP_LOGW(TAG, "P4 partition not yet confirmed valid this boot -- deferring any C6 reflash to next boot");
+        return ESP_OK;
+    }
+
     why2025_binaries_t bin;
 
     loader_esp32_config_t const config = {
@@ -65,6 +96,7 @@ esp_err_t flash_slave_c6_if_needed() {
         ESP_LOGW(TAG, "Resetting C6!");
 
         esp_loader_reset_target();
+        vTaskDelay(pdMS_TO_TICKS(C6_POST_RESET_SETTLE_MS));
 
         ESP_LOGW(TAG, "Done!");
 
