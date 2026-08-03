@@ -224,5 +224,10 @@ static void ws2812_task(void *arg) {
 }
 
 void status_led_ws2812_start(void) {
-    xTaskCreate(ws2812_task, "ws2812", 4096, NULL, 2, NULL);
+    /* Pinned to core 0 for the same reason as the LED-matrix tasks in
+     * led_matrix_pca9698.c: keep the LED subsystem off core 1, where app
+     * processes always run (zeus(), task.c). This task's own ~1 Hz cadence
+     * isn't tight enough to visibly suffer from contention today, but there's
+     * no reason to leave it exposed to the same risk. */
+    xTaskCreatePinnedToCore(ws2812_task, "ws2812", 4096, NULL, 2, NULL, 0);
 }

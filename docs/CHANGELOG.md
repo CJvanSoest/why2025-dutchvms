@@ -21,6 +21,18 @@ Entries from here on are the source of truth going forward.
 
 ## [Unreleased]
 
+## [1.3.3] - 2026-08-03
+
+### Fixed
+- **The LED matrix animation flickered during a WiFi firmware download** —
+  the LED tasks (`mtx_refresh_task_hw`/`mtx_refresh_task_bb`/`mtx_demo_task`
+  in `led_matrix_pca9698.c`, `ws2812_task` in `status_led_ws2812.c`) were
+  never core-pinned and could land on core 1, the same core app processes
+  always run on; a CPU-heavy app (confirmed via a real WiFi-OTA download)
+  starved the LED matrix's tight, unyielding refresh loop of time-slices at
+  equal priority. All four are now pinned to core 0, keeping the LED
+  subsystem off the core app code runs on.
+
 ## [1.3.2] - 2026-08-03
 
 ### Changed
