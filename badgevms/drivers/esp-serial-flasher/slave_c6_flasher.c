@@ -35,7 +35,7 @@ esp_err_t flash_slave_c6_if_needed() {
     // C6 reflash. Skipping here just defers to the next boot (the SD-staged
     // files causing the MD5 mismatch aren't touched, so this check will
     // naturally pass and proceed once this boot validates normally).
-    esp_ota_img_states_t ota_state;
+    esp_ota_img_states_t   ota_state;
     esp_partition_t const *running = esp_ota_get_running_partition();
     if (esp_ota_get_state_partition(running, &ota_state) == ESP_OK && ota_state == ESP_OTA_IMG_PENDING_VERIFY) {
         ESP_LOGW(TAG, "P4 partition not yet confirmed valid this boot -- deferring any C6 reflash to next boot");
