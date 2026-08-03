@@ -21,6 +21,20 @@ Entries from here on are the source of truth going forward.
 
 ## [Unreleased]
 
+## [1.3.4] - 2026-08-03
+
+### Fixed
+- **The LED matrix animation stopped moving entirely (v1.3.3 regression)** —
+  v1.3.3 pinned `mtx_refresh_task_hw`/`mtx_refresh_task_bb`/`mtx_demo_task`
+  and `ws2812_task` all to core 0 to fix a flicker; co-pinning the
+  animation-content task (`mtx_demo_task`, priority 2) onto the same core as
+  the non-yielding, priority-5 hardware refresh task starved it almost
+  completely under strict FreeRTOS priority scheduling, instead of letting
+  it run on whichever core the scheduler previously found room on. Only
+  `mtx_refresh_task_hw`/`mtx_refresh_task_bb` (the genuinely timing-critical
+  ones) stay pinned to core 0 now; `mtx_demo_task` and `ws2812_task` are
+  unpinned again.
+
 ## [1.3.3] - 2026-08-03
 
 ### Fixed
