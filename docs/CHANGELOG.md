@@ -21,6 +21,43 @@ Entries from here on are the source of truth going forward.
 
 ## [Unreleased]
 
+## [1.3.0] - 2026-08-03
+
+### Added
+- **PAX and LVGL prototype apps** (`sdk_apps/pax_test`, `sdk_apps/lvgl_test`)
+  — standalone example apps evaluating both graphics libraries as candidate
+  future app-side renderers; both build and now run on real hardware (see
+  `docs/pax_lvgl_design_proposal.md`).
+- **Releases now also publish ready-to-flash merged flash images**
+  (`esp32p4-update.bin`, `esp32p4-factory-erases-storage.bin`,
+  `esp32c6-update.bin`) alongside the existing individual pieces, so
+  flashing a badge from scratch or updating one over cable is a single
+  `esptool write_flash 0x0 <file>` per chip instead of four hand-typed
+  offset pairs (GitHub issue #10).
+- **Releases now also publish the ESP32-C6 radio co-processor bundle**
+  (`bootloader.bin`/`partition-table.bin`/`network_adapter.bin` + `.md5`
+  sidecars) alongside `badgevms.bin`, so the launcher's WiFi-OTA flow can
+  keep the C6 radio firmware in sync automatically.
+
+### Fixed
+- **Display brightness below roughly 80% was barely visible** — the
+  backlight PWM duty cycle was linear against a perceptually nonlinear
+  panel response; fixed with a gamma-2.2 correction curve so the 0-100%
+  brightness range now dims evenly.
+- **Apps could permanently fail to (re)launch after being opened a couple
+  of times, sometimes surviving a reboot** — `why_sbrk()`'s heap-shrink path
+  released far more memory than requested and silently unmapped live
+  memory, corrupting later reads and writes; the shrink amount is now
+  correctly clamped to the requested delta.
+- **The PAX graphics library prototype failed to load at all** — three
+  small, independent gaps in the app-side ELF loader's symbol resolution (a
+  stray `__thread` variable, unresolvable long-double libgcc helpers, a
+  missing `aligned_alloc` kernel export); all three are now resolved and
+  PAX runs on real hardware.
+- **The LVGL prototype's vendored library contained an accidental full
+  self-duplication** of its own `src/libs/` directory, breaking the build
+  via wrong-depth includes; the duplicate is removed.
+
 ## [1.2.0] - 2026-07-11
 
 ### Added
