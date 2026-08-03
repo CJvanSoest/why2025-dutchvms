@@ -21,6 +21,20 @@ Entries from here on are the source of truth going forward.
 
 ## [Unreleased]
 
+## [1.3.5] - 2026-08-03
+
+### Fixed
+- **A firmware update could silently revert to a much older version after a
+  few reboots** — `validate_ota_partition()` (which cancels ESP-IDF's
+  pending-rollback state for the running OTA image) ran as the *last* step
+  of `run_init()`, after NVS/config-loading steps with their own, unrelated
+  failure modes that return early on failure. If any of those failed on a
+  given boot, the OTA partition was never confirmed valid, and ESP-IDF's own
+  bootloader silently rolled it back to the previous partition on the next
+  boot — observed on real hardware across a run of WiFi-OTA updates.
+  `validate_ota_partition()` now runs unconditionally as the very first
+  thing `run_init()` does.
+
 ## [1.3.4] - 2026-08-03
 
 ### Fixed
