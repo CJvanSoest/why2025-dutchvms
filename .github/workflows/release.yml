@@ -74,12 +74,66 @@ jobs:
           done
           ls -l
 
+      - name: Build merged flash images
+        shell: bash
+        # issue #10: a single `esptool write_flash 0x0 <file>` per chip instead
+        # of the multi-offset commands in Flashing.md. See
+        # docs/design/merged-flash-images-proposal.md for the full design --
+        # in short, `idf.py merge-bin`/flasher_args.json can't be used as-is
+        # here because they also include the `storage` partition, which would
+        # silently wipe installed apps/WiFi/MeshCore identity on every normal
+        # update. Building the file lists explicitly instead, matching
+        # Flashing.md's documented offsets exactly.
+        #
+        # esp32c6-update.bin's ota_data_initial.bin comes from the C6
+        # sub-build's own build dir, not build/c6firmware/ (that flattened
+        # copy -- populated by connectivity_esp_hosted's ExternalProject_Add
+        # INSTALL_COMMAND -- only carries bootloader/partition-table/
+        # network_adapter, not ota_data_initial).
+        run: |
+          . "$IDF_PATH/export.sh"
+
+          # P4 update image: same bytes/offsets as Flashing.md's "Updating an
+          # existing badge" section, minus the storage partition.
+          python -m esptool --chip esp32p4 merge_bin -o esp32p4-update.bin \
+            --flash_mode dio --flash_size 16MB --flash_freq 80m \
+            0x2000  build/bootloader/bootloader.bin \
+            0x8000  build/partition_table/partition-table.bin \
+            0xd000  build/ota_data_initial.bin \
+            0x10000 build/badgevms.bin
+
+          # P4 factory image: same as above plus storage.bin -- wipes
+          # installed apps/WiFi/MeshCore identity, only for a blank/bricked
+          # badge. Filename spells out the consequence so it can't be
+          # mistaken for esp32p4-update.bin in a release asset list.
+          python -m esptool --chip esp32p4 merge_bin -o esp32p4-factory-erases-storage.bin \
+            --flash_mode dio --flash_size 16MB --flash_freq 80m \
+            0x2000   build/bootloader/bootloader.bin \
+            0x8000   build/partition_table/partition-table.bin \
+            0xd000   build/ota_data_initial.bin \
+            0x10000  build/badgevms.bin \
+            0x410000 build/storage.bin
+
+          # C6 update image: no storage-partition trap on this chip (it has
+          # none), so there's no separate "factory" variant to publish.
+          python -m esptool --chip esp32c6 merge_bin -o esp32c6-update.bin \
+            --flash_mode dio --flash_size 4MB --flash_freq 80m \
+            0x0     build/c6firmware/bootloader.bin \
+            0x8000  build/c6firmware/partition-table.bin \
+            0xd000  connectivity_esp_hosted/slave/build/ota_data_initial.bin \
+            0x10000 build/c6firmware/network_adapter.bin
+
+          ls -l esp32p4-update.bin esp32p4-factory-erases-storage.bin esp32c6-update.bin
+
       - name: Publish GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           # Asset names must stay exactly these -- cj_launcher's do_firmware_update()/
           # sync_c6_bundle() (why2025-apps/apps/cj_launcher/main.c) match on them
           # literally (FW_ASSET_P4/FW_ASSET_C6_BOOT/FW_ASSET_C6_PART/FW_ASSET_C6_APP).
+          # The merged esp32*-*.bin images are new, additive assets for the
+          # manual esptool-over-cable path (docs/guides/Flashing.md) -- nothing
+          # in cj_launcher's own OTA flow reads them.
           files: |
             build/badgevms.bin
             build/c6firmware/bootloader.bin
@@ -88,4 +142,7 @@ jobs:
             build/c6firmware/partition-table.bin.md5
             build/c6firmware/network_adapter.bin
             build/c6firmware/network_adapter.bin.md5
+            esp32p4-update.bin
+            esp32p4-factory-erases-storage.bin
+            esp32c6-update.bin
           generate_release_notes: true

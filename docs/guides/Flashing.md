@@ -16,10 +16,48 @@ Flashing the wrong port at the wrong chip's binaries will not work — the
 esptool `--chip` flag will simply fail to talk to the target, it will not
 brick anything.
 
+> **Double-check `--chip` and the release asset name before running any
+> `write_flash` command.** Every release publishes an `esp32p4-*.bin` and an
+> `esp32c6-*.bin` — both are flashed the same way (`write_flash 0x0
+> <file>.bin`), so a copy-paste mistake that swaps them fails loudly
+> (`--chip` rejects the wrong image) rather than bricking anything, but it's
+> an easy mix-up. Separately, `esp32p4-update.bin` and
+> `esp32p4-factory-erases-storage.bin` look almost identical in a release's
+> asset list — only the factory image wipes installed apps/WiFi/MeshCore
+> identity (see "Storage" below). Read the filename, not just the chip.
+
 ## First-time flash (blank badge, or recovering from a bad flash)
 
-You need both the P4 firmware (`badgevms.bin` + friends) and the C6
-co-processor firmware (`network_adapter.bin` + friends). Build both first:
+Each GitHub Release publishes one merged image per chip, ready to flash at
+offset `0x0` — no need to build from source or juggle multiple offsets:
+
+**Flash the P4** (side port):
+
+```bash
+python -m esptool --chip esp32p4 -b 460800 \
+  --before default_reset --after hard_reset --port /dev/ttyUSB0 \
+  write_flash 0x0 esp32p4-factory-erases-storage.bin
+```
+
+**Flash the C6** (bottom port — switch the USB cable):
+
+```bash
+python -m esptool --chip esp32c6 -b 460800 \
+  --before default_reset --after hard_reset --port /dev/ttyACM0 \
+  write_flash 0x0 esp32c6-update.bin
+```
+
+That's it — both commands include everything (bootloader, partition table,
+OTA metadata, app image), and the P4 one also includes a blank `storage`
+partition, so this is the only path that needs the "factory" image (see
+"Storage" below for why that matters).
+
+### Building from source instead
+
+If you're building the firmware yourself rather than downloading a release,
+build first and use the same multi-offset commands the release workflow
+merges together — this is exactly what's inside `esp32p4-factory-erases-storage.bin`/
+`esp32c6-update.bin`, just as separate files instead of one:
 
 ```bash
 . $IDF_PATH/export.sh          # or: source ~/esp/esp-idf/export.sh
@@ -56,15 +94,18 @@ python -m esptool --chip esp32c6 -b 460800 \
 ```
 
 Neither command touches the `storage` partition (the SD/flash filesystem
-holding installed apps) — see below.
+holding installed apps) — see below. If you're building from source and want
+a blank badge fully set up in one go, flash `build/storage.bin` at `0x410000`
+as well (same offset the release's factory image uses internally).
 
 ### Storage (apps + user data)
 
 The `storage` partition (`storage.bin`, offset `0x410000`) holds the flash
-catalog and any flash-installed apps. It is deliberately **not** flashed on
-a normal update — re-flashing it wipes user data (installed apps, WiFi
-credentials, MeshCore identity/contacts, etc.) on every reboot. Only flash
-it for a genuinely blank badge, or when you intend to reset storage to
+catalog and any flash-installed apps. It is deliberately **not** included in
+`esp32p4-update.bin` or a from-source update flash — re-flashing it wipes
+user data (installed apps, WiFi credentials, MeshCore identity/contacts,
+etc.) on every reboot. Only flash it (or use the `-factory-erases-storage`
+image) for a genuinely blank badge, or when you intend to reset storage to
 factory defaults:
 
 ```bash
@@ -74,21 +115,45 @@ python -m esptool --chip esp32p4 -b 460800 --port /dev/ttyUSB0 \
 
 ## Updating an existing badge
 
+Download the merged update image for the chip(s) you need to update and
+flash it at offset `0x0` — same bytes as the individual-file commands below,
+just one file:
+
+```bash
+# P4 (side port) -- always safe, never touches storage
+python -m esptool --chip esp32p4 -b 460800 \
+  --before default_reset --after hard_reset --port /dev/ttyUSB0 \
+  write_flash 0x0 esp32p4-update.bin
+
+# C6 (bottom port) -- only if the release notes say the LoRa/radio wire
+# protocol changed, see step 3 below
+python -m esptool --chip esp32c6 -b 460800 \
+  --before default_reset --after hard_reset --port /dev/ttyACM0 \
+  write_flash 0x0 esp32c6-update.bin
+```
+
+Equivalent, if you'd rather flash the individual pieces (e.g. to sanity-check
+exactly what's going where, or because you built from source and don't have
+a merged image):
+
 1. Download `badgevms.bin` from the release you want (GitHub Releases page,
    or build it yourself per above).
-2. Flash it with the same P4 command as above, using the downloaded
-   `badgevms.bin` in place of `build/badgevms.bin`. The bootloader,
-   partition table, and `ota_data_initial.bin` rarely change between
-   releases, but flashing them again is harmless and safest by default.
-3. Only re-flash the C6 (`network_adapter.bin`) if the release notes say the
-   LoRa/radio wire protocol changed — see `docs/CHANGELOG.md`. P4 and C6
-   firmware must be a matching pair for anything that touches that
-   protocol (`badgevms/drivers/lora_proto_client.c` /
+2. Flash it with the same P4 multi-offset command as the "Building from
+   source" section above, using the downloaded `badgevms.bin` in place of
+   `build/badgevms.bin`. The bootloader, partition table, and
+   `ota_data_initial.bin` rarely change between releases, but flashing them
+   again is harmless and safest by default.
+3. Only re-flash the C6 (`network_adapter.bin`, or `esp32c6-update.bin`) if
+   the release notes say the LoRa/radio wire protocol changed — see
+   `docs/CHANGELOG.md`. P4 and C6 firmware must be a matching pair for
+   anything that touches that protocol
+   (`badgevms/drivers/lora_proto_client.c` /
    `connectivity_esp_hosted/slave/main/tanmatsu/lora/lora_protocol_server.c`);
    flashing a new P4 against a stale C6 (or vice versa) can silently break
    LoRa without any error.
-4. Do **not** flash `storage.bin` — that would erase installed apps and
-   saved settings (see above).
+4. Do **not** flash `storage.bin`, and do **not** use the
+   `-factory-erases-storage` image for a normal update — either would erase
+   installed apps and saved settings (see "Storage" above).
 
 This is the only supported path today. An SD-card-based installer and a real
 OTA-over-WiFi path (no esptool, no computer) are proposed but not yet built —
@@ -125,6 +190,7 @@ flow.
 ## See also
 
 - [Releases.md](Releases.md) — how a release is cut and versioned
+- [docs/design/merged-flash-images-proposal.md](../design/merged-flash-images-proposal.md) — design rationale for the merged images this guide uses
 - [DUTCHVMS.md](../../DUTCHVMS.md) — what this fork changes vs upstream BadgeVMS
 - [docs/design/SD-and-OTA-Updates.md](../design/SD-and-OTA-Updates.md) — proposed SD-card install + OTA path
 - [README.md](../../README.md) — building from source, SDK, example apps
