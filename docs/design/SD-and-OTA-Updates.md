@@ -1,7 +1,14 @@
 # SD-card firmware install + OTA updates — design proposal
 
 Design document for [why2025-dutchvms#6](https://github.com/CJvanSoest/why2025-dutchvms/issues/6).
-No code yet — this is the plan to review before implementing it.
+
+> **Status (2026-08-03): §2 (WiFi OTA) and §3 (C6 bundle sync) are
+> implemented and merged** — see the status note at the top of each section
+> below for exactly what shipped and where. **§1 (SD-card install) is the
+> only part of this proposal that's still just a plan, not code.** This
+> document originally described all three as "no code yet"; that's no longer
+> true for two of the three, kept here only as the historical proposal text
+> for what became §2/§3.
 
 ## Problem
 
@@ -82,6 +89,25 @@ can't overwrite the last known-good one before it's even validated.
 
 ### 2. OTA over WiFi (revive `why2025_ota`, don't rewrite it)
 
+> **IMPLEMENTED** (task #73). Not un-archived after all — reimplemented
+> directly in `why2025-apps/apps/cj_launcher/main.c` as `do_firmware_update()`,
+> wired to Settings → **Update Firmware**. It fetches
+> `releases/latest` from `CJvanSoest/why2025-dutchvms`, compares the release
+> tag against `ota_get_running_version()` with `strverscmp()` (skips with
+> "Already up to date" if the running version is >= the release tag), and on
+> a real update streams `badgevms.bin` straight into an `ota_session_*` via
+> curl, same shape as originally proposed below. **Not yet hardware-tested**
+> (task #86) — build-verified only so far. **Known risk to watch for during
+> that test**: the running version string is whatever `git describe --tags`
+> produced at the last build (e.g. `v1.2.0-45-g1a2b3c4` for a dev build off a
+> branch, not a clean tag) — `strverscmp()` comparing that against a plain
+> release tag like `1.3.0` may not behave as a human would expect (leading
+> non-digit vs. digit characters), so "Already up to date" firing incorrectly
+> on a dev-flashed badge is a real possibility worth confirming, not assuming
+> away.
+>
+> The text below is kept as the original proposal for reference.
+
 Un-archive and adapt `Archive/sdk_apps/why2025_ota/ota_update.c`:
 
 - `update_firmware()`/`check_for_firmware_updates()` need no logic changes —
@@ -97,6 +123,20 @@ Un-archive and adapt `Archive/sdk_apps/why2025_ota/ota_update.c`:
   is a no-op instead of a needless flash-partition write.
 
 ### 3. Keep the C6 in sync on either path
+
+> **IMPLEMENTED** (task #85). `release.yml` now generates `.md5` sidecars
+> for `bootloader.bin`/`partition-table.bin`/`network_adapter.bin` and
+> attaches all 6 files (3 binaries + 3 sidecars) as GitHub Release assets.
+> `cj_launcher`'s `sync_c6_bundle()` downloads them into
+> `SD0:[BADGEVMS.APPS.why2025_firmware_ota_c6]` right after a successful P4
+> OTA commit, exactly as proposed below — no C6/kernel changes were needed.
+> It degrades gracefully against an older release missing these assets (each
+> missing file is skipped and reported, the P4 update still lands). **Not
+> yet exercised via an actual tagged release**: the current `latest` release
+> (`v1.2.0`, 2026-07-11) predates this workflow change and only has
+> `badgevms.bin` attached — the C6-sync path has only been read/build-verified
+> in code, never actually run against a real release's assets. Cutting a new
+> release tag is what will exercise this path for the first time.
 
 Per `radio_c6_updater_proposal.md`'s recommendation:
 
@@ -121,6 +161,12 @@ dual-bank swap of 3 small binaries. A plain file write to the one `storage`
 partition, gated by the same MD5 check already in place, is proportionate.
 
 ## Open questions to resolve before implementing
+
+Only §1 (SD-card install) remains unbuilt, so these open questions now only
+apply to that piece — §2/§3's real equivalent questions were answered by how
+they actually shipped (WiFi path version-gates on `strverscmp()` against the
+release tag, no separate MD5-of-running-partition tracking was needed; C6
+sync piggybacks on the existing GitHub Release rather than a separate ZIP).
 
 - Exact SD-card MD5/version staleness check for the P4 binary (see §1) —
   needs a concrete mechanism, not just "compare something."
