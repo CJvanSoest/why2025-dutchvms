@@ -587,9 +587,14 @@ CURL *curl_easy_init(void) {
     // pointing at objects.githubusercontent.com, plus several other headers)
     // comfortably exceeds, failing the whole request with "HTTP_CLIENT: Out
     // of buffer" before a caller's CURLOPT_FOLLOWLOCATION even gets a chance
-    // to act on it. 4096 gives real libcurl-like headroom.
-    curl->config.buffer_size    = 4096;
-    curl->config.buffer_size_tx = 4096;
+    // to act on it. 4096 was tried first but still wasn't enough on real
+    // hardware against an actual GitHub release-asset redirect (confirmed:
+    // "HTTP_CLIENT: Out of buffer" with res=8 code=302) -- GitHub's presigned
+    // objects.githubusercontent.com redirect URL plus its own response
+    // headers (Set-Cookie, X-GitHub-Request-Id, etc.) apparently exceeds
+    // 4096 combined. 8192 gives real libcurl-like headroom.
+    curl->config.buffer_size    = 8192;
+    curl->config.buffer_size_tx = 8192;
 
     curl->ssl_verify_peer          = true;
     curl->config.crt_bundle_attach = esp_crt_bundle_attach;
