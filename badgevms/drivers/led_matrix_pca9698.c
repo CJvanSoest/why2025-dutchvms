@@ -386,8 +386,7 @@ void led_matrix_pca9698_start(void) {
      * comment above); left unpinned it can land on core 1 too, and any
      * CPU-heavy app work there (confirmed: a WiFi firmware download) steals
      * its time-slices at equal priority and makes it visibly flicker/tear.
-     * Pinning the whole LED subsystem to core 0 keeps it off the core app
-     * processes actually run on. */
+     * Pin ONLY the refresh task to core 0, away from that contention. */
     if (mtx_hw_init()) {
         mtx_oe_pwm_init(60); /* default global brightness 60% (OE PWM) */
         xTaskCreatePinnedToCore(mtx_refresh_task_hw, "mtxrfsh", 4096, NULL, 5, NULL, 0);
@@ -395,5 +394,12 @@ void led_matrix_pca9698_start(void) {
         ESP_LOGW(TAG, "  HW i2c (I2C_NUM_1) init failed -> bit-bang fallback");
         xTaskCreatePinnedToCore(mtx_refresh_task_bb, "mtxrfsh", 4096, NULL, 2, NULL, 0);
     }
-    xTaskCreatePinnedToCore(mtx_demo_task, "mtxdemo", 4096, NULL, 2, NULL, 0);
+    /* mtx_demo_task deliberately stays unpinned (previous behavior): pinning
+     * it to the same core as the prio-5, effectively-non-yielding refresh
+     * task above starves it almost completely under strict FreeRTOS
+     * priority scheduling (the animation visibly stopped updating when both
+     * were pinned to core 0 together) -- unpinned, the scheduler is free to
+     * run it on whichever core actually has room, which is what let the
+     * animation update smoothly before this file pinned anything at all. */
+    xTaskCreate(mtx_demo_task, "mtxdemo", 4096, NULL, 2, NULL);
 }
