@@ -316,8 +316,8 @@ esp_loader_error_t flash_binary(FILE *bin, size_t size, size_t address) {
         // to the C6 unconditionally -- the root cause of the C6-corruption/
         // bad-MD5 crash loop. Retry a few times before giving up outright:
         // never flash a chunk we're not sure is complete.
-        long   chunk_start = why_ftell(bin);
-        int    read_attempt;
+        long chunk_start = why_ftell(bin);
+        int  read_attempt;
         for (read_attempt = 1; read_attempt <= 3; read_attempt++) {
             if (why_fread(payload, to_read, 1, bin) == 1) {
                 break;
@@ -332,9 +332,11 @@ esp_loader_error_t flash_binary(FILE *bin, size_t size, size_t address) {
             }
         }
         if (read_attempt > 3) {
-            printf("\nGiving up: could not read %u bytes at offset %u after 3 attempts.\n",
-                   (unsigned)to_read,
-                   (unsigned)written);
+            printf(
+                "\nGiving up: could not read %u bytes at offset %u after 3 attempts.\n",
+                (unsigned)to_read,
+                (unsigned)written
+            );
             return ESP_LOADER_ERROR_FAIL;
         }
 
