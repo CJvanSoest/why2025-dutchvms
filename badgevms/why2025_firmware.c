@@ -208,7 +208,9 @@ int app_main(void) {
         get_num_tasks()
     );
 
+    ESP_LOGE(TAG, "CJ-DEBUG: about to call run_init()");
     run_init();
+    ESP_LOGE(TAG, "CJ-DEBUG: run_init() returned (should never happen in normal operation)");
 
     ESP_LOGE(TAG, "Killed init, rebooting");
     esp_restart();
