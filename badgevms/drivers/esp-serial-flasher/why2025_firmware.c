@@ -306,7 +306,39 @@ esp_loader_error_t flash_binary(FILE *bin, size_t size, size_t address) {
 
     while (size > 0) {
         size_t to_read = MIN(size, sizeof(payload));
-        why_fread(payload, to_read, 1, bin);
+
+        // why_fread()'s return value was previously ignored here. On a short
+        // read (confirmed elsewhere in this codebase -- see the retry loop
+        // in application.c -- reads against the flash-backed APPS: storage
+        // can intermittently come back short), `payload` (a static buffer
+        // reused every iteration) ends up a mix of freshly-read bytes and
+        // stale leftovers from the previous chunk, which then got flashed
+        // to the C6 unconditionally -- the root cause of the C6-corruption/
+        // bad-MD5 crash loop. Retry a few times before giving up outright:
+        // never flash a chunk we're not sure is complete.
+        long chunk_start = why_ftell(bin);
+        int  read_attempt;
+        for (read_attempt = 1; read_attempt <= 3; read_attempt++) {
+            if (why_fread(payload, to_read, 1, bin) == 1) {
+                break;
+            }
+            printf("\nShort read at offset %u (attempt %d/3), retrying...\n", (unsigned)written, read_attempt);
+            // A short read may have already advanced the stream position by
+            // however many bytes it did manage to copy -- seek back to the
+            // start of this chunk so the retry re-reads the same `to_read`
+            // bytes rather than silently skipping ahead.
+            if (chunk_start >= 0) {
+                why_fseek(bin, chunk_start, SEEK_SET);
+            }
+        }
+        if (read_attempt > 3) {
+            printf(
+                "\nGiving up: could not read %u bytes at offset %u after 3 attempts.\n",
+                (unsigned)to_read,
+                (unsigned)written
+            );
+            return ESP_LOADER_ERROR_FAIL;
+        }
 
         err = esp_loader_flash_write(payload, to_read);
         if (err != ESP_LOADER_SUCCESS) {
