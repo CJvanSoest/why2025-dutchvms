@@ -10,7 +10,14 @@
 
 /* ============ DEBUG ============ */
 
-static __thread pax_err_t last_err = PAX_OK;
+// BadgeVMS apps are position-independent shared objects, so __thread would
+// force GCC's general-dynamic TLS model and a call to __tls_get_addr -- a
+// dynamic-loader symbol that neither BadgeVMS nor ESP-IDF provides (the ELF
+// loader has no TLS block/DTV/tp support at all). last_err only backs
+// pax_get_err()/pax_set_err(); a process-global is fine for single-task apps.
+// Local patch against upstream robotman2412/pax-graphics -- see
+// sdk_apps/pax_test/vendor/PATCHES.md.
+static pax_err_t last_err = PAX_OK;
 
 // Get the last error reported on this thread.
 pax_err_t pax_get_err() {

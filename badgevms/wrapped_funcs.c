@@ -171,6 +171,26 @@ void IRAM_ATTR *why_calloc(size_t nmemb, size_t size) {
     return ptr;
 }
 
+// dlmemalign()-backed, same shape as why_malloc()/why_calloc(). Added for
+// PAX's pax_buf_init(), which calls aligned_alloc() unconditionally --
+// dlmalloc.h documents dlmemalign() results as freeable via dlfree(), same
+// as every other why_*alloc() variant here, so the existing why_free() path
+// needs no changes.
+void IRAM_ATTR *why_aligned_alloc(size_t alignment, size_t size) {
+    task_info_t *task_info = get_task_info();
+
+    if (!task_info->pid) {
+        xSemaphoreTake(kernel_malloc_lock, portMAX_DELAY);
+    }
+
+    void *ptr = dlmemalign(alignment, size);
+
+    if (!task_info->pid) {
+        xSemaphoreGive(kernel_malloc_lock);
+    }
+    return ptr;
+}
+
 void IRAM_ATTR *why_realloc(void *_Nullable ptr, size_t size) {
     task_info_t *task_info = get_task_info();
 
