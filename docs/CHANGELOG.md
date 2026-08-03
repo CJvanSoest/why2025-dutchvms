@@ -21,6 +21,19 @@ Entries from here on are the source of truth going forward.
 
 ## [Unreleased]
 
+## [1.3.1] - 2026-08-03
+
+### Fixed
+- **The WiFi firmware-update flow (Settings → Update Firmware) failed to
+  download the new release**, reporting "Download failed, firmware not
+  changed" — GitHub's release-asset redirect response (a `Location` header
+  pointing at `objects.githubusercontent.com`, plus several other headers)
+  exceeded the HTTP client's default 512-byte header buffer, aborting the
+  request before it could follow the redirect. The buffer is now sized
+  generously enough to handle it. Found via a real hardware test of v1.3.0's
+  WiFi-OTA flow (task #86) — this had never been exercised against an actual
+  GitHub release before.
+
 ## [1.3.0] - 2026-08-03
 
 ### Added

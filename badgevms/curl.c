@@ -578,9 +578,18 @@ CURL *curl_easy_init(void) {
     curl->header_function = default_header_callback;
 
     memset(&curl->config, 0, sizeof(esp_http_client_config_t));
-    curl->config.event_handler = http_event_handler;
-    curl->config.user_data     = curl;
-    curl->config.timeout_ms    = 30000;
+    curl->config.event_handler  = http_event_handler;
+    curl->config.user_data      = curl;
+    curl->config.timeout_ms     = 30000;
+    // esp_http_client parses status line + headers into this single buffer
+    // before handing control back to us; left at 0 it defaults to 512 bytes,
+    // which a GitHub release-asset redirect response (Location header
+    // pointing at objects.githubusercontent.com, plus several other headers)
+    // comfortably exceeds, failing the whole request with "HTTP_CLIENT: Out
+    // of buffer" before a caller's CURLOPT_FOLLOWLOCATION even gets a chance
+    // to act on it. 4096 gives real libcurl-like headroom.
+    curl->config.buffer_size    = 4096;
+    curl->config.buffer_size_tx = 4096;
 
     curl->ssl_verify_peer          = true;
     curl->config.crt_bundle_attach = esp_crt_bundle_attach;
