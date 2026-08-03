@@ -21,6 +21,20 @@ Entries from here on are the source of truth going forward.
 
 ## [Unreleased]
 
+## [1.3.6] - 2026-08-03
+
+### Changed
+- **Diagnostic-only release**: v1.3.5's `validate_ota_partition()` fix did
+  not resolve the silent-rollback issue — hardware testing (reconnect-
+  tolerant serial capture across two consecutive reboots) showed the OTA
+  partition still reverting, and `validate_ota_partition()`'s own log line
+  never appeared in the boot log at all despite the fix being present in the
+  running v1.3.5 image. Added unconditional, unmissable `ESP_LOGE` diagnostics
+  at `run_init()`'s entry, around every branch of `validate_ota_partition()`,
+  and around the `run_init()` call site in `why2025_firmware.c`'s `app_main()`,
+  so the next hardware test can show conclusively whether/where this code
+  path actually executes. No functional change.
+
 ## [1.3.5] - 2026-08-03
 
 ### Fixed

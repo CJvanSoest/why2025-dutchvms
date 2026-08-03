@@ -365,8 +365,10 @@ void run_init(void) {
      * partition stuck at ESP_OTA_IMG_PENDING_VERIFY -- which ESP-IDF's own
      * bootloader then silently rolls back to the previous partition on the
      * *next* boot, regardless of how many releases had shipped since. */
+    ESP_LOGE(TAG, "CJ-DEBUG: run_init() entered");
     printf("Bootup successful, marking OTA partition valid\n");
-    validate_ota_partition();
+    bool ota_valid_ok = validate_ota_partition();
+    ESP_LOGE(TAG, "CJ-DEBUG: validate_ota_partition() returned %d", (int)ota_valid_ok);
 
     nvs_handle_t nvs_handle;
     esp_err_t    err = nvs_open("badgevms_init", NVS_READWRITE, &nvs_handle);
