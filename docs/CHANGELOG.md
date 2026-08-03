@@ -21,6 +21,18 @@ Entries from here on are the source of truth going forward.
 
 ## [Unreleased]
 
+## [1.3.9] - 2026-08-03
+
+### Fixed
+- **WiFi-OTA firmware updates could still fail to download even after
+  v1.3.1's fix for the same class of bug** -- a live end-to-end test of
+  v1.3.8's WiFi-OTA update flow got past version comparison and OTA session
+  setup, then failed on GitHub's release-asset redirect with
+  `HTTP_CLIENT: Out of buffer`. 4096 bytes (the value v1.3.1 landed on)
+  wasn't enough combined header room for the presigned
+  `objects.githubusercontent.com` redirect URL plus GitHub's own response
+  headers; `curl.c`'s `buffer_size`/`buffer_size_tx` are now 8192.
+
 ## [1.3.8] - 2026-08-03
 
 ### Fixed
