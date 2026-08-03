@@ -1,8 +1,36 @@
 # Single merged flash images for GitHub Releases — design proposal
 
 Design document for [why2025-dutchvms#10](https://github.com/CJvanSoest/why2025-dutchvms/issues/10)
-("Ready to flash to 0x0 github releases"). No code yet — this is the plan to
-review before implementing it.
+("Ready to flash to 0x0 github releases").
+
+> **Status (2026-08-03): IMPLEMENTED**, merged in
+> [PR #19](https://github.com/CJvanSoest/why2025-dutchvms/pull/19) (task #92).
+> `release.yml`'s "Build merged flash images" step now produces exactly what
+> this document proposed, with every "Open question"/"Risk" below resolved
+> as noted inline:
+> - Assets are `esp32p4-update.bin`, `esp32p4-factory-erases-storage.bin`,
+>   `esp32c6-update.bin` — the factory/update naming-confusion risk was
+>   resolved by spelling the consequence into the filename itself (the
+>   document's own suggested mitigation), not by keeping the shorter
+>   `esp32p4-factory.bin` this proposal originally used.
+> - C6 *is* merge-binned too (the "confirm this is wanted" open question —
+>   yes, for symmetry with the P4 asset and issue #10's literal ask).
+> - The C6's `ota_data_initial.bin` is read straight from
+>   `connectivity_esp_hosted/slave/build/ota_data_initial.bin` — confirmed
+>   NOT present in the flattened `build/c6firmware/` copy, so CI reads it
+>   from its original sub-build location rather than adding it to that
+>   `INSTALL_COMMAND`.
+> - `Flashing.md` was restructured to lead with the one-line merged commands
+>   for both first-time flash and updates, with the explicit multi-offset
+>   form demoted to a "Building from source instead" subsection — plus a
+>   bold warning about chip/asset-name mixups.
+>
+> Build-verified (byte-identical to individually-flashing the pieces) but,
+> like the OTA work in [SD-and-OTA-Updates.md](SD-and-OTA-Updates.md), **not
+> yet exercised through an actual tagged GitHub Release run** — the current
+> `latest` release (`v1.2.0`) predates this workflow change.
+>
+> The rest of this document is kept as the original proposal for reference.
 
 ## Problem
 
