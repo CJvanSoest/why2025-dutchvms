@@ -19,6 +19,8 @@
 #include "esp_heap_caps.h"
 #include "esp_log.h"
 #include "esp_system.h"
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
 #include "memory.h"
 #include "nvs.h"
 #include "nvs_flash.h"
@@ -376,6 +378,13 @@ void run_init(void) {
      * writes to, so this sidesteps both the UART and SD confounds. Read
      * back via why2025-apps' About screen (cj_launcher), no cable needed. */
     esp_rom_printf("CJ-DEBUG115: run_init() entered\n");
+    /* CJ-DEBUG task #115 (v1.3.16): this codebase has a known history of a
+     * silent-corruption-not-immediate-crash stack-overflow class of bug (the
+     * launcher's Launcher_Context, fixed by making it static) -- record the
+     * calling task's remaining stack (words) alongside entered/validated so
+     * a hardware test can rule stack pressure in or out without depending on
+     * print reliability in the moment. */
+    uint32_t     stack_words_entered = (uint32_t)uxTaskGetStackHighWaterMark(NULL);
     nvs_handle_t dbg115_nvs;
     if (nvs_open("cj_dbg115", NVS_READWRITE, &dbg115_nvs) == ESP_OK) {
         uint8_t entered_flag = 1;
@@ -384,15 +393,18 @@ void run_init(void) {
          * value types aren't cross-readable -- a u8 entry can't be read back
          * as a blob. */
         nvs_set_blob(dbg115_nvs, "entered", &entered_flag, sizeof(entered_flag));
+        nvs_set_blob(dbg115_nvs, "stack_ent", &stack_words_entered, sizeof(stack_words_entered));
         nvs_commit(dbg115_nvs);
         nvs_close(dbg115_nvs);
     }
     esp_rom_printf("CJ-DEBUG115: Bootup successful, marking OTA partition valid\n");
-    bool ota_valid_ok = validate_ota_partition();
+    bool     ota_valid_ok      = validate_ota_partition();
+    uint32_t stack_words_valid = (uint32_t)uxTaskGetStackHighWaterMark(NULL);
     esp_rom_printf("CJ-DEBUG115: validate_ota_partition() returned %d\n", (int)ota_valid_ok);
     if (nvs_open("cj_dbg115", NVS_READWRITE, &dbg115_nvs) == ESP_OK) {
         uint8_t validated_flag = (uint8_t)ota_valid_ok;
         nvs_set_blob(dbg115_nvs, "validated", &validated_flag, sizeof(validated_flag));
+        nvs_set_blob(dbg115_nvs, "stack_val", &stack_words_valid, sizeof(stack_words_valid));
         nvs_commit(dbg115_nvs);
         nvs_close(dbg115_nvs);
     }
