@@ -1,4 +1,23 @@
-CONFIG_BOOTLOADER_APP_ROLLBACK_ENABLE=y
+# CJ-DEBUG task #115: disabled as a pragmatic workaround. Hardware evidence
+# this session (raw otadata partition reads via esptool, independent of any
+# log capture) shows validate_ota_partition()'s call to
+# esp_ota_mark_app_valid_cancel_rollback() never successfully confirms a
+# freshly-OTA'd partition -- every real WiFi OTA update lands in
+# ESP_OTA_IMG_PENDING_VERIFY and gets silently reverted by the bootloader on
+# the next reset, even though the new image itself boots and runs correctly.
+# Root cause not found despite four independent diagnostic channels (UART,
+# SD, NVS flag, NVS stack-watermark) all showing zero evidence the relevant
+# code even executes -- likely needs a JTAG session, tracked as a deferred
+# investigation (see memory why2025_ota_confirm_never_executes_task115.md).
+#
+# Comparison research: Tanmatsu's launcher (Nicolai-Electronics,
+# github.com/Nicolai-Electronics/tanmatsu-launcher) never enables this option
+# at all and has never needed an equivalent confirm step -- with rollback
+# off, esp_ota_set_boot_partition() just sets the boot pointer directly, no
+# PENDING_VERIFY state exists, and there is nothing to fail to confirm.
+# Disabling it here trades away the "auto-revert on a bad OTA boot" safety
+# net for a working OTA update flow.
+# CONFIG_BOOTLOADER_APP_ROLLBACK_ENABLE is not set
 # CONFIG_BOOTLOADER_WDT_ENABLE is not set
 CONFIG_ESPTOOLPY_FLASHSIZE_16MB=y
 CONFIG_PARTITION_TABLE_CUSTOM=y
