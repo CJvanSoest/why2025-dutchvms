@@ -21,6 +21,16 @@ Entries from here on are the source of truth going forward.
 
 ## [Unreleased]
 
+## [1.3.10] - 2026-08-04
+
+### Changed
+- **Version-only release, no functional changes.** Cut solely to give a
+  badge already running v1.3.9 a newer release to WiFi-OTA update to, so
+  the download flow itself (Settings -> Update Firmware) could be validated
+  end-to-end after v1.3.9's `curl.c` buffer-size fix -- v1.3.9 itself could
+  only ever be flashed directly, since there was no newer release yet for
+  it to update *to*.
+
 ## [1.3.9] - 2026-08-03
 
 ### Fixed
