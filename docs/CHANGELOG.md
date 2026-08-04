@@ -21,6 +21,18 @@ Entries from here on are the source of truth going forward.
 
 ## [Unreleased]
 
+## [1.3.15] - 2026-08-04
+
+### Changed
+- **Diagnostic-only release for task #115.** v1.3.14's SD marker-file test
+  came back negative, but that channel is confounded by task #112's
+  already-confirmed intermittent SD-write corruption. Switched the
+  `run_init()`/`validate_ota_partition()` marker test to NVS (internal
+  flash, the same medium `validate_ota_partition()` itself writes to),
+  written as a blob so why2025-apps' `bv_nvs_get_blob()` bridge can read it
+  back and show it on the launcher's About screen -- no cable needed for
+  the next hardware check.
+
 ## [1.3.14] - 2026-08-04
 
 ### Changed
