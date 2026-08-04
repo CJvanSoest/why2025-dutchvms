@@ -367,11 +367,25 @@ void run_init(void) {
      * *next* boot, regardless of how many releases had shipped since. */
     /* CJ-DEBUG task #115: see why2025_firmware.c for why this is
      * esp_rom_printf() instead of ESP_LOGE/printf -- differential test for
-     * why these lines never reached the serial capture. */
+     * why these lines never reached the serial capture. Neither did that
+     * (v1.3.13, hardware-confirmed). These SD marker-file writes are a
+     * second, UART-independent differential test: if run_init() is truly
+     * entered and validate_ota_partition() truly runs, these files exist on
+     * SD afterwards regardless of what happened to the serial console. */
     esp_rom_printf("CJ-DEBUG115: run_init() entered\n");
+    FILE *marker_entered = fopen("SD0:run_init_entered.txt", "wb");
+    if (marker_entered) {
+        fprintf(marker_entered, "run_init() entered\n");
+        fclose(marker_entered);
+    }
     esp_rom_printf("CJ-DEBUG115: Bootup successful, marking OTA partition valid\n");
     bool ota_valid_ok = validate_ota_partition();
     esp_rom_printf("CJ-DEBUG115: validate_ota_partition() returned %d\n", (int)ota_valid_ok);
+    FILE *marker_validated = fopen("SD0:run_init_validated.txt", "wb");
+    if (marker_validated) {
+        fprintf(marker_validated, "validate_ota_partition() returned %d\n", (int)ota_valid_ok);
+        fclose(marker_validated);
+    }
 
     nvs_handle_t nvs_handle;
     esp_err_t    err = nvs_open("badgevms_init", NVS_READWRITE, &nvs_handle);
