@@ -21,6 +21,16 @@ Entries from here on are the source of truth going forward.
 
 ## [Unreleased]
 
+## [1.3.12] - 2026-08-04
+
+### Changed
+- **Version-only release, no functional changes.** Cut solely to give a
+  badge already running v1.3.11 a newer release to WiFi-OTA update to, so
+  why2025-apps' `sync_c6_bundle()` v1.14.4 filename-collision experiment for
+  task #112 could be exercised end-to-end (short, dot-free 8.3-native SD
+  filenames instead of the real C6 asset names, to test a FAT shortname-
+  alias hypothesis).
+
 ## [1.3.11] - 2026-08-04
 
 ### Changed
