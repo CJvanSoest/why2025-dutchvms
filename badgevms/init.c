@@ -368,23 +368,33 @@ void run_init(void) {
     /* CJ-DEBUG task #115: see why2025_firmware.c for why this is
      * esp_rom_printf() instead of ESP_LOGE/printf -- differential test for
      * why these lines never reached the serial capture. Neither did that
-     * (v1.3.13, hardware-confirmed). These SD marker-file writes are a
-     * second, UART-independent differential test: if run_init() is truly
-     * entered and validate_ota_partition() truly runs, these files exist on
-     * SD afterwards regardless of what happened to the serial console. */
+     * (v1.3.13, hardware-confirmed). v1.3.14's SD marker-file test also
+     * came back negative (files never appeared on SD0:), but that channel
+     * is confounded by task #112's already-confirmed intermittent SD-write
+     * corruption -- a false negative there is plausible. NVS lives on
+     * internal flash, the same medium validate_ota_partition() itself
+     * writes to, so this sidesteps both the UART and SD confounds. Read
+     * back via why2025-apps' About screen (cj_launcher), no cable needed. */
     esp_rom_printf("CJ-DEBUG115: run_init() entered\n");
-    FILE *marker_entered = fopen("SD0:run_init_entered.txt", "wb");
-    if (marker_entered) {
-        fprintf(marker_entered, "run_init() entered\n");
-        fclose(marker_entered);
+    nvs_handle_t dbg115_nvs;
+    if (nvs_open("cj_dbg115", NVS_READWRITE, &dbg115_nvs) == ESP_OK) {
+        uint8_t entered_flag = 1;
+        /* nvs_set_blob (not nvs_set_u8): the app-facing bv_nvs_get_blob()
+         * bridge (badgevms/nvs_bridge.c) reads via nvs_get_blob(), and NVS
+         * value types aren't cross-readable -- a u8 entry can't be read back
+         * as a blob. */
+        nvs_set_blob(dbg115_nvs, "entered", &entered_flag, sizeof(entered_flag));
+        nvs_commit(dbg115_nvs);
+        nvs_close(dbg115_nvs);
     }
     esp_rom_printf("CJ-DEBUG115: Bootup successful, marking OTA partition valid\n");
     bool ota_valid_ok = validate_ota_partition();
     esp_rom_printf("CJ-DEBUG115: validate_ota_partition() returned %d\n", (int)ota_valid_ok);
-    FILE *marker_validated = fopen("SD0:run_init_validated.txt", "wb");
-    if (marker_validated) {
-        fprintf(marker_validated, "validate_ota_partition() returned %d\n", (int)ota_valid_ok);
-        fclose(marker_validated);
+    if (nvs_open("cj_dbg115", NVS_READWRITE, &dbg115_nvs) == ESP_OK) {
+        uint8_t validated_flag = (uint8_t)ota_valid_ok;
+        nvs_set_blob(dbg115_nvs, "validated", &validated_flag, sizeof(validated_flag));
+        nvs_commit(dbg115_nvs);
+        nvs_close(dbg115_nvs);
     }
 
     nvs_handle_t nvs_handle;
