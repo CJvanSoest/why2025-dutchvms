@@ -21,6 +21,22 @@ Entries from here on are the source of truth going forward.
 
 ## [Unreleased]
 
+## [1.3.13] - 2026-08-04
+
+### Changed
+- **Diagnostic-only release for task #115.** Raw `otadata` flash reads
+  (independent of any serial log capture) confirmed every P4 OTA update this
+  session writes and commits successfully but never gets confirmed valid:
+  the new partition stays `ESP_OTA_IMG_PENDING_VERIFY` even after 10+
+  minutes of fully functional operation, and a subsequent reboot rolls back
+  to the previous partition. The existing `ESP_LOGE`/`printf` diagnostics
+  around `run_init()`/`validate_ota_partition()` never once appeared in the
+  serial log across dozens of boots, despite `run_init()`'s observable
+  effects (apps launching) clearly happening. Swapped that diagnostic
+  bracket to `esp_rom_printf()` -- a direct ROM-level UART write bypassing
+  the ESP-IDF log/stdio buffering layers -- to get visibility into what
+  actually happens in there on the next hardware test.
+
 ## [1.3.12] - 2026-08-04
 
 ### Changed
