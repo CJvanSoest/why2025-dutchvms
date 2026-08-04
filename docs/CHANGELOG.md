@@ -21,6 +21,21 @@ Entries from here on are the source of truth going forward.
 
 ## [Unreleased]
 
+## [1.3.16] - 2026-08-04
+
+### Changed
+- **Diagnostic-only release for task #115.** Even `validate_ota_partition()`'s
+  own long-standing internal diagnostics and the far-downstream "Entering
+  main supervision loop..." print never appear in the serial capture across
+  the whole multi-day log history -- not specific to recent changes,
+  pointing at something structural rather than a logic bug in this
+  session's edits. This codebase has a known prior stack-overflow bug
+  (`Launcher_Context`, fixed by making it `static`) with a similar
+  silent-corruption-not-immediate-crash signature. Records
+  `uxTaskGetStackHighWaterMark()` for the init task at both `cj_dbg115`
+  checkpoints to rule stack pressure in or out, independent of print
+  reliability.
+
 ## [1.3.15] - 2026-08-04
 
 ### Changed
