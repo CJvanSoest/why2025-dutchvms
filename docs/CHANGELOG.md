@@ -21,6 +21,18 @@ Entries from here on are the source of truth going forward.
 
 ## [Unreleased]
 
+## [1.3.14] - 2026-08-04
+
+### Changed
+- **Diagnostic-only release for task #115.** v1.3.13's `esp_rom_printf()`
+  diagnostics around `run_init()`/`validate_ota_partition()` still never
+  reached the serial capture (hardware-confirmed), ruling out ESP-IDF
+  log/stdio buffering as the explanation. Added a second, UART-independent
+  differential test: SD marker files (`SD0:run_init_entered.txt`,
+  `SD0:run_init_validated.txt`) written at `run_init()` entry and right
+  after `validate_ota_partition()` returns, to check via SD access whether
+  that code genuinely executes regardless of what is silencing the console.
+
 ## [1.3.13] - 2026-08-04
 
 ### Changed
