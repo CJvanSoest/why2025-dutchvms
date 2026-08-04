@@ -21,6 +21,29 @@ Entries from here on are the source of truth going forward.
 
 ## [Unreleased]
 
+## [1.3.17] - 2026-08-04
+
+### Changed
+- **Pragmatic fix for task #115: disables `CONFIG_BOOTLOADER_APP_ROLLBACK_ENABLE`.**
+  Hardware evidence gathered this session (raw `otadata` partition reads via
+  `esptool`, independent of any log capture) showed
+  `validate_ota_partition()`'s call to
+  `esp_ota_mark_app_valid_cancel_rollback()` never successfully confirms a
+  freshly-OTA'd partition -- the new image boots and runs correctly, but the
+  bootloader silently reverts it to the previous partition on the next
+  reset, and subsequent OTA attempts then fail with
+  `ESP_ERR_OTA_ROLLBACK_INVALID_STATE`. The actual root cause was not found
+  after exhausting four independent diagnostic channels (UART, SD, NVS
+  flag, NVS stack-watermark); deep root-causing is deferred to a future
+  session with JTAG access (task #115, see memory
+  `why2025_ota_confirm_never_executes_task115.md`). Comparison research
+  confirmed Tanmatsu's launcher (Nicolai-Electronics) never enables app
+  rollback at all and has never needed an equivalent confirm step --
+  disabling it here brings WHY2025 in line with that approach: OTA updates
+  now apply directly via `esp_ota_set_boot_partition()` with nothing left
+  to fail to confirm, at the cost of losing the auto-revert-on-bad-boot
+  safety net rollback provided.
+
 ## [1.3.16] - 2026-08-04
 
 ### Changed
