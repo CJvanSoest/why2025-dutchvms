@@ -46,6 +46,8 @@
 #include "esp_rom_crc.h"
 #include "esp_rom_sys.h"
 #include "freertos/FreeRTOS.h"
+#include "freertos/semphr.h"
+#include "freertos/stream_buffer.h"
 #include "freertos/task.h"
 #include "rom/ets_sys.h"
 #include "rom/uart.h"
@@ -245,6 +247,72 @@ static int vms_to_posix(char const *vms, char *out, size_t out_size) {
  * this file already makes). */
 static uint8_t put_stream_chunk[PUT_STREAM_CHUNK_BYTES];
 
+/* rx_blocking() talks straight to the UART ROM driver (uart_rx_one_char()),
+ * not the ESP-IDF UART driver's own interrupt-fed ring buffer -- there is
+ * essentially nothing but the small hardware RX FIFO backing it. A first
+ * cut of streaming PUT (writing each chunk to SD synchronously, inline,
+ * between rx_blocking() calls) reproduced the exact "large PUT corrupts in
+ * transit" failure this project had already hit once before with a 155KB
+ * PUT (see project memory) -- a slow SD/FATFS write() call blocks the
+ * reader for long enough that the hardware FIFO overflows and drops bytes
+ * before the next rx_blocking() call can drain it, which then fails the
+ * end-to-end CRC.
+ *
+ * Fix: split into a reader (this task, draining UART into a stream buffer,
+ * never blocked on anything but incoming bytes) and a writer (a second
+ * task, draining that stream buffer to SD independently). The two only
+ * touch each other through the stream buffer, so a slow SD write only ever
+ * delays the WRITER, never the reader's ability to keep pulling bytes off
+ * UART. 32KB of slack comfortably absorbs ordinary SD write latency spikes
+ * (FAT cluster allocation, etc.) at the ~11.5KB/s an incoming 115200-baud
+ * transfer can ever deliver -- NOT a hard guarantee against overflow (only
+ * switching this UART to the ESP-IDF driver's own interrupt-driven ring
+ * buffer would be that, a bigger change this wasn't extended to since the
+ * same UART is shared with esp_rom_printf console logging elsewhere -- see
+ * this file's own top-of-file comment), but a large, empirically-motivated
+ * safety margin over the single-chunk exposure this used to have. */
+#define PUT_RING_BUFFER_BYTES  (32 * 1024)
+#define PUT_WRITER_CHUNK_BYTES 1024
+#define PUT_WRITER_STACK_WORDS 3072
+#define PUT_WRITER_PRIORITY    3 /* same tier as deploy_listener_task itself */
+
+typedef struct {
+    StreamBufferHandle_t stream;
+    int                  fd;
+    uint32_t             expected_bytes;
+    volatile bool        write_failed;
+    SemaphoreHandle_t    finished;
+} put_writer_ctx_t;
+
+static void put_writer_task(void *arg) {
+    put_writer_ctx_t *ctx = (put_writer_ctx_t *)arg;
+    static uint8_t     writer_buf[PUT_WRITER_CHUNK_BYTES];
+    uint32_t            remaining = ctx->expected_bytes;
+
+    while (remaining > 0) {
+        size_t want = remaining < sizeof(writer_buf) ? remaining : sizeof(writer_buf);
+        size_t got  = xStreamBufferReceive(ctx->stream, writer_buf, want, portMAX_DELAY);
+        if (got == 0)
+            continue; /* portMAX_DELAY: only happens if the stream buffer itself was reset/deleted */
+
+        if (!ctx->write_failed) {
+            size_t written = 0;
+            while (written < got) {
+                ssize_t w = write(ctx->fd, writer_buf + written, got - written);
+                if (w <= 0) {
+                    ctx->write_failed = true;
+                    break;
+                }
+                written += (size_t)w;
+            }
+        }
+        remaining -= (uint32_t)got;
+    }
+
+    xSemaphoreGive(ctx->finished);
+    vTaskDelete(NULL);
+}
+
 /* Reads and CRC-folds `n` bytes off the wire without writing them anywhere
  * -- used by handle_put_streaming()'s error paths to stay frame-aligned
  * for the next scan_for_magic() even when there's nothing valid to do with
@@ -326,24 +394,77 @@ static void handle_put_streaming(uint32_t len, uint16_t crc) {
         fd = open(tmp_path, O_WRONLY | O_CREAT | O_TRUNC, 0666);
     }
 
-    bool     write_fail = false;
-    uint32_t remaining  = data_len;
+    /* Writer task setup -- only worth it (and only possible) if there's an
+     * open destination fd and actual file bytes coming. On bad_vms_path or
+     * fd<0, `remaining` below still has to be drained off UART for CRC/
+     * frame-sync, there's just nowhere to write it, so have_writer stays
+     * false and the loop below folds CRC only. Same for OOM setting up the
+     * stream buffer/semaphore/task itself (should be exceedingly rare --
+     * 32KB plus two small kernel objects -- but if it happens, degrade to
+     * "drain and report OOM" rather than fall back to the FIFO-risky
+     * synchronous write path this replaced). */
+    StreamBufferHandle_t stream        = NULL;
+    SemaphoreHandle_t    finished      = NULL;
+    put_writer_ctx_t     writer_ctx    = {0};
+    TaskHandle_t          writer_task_h = NULL;
+    bool                  writer_oom    = false;
+
+    if (fd >= 0 && data_len > 0) {
+        stream   = xStreamBufferCreate(PUT_RING_BUFFER_BYTES, 1);
+        finished = xSemaphoreCreateBinary();
+        if (stream && finished) {
+            writer_ctx.stream         = stream;
+            writer_ctx.fd             = fd;
+            writer_ctx.expected_bytes = data_len;
+            writer_ctx.write_failed   = false;
+            writer_ctx.finished       = finished;
+            if (create_kernel_task(
+                    put_writer_task,
+                    "put_writer",
+                    PUT_WRITER_STACK_WORDS,
+                    &writer_ctx,
+                    PUT_WRITER_PRIORITY,
+                    &writer_task_h,
+                    0
+                ) != pdTRUE) {
+                writer_task_h = NULL;
+            }
+        }
+        if (!writer_task_h) {
+            writer_oom = true;
+            if (stream) {
+                vStreamBufferDelete(stream);
+                stream = NULL;
+            }
+            if (finished) {
+                vSemaphoreDelete(finished);
+                finished = NULL;
+            }
+        }
+    }
+    bool have_writer = (writer_task_h != NULL);
+
+    uint32_t remaining = data_len;
     while (remaining > 0) {
         uint32_t n = remaining < PUT_STREAM_CHUNK_BYTES ? remaining : PUT_STREAM_CHUNK_BYTES;
         rx_blocking(put_stream_chunk, n);
         crc = esp_rom_crc16_le(crc, put_stream_chunk, n);
-        if (fd >= 0 && !write_fail) {
-            size_t written = 0;
-            while (written < n) {
-                ssize_t w = write(fd, put_stream_chunk + written, n - written);
-                if (w <= 0) {
-                    write_fail = true;
-                    break;
-                }
-                written += (size_t)w;
-            }
+        if (have_writer) {
+            /* Reader never blocks on SD I/O itself -- only ever on the
+             * writer falling more than PUT_RING_BUFFER_BYTES behind, which
+             * the writer's own independent scheduling makes brief even
+             * when it happens (see the big comment above put_writer_task). */
+            xStreamBufferSend(stream, put_stream_chunk, n, portMAX_DELAY);
         }
         remaining -= n;
+    }
+
+    bool write_fail = writer_oom;
+    if (have_writer) {
+        xSemaphoreTake(finished, portMAX_DELAY);
+        write_fail = writer_ctx.write_failed;
+        vSemaphoreDelete(finished);
+        vStreamBufferDelete(stream);
     }
 
     uint8_t crc_bytes[2];
@@ -368,6 +489,12 @@ static void handle_put_streaming(uint32_t len, uint16_t crc) {
     if (fd < 0) {
         send_status(ST_ERR_FOPEN);
         esp_rom_printf("[deploy] PUT open failed for '%s.part' (errno=%d)\n", posix_path, errno);
+        return;
+    }
+    if (writer_oom) {
+        unlink(tmp_path);
+        send_status(ST_ERR_OOM);
+        esp_rom_printf("[deploy] PUT: OOM setting up writer task/stream buffer for '%s'\n", posix_path);
         return;
     }
     if (write_fail) {
