@@ -1,5 +1,24 @@
 dependencies:
   idf: '>=5.5.0'
   espressif/esp_wifi_remote: '^1.3.1'
-  espressif/esp_hosted: '2.12.3'
-  espressif/esp-serial-flasher: '*'
+  # CJ-DEBUG-BLE (task #23 follow-up): local override_path instead of the
+  # registry version. Upstream transport_drv_reconfigure() arms a 5s
+  # "slave unresponsive" watchdog timer unconditionally, but the
+  # "Transport is already up" fast path (hit whenever WiFi already brought
+  # the transport up before something else -- e.g. BLE -- reconfigures it
+  # later) never stops that timer. The timer fires 5s later regardless and
+  # force-resets the host even though everything is working -- reproduced
+  # 100% of the time as a crash a few seconds after opening cj_meshcore.
+  # See components/esp_hosted_patched/host/drivers/transport/transport_drv.c
+  # for the one-line fix (stop the timer in that branch). Revert to the
+  # plain version pin once/if this is merged upstream in esp-hosted-mcu.
+  espressif/esp_hosted:
+    version: '2.12.3'
+    override_path: '../components/espressif__esp_hosted'
+  # Pinned (was '*'): deleting dependencies.lock to re-resolve the
+  # esp_hosted override_path also silently re-resolved this to 2.0.0,
+  # which broke esp_loader_mem_write()/esp_loader_mem_finish()'s signature
+  # (added an esp_loader_mem_cfg_t* param) against why2025_firmware.c's
+  # existing calls. 1.11.0 is the version this repo was actually built and
+  # hardware-tested against (see dependencies.lock history).
+  espressif/esp-serial-flasher: '1.11.0'
