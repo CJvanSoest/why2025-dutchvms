@@ -9,6 +9,9 @@
  * Commands:
  *   0x01 PUT   payload = [path_len:2 LE][path:N][file_data:M]
  *              response payload = [bytes_written:4 LE]
+ *              streamed straight to a ".part" temp file + rename() on
+ *              success (task #44) -- every other command's (always-small)
+ *              payload is still buffered whole in one malloc() first
  *   0x02 GET   payload = [path_len:2 LE][path:N]
  *              response payload = raw file bytes
  *   0x03 LIST  payload = [path_len:2 LE][path:N]
@@ -234,77 +237,153 @@ static int vms_to_posix(char const *vms, char *out, size_t out_size) {
     return 0;
 }
 
-static void handle_put(uint8_t const *payload, uint32_t len) {
+#define PUT_STREAM_CHUNK_BYTES 2048
+/* Kernel task, small stack (see the 6144 comment on create_kernel_task()
+ * below) -- a 2KB scratch buffer lives in BSS, not on the stack. Single
+ * dedicated deploy_listener_task processes one frame at a time, so an
+ * unguarded file-scope static is fine here (same assumption the rest of
+ * this file already makes). */
+static uint8_t put_stream_chunk[PUT_STREAM_CHUNK_BYTES];
+
+/* Reads and CRC-folds `n` bytes off the wire without writing them anywhere
+ * -- used by handle_put_streaming()'s error paths to stay frame-aligned
+ * for the next scan_for_magic() even when there's nothing valid to do with
+ * the bytes (bad path, etc). */
+static void put_drain(uint32_t n, uint16_t *crc_inout) {
+    uint16_t crc = *crc_inout;
+    while (n > 0) {
+        uint32_t chunk_n = n < PUT_STREAM_CHUNK_BYTES ? n : PUT_STREAM_CHUNK_BYTES;
+        rx_blocking(put_stream_chunk, chunk_n);
+        crc = esp_rom_crc16_le(crc, put_stream_chunk, chunk_n);
+        n   -= chunk_n;
+    }
+    *crc_inout = crc;
+}
+
+/* CMD_PUT, streamed straight to a ".part" temp file and rename()d into
+ * place on success -- task #44: a single malloc() sized to the WHOLE frame
+ * (what process_one_frame() used to do for every command, PUT included) is
+ * what OOM'd here on anything much past ~100KB; a PAX-linked app ELF
+ * (~180KB) was the first real thing to hit it. Every other command's
+ * payload is at most a VMS path (<256 bytes) and stays on the old buffered
+ * path in process_one_frame() -- only PUT needed this.
+ *
+ * `crc` in already covers the 5-byte header (folded by the caller); this
+ * folds in path_len + path + file data as they're read, exactly like the
+ * old code did over one buffer, just incrementally. The trailing CRC is
+ * checked LAST, after everything is drained, and takes precedence over
+ * every other error the same way process_one_frame()'s old up-front check
+ * did for every command -- a corrupt frame reports ERR_BAD_FRAME even if
+ * it also happens to have e.g. a bad path, and the real destination file
+ * is never touched on any error path (only ever the .part temp is). */
+static void handle_put_streaming(uint32_t len, uint16_t crc) {
     if (len < 2) {
+        put_drain(len, &crc);
+        uint8_t crc_bytes[2];
+        rx_blocking(crc_bytes, 2);
         send_status(ST_ERR_BAD_FRAME);
         esp_rom_printf("[deploy] PUT: len<2\n");
         return;
     }
-    uint16_t path_len = (uint16_t)payload[0] | ((uint16_t)payload[1] << 8);
-    if (path_len == 0 || path_len >= MAX_PATH_BYTES) {
-        send_status(ST_ERR_BAD_PATH);
-        esp_rom_printf("[deploy] PUT: bad path_len %u\n", (unsigned)path_len);
-        return;
-    }
-    if ((uint32_t)path_len + 2 > len) {
-        send_status(ST_ERR_BAD_FRAME);
-        esp_rom_printf("[deploy] PUT: path_len overruns payload\n");
-        return;
-    }
 
-    char vms_path[MAX_PATH_BYTES];
-    memcpy(vms_path, payload + 2, path_len);
-    vms_path[path_len] = 0;
+    uint8_t path_len_bytes[2];
+    rx_blocking(path_len_bytes, 2);
+    crc = esp_rom_crc16_le(crc, path_len_bytes, 2);
+    uint16_t path_len             = (uint16_t)path_len_bytes[0] | ((uint16_t)path_len_bytes[1] << 8);
+    uint32_t after_path_len_field = len - 2;
 
-    uint8_t const *data     = payload + 2 + path_len;
-    uint32_t       data_len = len - 2 - path_len;
+    bool bad_path_len = (path_len == 0 || path_len >= MAX_PATH_BYTES || (uint32_t)path_len > after_path_len_field);
+
+    char     vms_path[MAX_PATH_BYTES];
+    uint32_t data_len = 0;
+    if (bad_path_len) {
+        put_drain(after_path_len_field, &crc);
+        vms_path[0] = 0;
+    } else {
+        rx_blocking((uint8_t *)vms_path, path_len);
+        crc          = esp_rom_crc16_le(crc, (uint8_t const *)vms_path, path_len);
+        vms_path[path_len] = 0;
+        data_len     = after_path_len_field - path_len;
+    }
 
     char posix_path[MAX_PATH_BYTES + 32];
-    if (vms_to_posix(vms_path, posix_path, sizeof(posix_path)) != 0) {
-        send_status(ST_ERR_BAD_PATH);
-        esp_rom_printf("[deploy] PUT: bad VMS path '%s'\n", vms_path);
+    bool bad_vms_path = bad_path_len || vms_to_posix(vms_path, posix_path, sizeof(posix_path)) != 0;
+
+    char tmp_path[MAX_PATH_BYTES + 32 + 8];
+    int  fd = -1;
+    if (!bad_vms_path) {
+        /* mkdir -p: create any missing parent directories. We mutate
+         * posix_path temporarily by null-terminating at each '/' and
+         * calling mkdir. */
+        for (char *p = posix_path + 1; *p; p++) {
+            if (*p == '/') {
+                *p = 0;
+                mkdir(posix_path, 0755); /* ignore errors (EEXIST is fine) */
+                *p = '/';
+            }
+        }
+        snprintf(tmp_path, sizeof(tmp_path), "%s.part", posix_path);
+        fd = open(tmp_path, O_WRONLY | O_CREAT | O_TRUNC, 0666);
+    }
+
+    bool     write_fail = false;
+    uint32_t remaining  = data_len;
+    while (remaining > 0) {
+        uint32_t n = remaining < PUT_STREAM_CHUNK_BYTES ? remaining : PUT_STREAM_CHUNK_BYTES;
+        rx_blocking(put_stream_chunk, n);
+        crc = esp_rom_crc16_le(crc, put_stream_chunk, n);
+        if (fd >= 0 && !write_fail) {
+            size_t written = 0;
+            while (written < n) {
+                ssize_t w = write(fd, put_stream_chunk + written, n - written);
+                if (w <= 0) {
+                    write_fail = true;
+                    break;
+                }
+                written += (size_t)w;
+            }
+        }
+        remaining -= n;
+    }
+
+    uint8_t crc_bytes[2];
+    rx_blocking(crc_bytes, 2);
+    uint16_t crc_wire = (uint16_t)crc_bytes[0] | ((uint16_t)crc_bytes[1] << 8);
+
+    if (fd >= 0)
+        close(fd);
+
+    if (crc != crc_wire) {
+        if (fd >= 0)
+            unlink(tmp_path);
+        send_status(ST_ERR_BAD_FRAME);
+        esp_rom_printf("[deploy] PUT CRC mismatch: wire=0x%04X calc=0x%04X\n", crc_wire, crc);
         return;
     }
-
-    esp_rom_printf("[deploy] PUT '%s' -> '%s' %u bytes\n", vms_path, posix_path, (unsigned)data_len);
-
-    /* mkdir -p: create any missing parent directories. We mutate posix_path
-     * temporarily by null-terminating at each '/' and calling mkdir. */
-    for (char *p = posix_path + 1; *p; p++) {
-        if (*p == '/') {
-            *p = 0;
-            mkdir(posix_path, 0755); /* ignore errors (EEXIST is fine) */
-            *p = '/';
-        }
+    if (bad_vms_path) {
+        send_status(ST_ERR_BAD_PATH);
+        esp_rom_printf("[deploy] PUT: bad path (path_len=%u)\n", (unsigned)path_len);
+        return;
     }
-
-    int fd = open(posix_path, O_WRONLY | O_CREAT | O_TRUNC, 0666);
     if (fd < 0) {
         send_status(ST_ERR_FOPEN);
-        esp_rom_printf("[deploy] PUT open failed for '%s' (errno=%d)\n", posix_path, errno);
+        esp_rom_printf("[deploy] PUT open failed for '%s.part' (errno=%d)\n", posix_path, errno);
+        return;
+    }
+    if (write_fail) {
+        unlink(tmp_path);
+        send_status(ST_ERR_WRITE);
+        esp_rom_printf("[deploy] PUT write failed for '%s' (errno=%d)\n", posix_path, errno);
+        return;
+    }
+    if (rename(tmp_path, posix_path) != 0) {
+        unlink(tmp_path);
+        send_status(ST_ERR_WRITE);
+        esp_rom_printf("[deploy] PUT rename failed for '%s' (errno=%d)\n", posix_path, errno);
         return;
     }
 
-    size_t   total  = 0;
-    uint32_t remain = data_len;
-    while (remain > 0) {
-        ssize_t n = write(fd, data + total, remain);
-        if (n <= 0) {
-            close(fd);
-            send_status(ST_ERR_WRITE);
-            esp_rom_printf(
-                "[deploy] PUT write failed at %u/%u (errno=%d)\n",
-                (unsigned)total,
-                (unsigned)data_len,
-                errno
-            );
-            return;
-        }
-        total  += (size_t)n;
-        remain -= (uint32_t)n;
-    }
-    close(fd);
-
+    esp_rom_printf("[deploy] PUT '%s' -> '%s' %u bytes OK (streamed)\n", vms_path, posix_path, (unsigned)data_len);
     uint8_t reply[4] = {
         (uint8_t)(data_len & 0xFF),
         (uint8_t)((data_len >> 8) & 0xFF),
@@ -518,6 +597,20 @@ static void process_one_frame(void) {
         return;
     }
 
+    /* CRC over [cmd:1][len:4][payload:N] -- header folded in now regardless
+     * of command; CMD_PUT folds the rest in itself as it streams (see
+     * handle_put_streaming()'s own comment), everything else still gets it
+     * folded below over one buffered payload. */
+    uint16_t crc = 0xFFFF;
+    crc          = esp_rom_crc16_le(crc, hdr, 5);
+
+    if (cmd == CMD_PUT) {
+        /* Bypasses the malloc(len)-sized-to-the-whole-frame path below --
+         * that's what used to OOM on a large file (task #44). */
+        handle_put_streaming(len, crc);
+        return;
+    }
+
     uint8_t *payload = NULL;
     if (len > 0) {
         payload = malloc(len);
@@ -527,17 +620,12 @@ static void process_one_frame(void) {
             return;
         }
         rx_blocking(payload, len);
+        crc = esp_rom_crc16_le(crc, payload, len);
     }
 
     uint8_t crc_bytes[2];
     rx_blocking(crc_bytes, 2);
     uint16_t crc_wire = (uint16_t)crc_bytes[0] | ((uint16_t)crc_bytes[1] << 8);
-
-    /* CRC over [cmd:1][len:4][payload:N] */
-    uint16_t crc = 0xFFFF;
-    crc          = esp_rom_crc16_le(crc, hdr, 5);
-    if (payload && len)
-        crc = esp_rom_crc16_le(crc, payload, len);
 
     if (crc != crc_wire) {
         esp_rom_printf(
@@ -554,7 +642,6 @@ static void process_one_frame(void) {
 
     switch (cmd) {
         case CMD_PING: handle_ping(payload, len); break;
-        case CMD_PUT: handle_put(payload, len); break;
         case CMD_GET: handle_get(payload, len); break;
         case CMD_LIST: handle_list(payload, len); break;
         case CMD_DELETE: handle_delete(payload, len); break;
