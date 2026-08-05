@@ -25,6 +25,8 @@ Some feature highlights (inherited from BadgeVMS):
   [docs/guides/Flashing.md](docs/guides/Flashing.md).
 * **Cutting a release**: see [docs/guides/Releases.md](docs/guides/Releases.md).
 * **What changed recently**: see [docs/CHANGELOG.md](docs/CHANGELOG.md).
+* **Known issues** (resolved and open bugs, with root-cause writeups): see
+  [docs/KNOWN_ISSUES.md](docs/KNOWN_ISSUES.md).
 * **Apps** (the actual user-facing programs — MeshCore, storage viewer,
   WiFi analyzer, etc.) live in a separate (private) repo, why2025-apps, and
   are distributed via [why2025-app-repository](https://github.com/CJvanSoest/why2025-app-repository).
