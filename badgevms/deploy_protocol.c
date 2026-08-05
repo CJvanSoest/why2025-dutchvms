@@ -289,6 +289,8 @@ static void put_writer_task(void *arg) {
     static uint8_t     writer_buf[PUT_WRITER_CHUNK_BYTES];
     uint32_t            remaining = ctx->expected_bytes;
 
+    esp_rom_printf("[deploy] CJ-DEBUG44: writer_task started, expecting %u bytes\n", (unsigned)remaining);
+    uint32_t iter = 0;
     while (remaining > 0) {
         size_t want = remaining < sizeof(writer_buf) ? remaining : sizeof(writer_buf);
         size_t got  = xStreamBufferReceive(ctx->stream, writer_buf, want, portMAX_DELAY);
@@ -301,13 +303,24 @@ static void put_writer_task(void *arg) {
                 ssize_t w = write(ctx->fd, writer_buf + written, got - written);
                 if (w <= 0) {
                     ctx->write_failed = true;
+                    esp_rom_printf("[deploy] CJ-DEBUG44: writer write() failed, errno=%d\n", errno);
                     break;
                 }
                 written += (size_t)w;
             }
         }
         remaining -= (uint32_t)got;
+        iter++;
+        if (iter <= 3 || remaining == 0) {
+            esp_rom_printf(
+                "[deploy] CJ-DEBUG44: writer iter=%u got=%u remaining=%u\n",
+                (unsigned)iter,
+                (unsigned)got,
+                (unsigned)remaining
+            );
+        }
     }
+    esp_rom_printf("[deploy] CJ-DEBUG44: writer_task done, %u iters, giving semaphore\n", (unsigned)iter);
 
     xSemaphoreGive(ctx->finished);
     vTaskDelete(NULL);
@@ -443,8 +456,15 @@ static void handle_put_streaming(uint32_t len, uint16_t crc) {
         }
     }
     bool have_writer = (writer_task_h != NULL);
+    esp_rom_printf(
+        "[deploy] CJ-DEBUG44: reader have_writer=%d data_len=%u writer_oom=%d\n",
+        (int)have_writer,
+        (unsigned)data_len,
+        (int)writer_oom
+    );
 
     uint32_t remaining = data_len;
+    uint32_t reader_iter = 0;
     while (remaining > 0) {
         uint32_t n = remaining < PUT_STREAM_CHUNK_BYTES ? remaining : PUT_STREAM_CHUNK_BYTES;
         rx_blocking(put_stream_chunk, n);
@@ -454,14 +474,26 @@ static void handle_put_streaming(uint32_t len, uint16_t crc) {
              * writer falling more than PUT_RING_BUFFER_BYTES behind, which
              * the writer's own independent scheduling makes brief even
              * when it happens (see the big comment above put_writer_task). */
-            xStreamBufferSend(stream, put_stream_chunk, n, portMAX_DELAY);
+            size_t sent = xStreamBufferSend(stream, put_stream_chunk, n, portMAX_DELAY);
+            (void)sent;
         }
         remaining -= n;
+        reader_iter++;
+        if (reader_iter <= 3 || remaining == 0) {
+            esp_rom_printf(
+                "[deploy] CJ-DEBUG44: reader iter=%u n=%u remaining=%u\n",
+                (unsigned)reader_iter,
+                (unsigned)n,
+                (unsigned)remaining
+            );
+        }
     }
+    esp_rom_printf("[deploy] CJ-DEBUG44: reader loop done, %u iters, awaiting writer\n", (unsigned)reader_iter);
 
     bool write_fail = writer_oom;
     if (have_writer) {
         xSemaphoreTake(finished, portMAX_DELAY);
+        esp_rom_printf("[deploy] CJ-DEBUG44: writer semaphore taken\n");
         write_fail = writer_ctx.write_failed;
         vSemaphoreDelete(finished);
         vStreamBufferDelete(stream);
