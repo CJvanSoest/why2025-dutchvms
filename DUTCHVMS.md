@@ -98,10 +98,14 @@ git push github
 
 Tag-driven: pushing a `vX.Y.Z` tag triggers `.github/workflows/release.yml`,
 which builds firmware and publishes a GitHub Release with `badgevms.bin`
-attached. There is no on-device updater consuming this automatically —
-flashing a release onto a badge is a manual step. See
-[docs/guides/Releases.md](docs/guides/Releases.md) for the full process and
-[docs/CHANGELOG.md](docs/CHANGELOG.md) for what changed in each release.
+attached. The launcher (why2025-apps' `cj_launcher`, Settings > Update
+Firmware) can fetch and flash this release on-device over WiFi — manual
+flashing via `docs/guides/Flashing.md` is a fallback, not the only path.
+See [docs/guides/Releases.md](docs/guides/Releases.md) for the full release
+process, [docs/CHANGELOG.md](docs/CHANGELOG.md) for what changed in each
+release, and [docs/KNOWN_ISSUES.md](docs/KNOWN_ISSUES.md) for the current
+caveats around the on-device updater (OTA confirmation and the app-repo
+self-update download path both have open, unresolved issues).
 
 ## Archive
 

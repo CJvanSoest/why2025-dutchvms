@@ -63,6 +63,8 @@ apps (those are in the separate (private) why2025-apps repo — see
 * [thread_test](sdk_apps/thread_test) has a simple example of creating a thread and how to interact with workers.
 * [wifi_test](sdk_apps/wifi_test), [socket_test](sdk_apps/socket_test), [readdir_test](sdk_apps/readdir_test), [process_test](sdk_apps/process_test), [bmi270_test](sdk_apps/bmi270_test) — smaller focused examples, one concept each.
 * [hardware_test](sdk_apps/hardware_test) and [memtester](sdk_apps/memtester) — diagnostic/self-test apps.
+* [pax_test](sdk_apps/pax_test) and [lvgl_test](sdk_apps/lvgl_test) — minimal examples of the two render-library options apps can use (see [why2025-apps](https://github.com/CJvanSoest/why2025-apps) for real apps built on either).
+* [badgevms_launcher](sdk_apps/badgevms_launcher) — the reference/example launcher this SDK ships with; the actual launcher used on real badges is `cj_launcher` in [why2025-apps](https://github.com/CJvanSoest/why2025-apps), not this one.
 
 Finally, as a more complete example, there is also [doomgeneric](sdk_apps/doomgeneric), a full-fledged Doom port! In particular check out [doomgeneric_badgevms.c](sdk_apps/doomgeneric/doomgeneric/doomgeneric_badgevms.c) for examples of framebuffers, scaling, window handling, input, etc.
 
