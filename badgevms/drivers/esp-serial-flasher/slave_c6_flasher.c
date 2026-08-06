@@ -66,6 +66,24 @@ esp_err_t flash_slave_c6_if_needed() {
             return ESP_FAIL;
         }
 
+        // flash_binary()'s return value used to be discarded below: a genuine
+        // write failure (short read after retries, a rejected packet, or the
+        // stub's own post-write MD5 check failing) would print its own
+        // detail via flash_binary()'s internal printf()s, but this function
+        // would still fall through to "Resetting C6!"/"Done!" and return
+        // ESP_OK unconditionally, as if every binary had been flashed
+        // successfully. That made a real flash failure indistinguishable
+        // from success in this driver's own log output, and meant
+        // wifi_create() (the caller) had no way to know the C6 might still
+        // be running stale/partial firmware -- see task #113/#125: this
+        // alone doesn't explain every observed non-converging reflash loop
+        // (a mismatched SD-card .bin/.md5 pair still won't converge no
+        // matter how many times a write actually succeeds), but a silent
+        // write failure was a real, separate way to end up in the same
+        // "reflash every boot, LoRa never comes up" state undetected.
+        // Declared before the goto below so it's always initialized at `out:`.
+        bool any_write_failed = false;
+
         if (!get_why2025_binaries(&bin)) {
             ESP_LOGW(TAG, "Couldn't open firmware files, skipping");
             goto out;
@@ -73,21 +91,30 @@ esp_err_t flash_slave_c6_if_needed() {
 
         if (esp_loader_flash_verify_known_md5(bin.boot.addr, bin.boot.size, bin.boot.md5) != ESP_LOADER_SUCCESS) {
             ESP_LOGW(TAG, "Bootloader MD5 mismatch, flashing...");
-            flash_binary(bin.boot.fp, bin.boot.size, bin.boot.addr);
+            if (flash_binary(bin.boot.fp, bin.boot.size, bin.boot.addr) != ESP_LOADER_SUCCESS) {
+                ESP_LOGE(TAG, "Bootloader flash failed, C6 may be left with stale/partial firmware");
+                any_write_failed = true;
+            }
         } else {
             ESP_LOGW(TAG, "Bootloader MD5 match, skipping...");
         }
 
         if (esp_loader_flash_verify_known_md5(bin.part.addr, bin.part.size, bin.part.md5) != ESP_LOADER_SUCCESS) {
             ESP_LOGW(TAG, "Partition table MD5 mismatch, flashing...");
-            flash_binary(bin.part.fp, bin.part.size, bin.part.addr);
+            if (flash_binary(bin.part.fp, bin.part.size, bin.part.addr) != ESP_LOADER_SUCCESS) {
+                ESP_LOGE(TAG, "Partition table flash failed, C6 may be left with stale/partial firmware");
+                any_write_failed = true;
+            }
         } else {
             ESP_LOGW(TAG, "Partition table MD5 match, skipping...");
         }
 
         if (esp_loader_flash_verify_known_md5(bin.app.addr, bin.app.size, bin.app.md5) != ESP_LOADER_SUCCESS) {
             ESP_LOGW(TAG, "Application MD5 mismatch, flashing...");
-            flash_binary(bin.app.fp, bin.app.size, bin.app.addr);
+            if (flash_binary(bin.app.fp, bin.app.size, bin.app.addr) != ESP_LOADER_SUCCESS) {
+                ESP_LOGE(TAG, "Application flash failed, C6 may be left with stale/partial firmware");
+                any_write_failed = true;
+            }
         } else {
             ESP_LOGW(TAG, "Application MD5 match, skipping...");
         }
@@ -98,11 +125,15 @@ esp_err_t flash_slave_c6_if_needed() {
         esp_loader_reset_target();
         vTaskDelay(pdMS_TO_TICKS(C6_POST_RESET_SETTLE_MS));
 
-        ESP_LOGW(TAG, "Done!");
+        if (any_write_failed) {
+            ESP_LOGW(TAG, "Done (with flash errors, see above)");
+        } else {
+            ESP_LOGW(TAG, "Done!");
+        }
 
         free_why2025_binaries(&bin);
 
-        return ESP_OK;
+        return any_write_failed ? ESP_FAIL : ESP_OK;
     }
 
     return ESP_FAIL;
