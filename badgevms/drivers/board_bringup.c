@@ -77,33 +77,25 @@ static void i2c2_verify_task(void *arg) {
     gpio_set_level(5, 1);          // RESET high = released (was wrongly GPIO1 before)
     gpio_set_level(8, 0);          // OE low = outputs enabled (harmless for i2c)
     vTaskDelay(pdMS_TO_TICKS(20)); // let the PCA9698 come out of reset
-    ESP_LOGW(TAG, "=== I2C2 VERIFY (RESET=GPIO5 HIGH, OE=GPIO8 LOW): SDA=GPIO22 SCL=GPIO9 ===");
-    int const     pairs[][2] = {{22, 9}, {9, 22}};
-    uint8_t const addrs[]    = {0x40, 0x20};
-    int           found      = 0;
-    for (int p = 0; p < 2 && !found; p++) {
-        for (size_t a = 0; a < sizeof(addrs) && !found; a++) {
-            int sda = pairs[p][0], scl = pairs[p][1];
-            int r1 = bb_pca_readback(sda, scl, addrs[a], 0x55);
-            int r2 = (r1 == 0x55) ? bb_pca_readback(sda, scl, addrs[a], 0xAA) : -1;
-            ESP_LOGW(
-                TAG,
-                "  SDA=GPIO%d SCL=GPIO%d @0x%02x: rb(0x55)=0x%02x rb(0xAA)=0x%02x",
-                sda,
-                scl,
-                addrs[a],
-                r1 & 0xFF,
-                r2 & 0xFF
-            );
-            if (r1 == 0x55 && r2 == 0xAA) {
-                ESP_LOGW(TAG, "  *** PCA9698 CONFIRMED: SDA=GPIO%d SCL=GPIO%d addr7=0x%02x ***", sda, scl, addrs[a]);
-                found = 1;
-            }
-        }
+
+    /* task #121's architecture review: this used to brute-force 2 pin
+     * orderings x 2 addresses with ~10 log lines every single boot --
+     * leftover from when the pinout itself was still being discovered.
+     * SDA=GPIO22/SCL=GPIO9 @ addr7=0x20 is the confirmed, final wiring (see
+     * why_led_matrix_pinout memory / src/hardware schematic); this is now
+     * purely a presence check for the optional LED-matrix add-on, not a
+     * pinout search, so it only tries that one combination. */
+    int const     sda = 22, scl = 9;
+    uint8_t const addr  = 0x20;
+    int           found = 0;
+    int           r1    = bb_pca_readback(sda, scl, addr, 0x55);
+    int           r2    = (r1 == 0x55) ? bb_pca_readback(sda, scl, addr, 0xAA) : -1;
+    if (r1 == 0x55 && r2 == 0xAA) {
+        ESP_LOGI(TAG, "LED-matrix add-on detected (PCA9698 @0x%02x)", addr);
+        found = 1;
+    } else {
+        ESP_LOGI(TAG, "No LED-matrix add-on detected (PCA9698 @0x%02x not responding)", addr);
     }
-    if (!found)
-        ESP_LOGW(TAG, "  still no echo (RESET=GPIO5 high) -> chip solder or OTHER");
-    ESP_LOGW(TAG, "=== I2C2 VERIFY done ===");
     if (found) {
         led_matrix_pca9698_start();
         status_led_ws2812_start();

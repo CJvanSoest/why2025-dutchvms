@@ -371,13 +371,13 @@ static void mtx_demo_task(void *arg) {
 }
 
 void led_matrix_pca9698_start(void) {
-    /* Detect which pin order ACKs, then start the driver (refresh) + demo. */
+    /* task #121's architecture review: this used to re-probe both pin
+     * orderings itself, redundant with (and able to disagree with) the
+     * presence check board_bringup.c's i2c2_verify_task already did before
+     * ever calling this function -- this only runs once that's already
+     * confirmed SDA=GPIO22/SCL=GPIO9 acks, so just use it directly. */
     mtx_sda = 22;
     mtx_scl = 9;
-    if (bb_pca_readback(9, 22, MTX_ADDR, 0x55) == 0x55) {
-        mtx_sda = 9;
-        mtx_scl = 22;
-    }
     led_matrix_clear();
     /* App processes are always spawned pinned to core 1 (zeus(), task.c) --
      * mtx_refresh_task_hw in particular has no vTaskDelay in its per-row

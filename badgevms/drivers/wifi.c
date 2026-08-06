@@ -41,6 +41,15 @@
 #define WIFI_DISCONNECTED_BIT  BIT1
 #define WIFI_FAIL_BIT          BIT2
 #define WIFI_AUTH_ERR_BIT      BIT3
+#define WIFI_SCAN_DONE_BIT     BIT4
+
+/* task #121's architecture review: esp_wifi_scan_start(NULL, true) (blocking
+ * mode) has no caller-facing timeout -- cj_wifi_analyzer's own docs record
+ * that rescanning while connected can hang indefinitely, worked around
+ * app-side by disconnecting before every scan. Fixed here instead: start the
+ * scan in non-blocking mode and wait on WIFI_EVENT_SCAN_DONE ourselves with
+ * a bound, force-stopping the scan if it's exceeded. */
+#define SCAN_TIMEOUT_MS (10 * 1000)
 
 typedef struct wifi_station {
     mac_address_t                   bssid[6];
@@ -259,6 +268,8 @@ static void event_handler(void *arg, esp_event_base_t event_base, int32_t event_
          * esp_netif_sntp_start() just (re)kicks the lwIP SNTP task, no need
          * to block here or handle failure -- sync_time_cb() logs success. */
         esp_netif_sntp_start();
+    } else if (event_base == WIFI_EVENT && event_id == WIFI_EVENT_SCAN_DONE) {
+        xEventGroupSetBits(wifi_event_group, WIFI_SCAN_DONE_BIT);
     }
 }
 
@@ -379,7 +390,20 @@ static void hermes_do_scan() {
 
     status.last_scan_time = cur_time;
 
-    esp_wifi_scan_start(NULL, true);
+    xEventGroupClearBits(wifi_event_group, WIFI_SCAN_DONE_BIT);
+    esp_err_t scan_res = esp_wifi_scan_start(NULL, false);
+    if (scan_res != ESP_OK) {
+        ESP_LOGW(TAG, "esp_wifi_scan_start failed: %s", esp_err_to_name(scan_res));
+        return;
+    }
+
+    EventBits_t bits =
+        xEventGroupWaitBits(wifi_event_group, WIFI_SCAN_DONE_BIT, pdTRUE, pdFALSE, pdMS_TO_TICKS(SCAN_TIMEOUT_MS));
+    if (!(bits & WIFI_SCAN_DONE_BIT)) {
+        ESP_LOGW(TAG, "WiFi scan timed out after %dms, aborting", SCAN_TIMEOUT_MS);
+        esp_wifi_scan_stop();
+        return;
+    }
 
     uint16_t         number = DEFAULT_SCAN_LIST_SIZE;
     wifi_ap_record_t ap_info[DEFAULT_SCAN_LIST_SIZE];
@@ -662,8 +686,12 @@ device_t *wifi_create() {
     ESP_LOGW(TAG, "CJ-PATCH: ESP-Hosted/SDIO init SKIPPED -- C6 runs custom firmware");
 #endif
 
-    wifi_device_t *dev      = malloc(sizeof(wifi_device_t));
-    device_t      *base_dev = (device_t *)dev;
+    wifi_device_t *dev = malloc(sizeof(wifi_device_t));
+    if (!dev) {
+        ESP_LOGE(TAG, "Failed to allocate wifi_device_t");
+        return NULL;
+    }
+    device_t *base_dev = (device_t *)dev;
 
     base_dev->type   = DEVICE_TYPE_BLOCK;
     base_dev->_open  = wifi_open;

@@ -420,9 +420,13 @@ static orientation_t get_orientation(void *dev) {
 }
 
 device_t *bosch_bmi270_sensor_create() {
-    bosch_bmi270_device_t *dev             = calloc(1, sizeof(bosch_bmi270_device_t));
-    orientation_device_t  *orientation_dev = (orientation_device_t *)dev;
-    device_t              *base_dev        = (device_t *)dev;
+    bosch_bmi270_device_t *dev = calloc(1, sizeof(bosch_bmi270_device_t));
+    if (!dev) {
+        ESP_LOGE(TAG, "Failed to allocate bosch_bmi270_device_t");
+        return NULL;
+    }
+    orientation_device_t *orientation_dev = (orientation_device_t *)dev;
+    device_t             *base_dev        = (device_t *)dev;
 
     base_dev->type   = DEVICE_TYPE_ORIENTATION;
     base_dev->_open  = bmi270_open;

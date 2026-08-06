@@ -235,8 +235,12 @@ static ssize_t tca8418_lseek(void *dev, int fd, off_t offset, int whence) {
 }
 
 device_t *tca8418_keyboard_create() {
-    tca8418_device_t *dev      = calloc(1, sizeof(tca8418_device_t));
-    device_t         *base_dev = (device_t *)dev;
+    tca8418_device_t *dev = calloc(1, sizeof(tca8418_device_t));
+    if (!dev) {
+        ESP_LOGE(TAG, "Failed to allocate tca8418_device_t");
+        return NULL;
+    }
+    device_t *base_dev = (device_t *)dev;
 
     base_dev->type   = DEVICE_TYPE_KEYBOARD;
     base_dev->_open  = tca8418_open;
