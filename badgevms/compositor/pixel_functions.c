@@ -137,7 +137,6 @@ void merge_rectangles(rect_array_t *arr) {
                         break;
                     } else if (b->x + b->w == a->x) {
                         b->w += a->w;
-                        b->x  = b->x;
                         memmove(&arr->rects[i], &arr->rects[i + 1], (arr->count - i - 1) * sizeof(window_rect_t));
                         arr->count--;
                         merged_any = true;

@@ -49,15 +49,6 @@
  * channel via display_backlight_client.h (TANMATSU_EVENT_DISPLAY_BL). */
 #define BADGE_BACKLIGHT_GPIO (-1) /* confirmed: backlight PWM lives on the C6, see comment above */
 
-#if BADGE_BACKLIGHT_GPIO >= 0
-#include "driver/ledc.h"
-#define BACKLIGHT_LEDC_MODE    LEDC_LOW_SPEED_MODE
-#define BACKLIGHT_LEDC_TIMER   LEDC_TIMER_2
-#define BACKLIGHT_LEDC_CHANNEL LEDC_CHANNEL_2
-#define BACKLIGHT_LEDC_RES_BIT LEDC_TIMER_8_BIT
-#define BACKLIGHT_LEDC_FREQ_HZ 5000
-#endif
-
 #define MIPI_DSI_PHY_PWR_LDO_CHAN       (3) // LDO_VO3 is connected to VDD_MIPI_DPHY
 #define MIPI_DSI_PHY_PWR_LDO_VOLTAGE_MV (2500)
 #define LCD_MIPI_DSI_BUS_ID             (0)
@@ -211,59 +202,16 @@ void get_framebuffer(void *dev, int num, void **pixels) {
  * Kept as free functions (not on lcd_device_t's vtable) since there is only
  * ever one LCD on this hardware — same reasoning as e.g. bv_led_matrix_*
  * addressing a single shared panel directly rather than through a device
- * handle. `percent` is stored regardless of BADGE_BACKLIGHT_GPIO so the
- * value round-trips through NVS correctly even while no confirmed local pin
- * exists (see the comment above); the LEDC duty cycle is only ever touched
- * when BADGE_BACKLIGHT_GPIO >= 0. */
+ * handle. `percent` is stored purely so it round-trips through NVS
+ * correctly -- no local P4 GPIO drives the backlight (see BADGE_BACKLIGHT_GPIO
+ * above), real dimming happens over the P4<->C6 link below. */
 static uint8_t backlight_percent = 100;
-#if BADGE_BACKLIGHT_GPIO >= 0
-static bool backlight_ledc_ready = false;
-
-static void backlight_ledc_init(void) {
-    ledc_timer_config_t timer_cfg = {
-        .speed_mode      = BACKLIGHT_LEDC_MODE,
-        .duty_resolution = BACKLIGHT_LEDC_RES_BIT,
-        .timer_num       = BACKLIGHT_LEDC_TIMER,
-        .freq_hz         = BACKLIGHT_LEDC_FREQ_HZ,
-        .clk_cfg         = LEDC_AUTO_CLK,
-    };
-    if (ledc_timer_config(&timer_cfg) != ESP_OK) {
-        ESP_LOGW(TAG, "backlight: ledc_timer_config failed");
-        return;
-    }
-
-    ledc_channel_config_t chan_cfg = {
-        .gpio_num   = BADGE_BACKLIGHT_GPIO,
-        .speed_mode = BACKLIGHT_LEDC_MODE,
-        .channel    = BACKLIGHT_LEDC_CHANNEL,
-        .timer_sel  = BACKLIGHT_LEDC_TIMER,
-        .duty       = 0,
-        .hpoint     = 0,
-    };
-    if (ledc_channel_config(&chan_cfg) != ESP_OK) {
-        ESP_LOGW(TAG, "backlight: ledc_channel_config failed");
-        return;
-    }
-
-    backlight_ledc_ready = true;
-}
-#endif
 
 void st7703_set_brightness(uint8_t percent) {
     if (percent > 100)
         percent = 100;
     backlight_percent = percent;
 
-#if BADGE_BACKLIGHT_GPIO >= 0
-    if (!backlight_ledc_ready)
-        backlight_ledc_init();
-    if (backlight_ledc_ready) {
-        uint32_t max_duty = (1u << BACKLIGHT_LEDC_RES_BIT) - 1;
-        uint32_t duty     = (max_duty * percent) / 100;
-        ledc_set_duty(BACKLIGHT_LEDC_MODE, BACKLIGHT_LEDC_CHANNEL, duty);
-        ledc_update_duty(BACKLIGHT_LEDC_MODE, BACKLIGHT_LEDC_CHANNEL);
-    }
-#endif
     // Real backlight PWM lives on the C6 (see comment above) -- send it
     // there regardless of BADGE_BACKLIGHT_GPIO, which only ever covers a
     // hypothetical local P4 pin that isn't populated on this board.

@@ -69,8 +69,7 @@ typedef struct {
 } fatfs_device_t;
 
 static int fatfs_open(void *dev, path_t *path, int flags, mode_t mode) {
-    fatfs_device_t *device   = dev;
-    char           *unixpath = path_to_unix(path);
+    char *unixpath = path_to_unix(path);
 
     int ret = open(unixpath, flags, mode);
     return ret;
@@ -94,8 +93,7 @@ static ssize_t fatfs_lseek(void *dev, int fd, off_t offset, int whence) {
 }
 
 static int fatfs_stat(void *dev, path_t *path, struct stat *restrict statbuf) {
-    fatfs_device_t *device   = dev;
-    char           *unixpath = path_to_unix(path);
+    char *unixpath = path_to_unix(path);
     return stat(unixpath, statbuf);
 }
 
@@ -104,43 +102,36 @@ static int fatfs_fstat(void *dev, int fd, struct stat *restrict statbuf) {
 }
 
 static int fatfs_unlink(void *dev, path_t *path) {
-    fatfs_device_t *device   = dev;
-    char           *unixpath = path_to_unix(path);
+    char *unixpath = path_to_unix(path);
     return unlink(unixpath);
 }
 
 static int fatfs_rename(void *dev, path_t *oldpath, path_t *newpath) {
-    fatfs_device_t *device       = dev;
-    char           *old_unixpath = path_to_unix(oldpath);
-    char           *new_unixpath = path_to_unix(newpath);
+    char *old_unixpath = path_to_unix(oldpath);
+    char *new_unixpath = path_to_unix(newpath);
     return rename(old_unixpath, new_unixpath);
 }
 
 static int fatfs_mkdir(void *dev, path_t *path, mode_t mode) {
-    fatfs_device_t *device   = dev;
-    char           *unixpath = path_to_unix(path);
+    char *unixpath = path_to_unix(path);
     return mkdir(unixpath, mode);
 }
 
 static int fatfs_rmdir(void *dev, path_t *path) {
-    fatfs_device_t *device   = dev;
-    char           *unixpath = path_to_unix(path);
+    char *unixpath = path_to_unix(path);
     return rmdir(unixpath);
 }
 
 static DIR *fatfs_opendir(void *dev, path_t *path) {
-    fatfs_device_t *device   = dev;
-    char           *unixpath = path_to_unix(path);
+    char *unixpath = path_to_unix(path);
     return opendir(unixpath);
 }
 
 static struct dirent *fatfs_readdir(void *dev, DIR *dirp) {
-    fatfs_device_t *device = dev;
     return readdir(dirp);
 }
 
 static int fatfs_closedir(void *dev, DIR *dirp) {
-    fatfs_device_t *device = dev;
     return closedir(dirp);
 }
 

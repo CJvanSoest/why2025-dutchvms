@@ -6,10 +6,8 @@
 #include "esp_log.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/semphr.h"
-#include "interface.h"
 #include "ir_nec_encoder.h"
 #include "priv_events.h"
-#include "sdio_slave_api.h"
 #include "tanmatsu_hardware.h"
 
 static const char*          TAG         = "ir";
@@ -59,7 +57,13 @@ static void ir_protocol_packet_callback(uint32_t msg_id, const uint8_t* data, si
     };
 
     const ir_nec_scan_code_t* scan_code = (const ir_nec_scan_code_t*)data;
-    ESP_ERROR_CHECK(rmt_transmit(tx_channel, nec_encoder, scan_code, sizeof(ir_nec_scan_code_t), &transmit_config));
+    // This callback runs on the shared esp-hosted RPC Rx thread, which must
+    // never block or abort (see slave_control.c) -- a transient RMT-queue-busy
+    // failure here must not take down WiFi/BT/LoRa with it.
+    esp_err_t res = rmt_transmit(tx_channel, nec_encoder, scan_code, sizeof(ir_nec_scan_code_t), &transmit_config);
+    if (res != ESP_OK) {
+        ESP_LOGW(TAG, "rmt_transmit failed: %s", esp_err_to_name(res));
+    }
 }
 
 esp_err_t ir_initialize(void) {
