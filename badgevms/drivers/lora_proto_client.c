@@ -26,7 +26,7 @@
 #define LORA_PROTOCOL_VERSION_SHIFT 24
 #define LORA_PROTOCOL_TYPE_MASK     0x00FFFFFFu
 
-#define LORA_PROTOCOL_PACK_TYPE(type) \
+#define LORA_PROTOCOL_PACK_TYPE(type)                                                                                  \
     (((uint32_t)(LORA_PROTOCOL_VERSION) << LORA_PROTOCOL_VERSION_SHIFT) | ((uint32_t)(type) & LORA_PROTOCOL_TYPE_MASK))
 #define LORA_PROTOCOL_UNPACK_VERSION(raw_type) ((uint32_t)(raw_type) >> LORA_PROTOCOL_VERSION_SHIFT)
 #define LORA_PROTOCOL_UNPACK_TYPE(raw_type)    ((uint32_t)(raw_type) & LORA_PROTOCOL_TYPE_MASK)

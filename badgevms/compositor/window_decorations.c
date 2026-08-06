@@ -132,7 +132,7 @@ IRAM_ATTR void draw_window_box(uint16_t *fb, window_t *window, bool foreground) 
     // without this, title[20] is left uninitialized and the strlen()/
     // truncation loop below reads/writes out of bounds.
     title[sizeof(title) - 1] = '\0';
-    int max_text = strlen(title);
+    int max_text             = strlen(title);
     int text_width;
     int title_bar_width = total_width - 4; // Account for borders
 

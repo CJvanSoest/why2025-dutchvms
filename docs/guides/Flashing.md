@@ -118,6 +118,42 @@ python -m esptool --chip esp32p4 -b 460800 --port /dev/ttyUSB0 \
   write_flash 0x410000 build/storage.bin
 ```
 
+## Getting the DutchVMS launcher onto a fresh badge
+
+**This step is easy to miss and the badge will not show DutchVMS without
+it.** The factory `storage.bin` (see above) only bakes in two small
+diagnostic apps (`cj_i2c_scan`, `cj_lora_info` — see
+`flash_storage/skel/BADGEVMS/APPS/`) and the C6 OTA bundle. It does **not**
+include a launcher: not the generic BadgeVMS reference launcher
+(`sdk_apps/badgevms_launcher` here is source only, never copied into
+`storage.bin`) and not `cj_launcher` (it lives in the separate
+[why2025-apps](https://github.com/CJvanSoest/why2025-apps) repo, so this
+firmware repo's build can't bundle it). A badge that's only had firmware
+flashed will boot to a blank/fallback screen or, if something else was
+installed as a launcher previously, that instead of DutchVMS branding.
+
+After flashing the P4 and C6 as above, deploy `cj_launcher` from the
+why2025-apps repo as the very first app, over the P4's UART (side port —
+see "Installing/updating individual apps" below for the general form):
+
+```bash
+# from a why2025-apps checkout, after ./apps/build.sh cj_launcher (see that
+# repo's README for build prerequisites)
+python3 tools/badge_deploy.py --port /dev/ttyUSB0 \
+  put apps/cj_launcher/cj_launcher.elf 'SD0:[BADGEVMS.APPS.badgevms_launcher]cj_launcher.elf'
+python3 tools/badge_deploy.py --port /dev/ttyUSB0 \
+  put apps/cj_launcher/manifest.json 'SD0:[BADGEVMS.APPS]badgevms_launcher.json'
+```
+
+`cj_launcher`'s manifest intentionally sets `"unique_identifier":
+"badgevms_launcher"` — that's not a leftover from forking the reference
+launcher, it's what makes the boot supervisor (`application_launch
+("badgevms_launcher")` in `badgevms/init.c`) pick it up as *the* launcher.
+Reboot the badge after both `put`s; DutchVMS should now boot straight into
+it. Every other app (`cj_storage`, `cj_files`, MeshCore, etc.) can then be
+installed the same way, or via the launcher's own APP REPO / WHY APPS tiles
+once it's running.
+
 ## Updating an existing badge
 
 Download the merged update image for the chip(s) you need to update and
