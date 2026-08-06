@@ -17,5 +17,13 @@
 #pragma once
 
 #include "badgevms/device.h"
+#include "i2c_bus.h"
 
 device_t *badgevms_i2c_bus_create(char const *name, uint8_t port, uint32_t clk_speed);
+
+// Shared main-bus (I2C_NUM_0, GPIO18/20) bring-up for drivers that need a raw
+// i2c_bus_handle_t directly (not through the device_t/VFS layer above) --
+// used by bosch_bmi270.c and bosch_bme690.c, which were previously each
+// carrying their own copy of this same i2c_config_t + i2c_bus_create() call.
+// Returns NULL on failure; caller logs with its own TAG.
+i2c_bus_handle_t why_i2c0_main_bus_create(void);
