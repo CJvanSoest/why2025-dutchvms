@@ -577,19 +577,24 @@ static void deploy_listener_task(void *arg) {
 
 bool deploy_protocol_init(void) {
     esp_rom_printf("[deploy] init: creating listener task\n");
-    /* Priority must stay below the wifi hermes task (5, also core 0) - at 6
-     * this task permanently starved hermes and everything else <=6 on core 0
-     * (confirmed root cause of the wifi-analyzer hang investigation: hermes
-     * stuck eReady forever, core-0-pinned diagnostic tasks froze right after
-     * this task's creation, and skipping this call entirely kept core 0
-     * alive). rx_blocking()'s 2ms poll cadence has no real-time requirement
-     * that needs a high priority. */
+    /* Priority must stay at or below ESP_TASK_MAIN_PRIO (1) -- same class of
+     * bug as the earlier wifi-hang investigation (this task at priority 6
+     * permanently starved hermes and everything <=6 on core 0). At priority
+     * 3 it strictly outranked app_main (prio 1): FreeRTOS always picks the
+     * higher-priority ready task, so every time this task's 2ms poll delay
+     * (rx_blocking()) expired it preempted app_main before app_main could
+     * make forward progress, permanently starving the whole boot sequence
+     * (confirmed root cause of task #124's launcher-never-starts bug --
+     * app_main never got far enough to reach run_init()). Tied at priority 1
+     * with app_main, FreeRTOS round-robins between them instead; the 2ms
+     * poll cadence has no real-time requirement that needs a priority edge
+     * over app_main. */
     BaseType_t r = create_kernel_task(
         deploy_listener_task,
         "deploy",
         6144, /* stack — bigger because we now do fwrite/malloc */
         NULL,
-        3,
+        1,
         &deploy_handle,
         0
     );
