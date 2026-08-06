@@ -16,6 +16,21 @@
 
 #pragma once
 
+// why_die() is declared in task.h -- forward-declared here instead of
+// #include "task.h" to avoid pulling badgevms/device.h (and the rest of
+// task.h's includes) into every translation unit that uses these macros,
+// which trips up ESP-IDF's component_requirements.py dependency-graph check.
+//
+// It's also ESP32/FreeRTOS-specific (implemented in wrapped_funcs.c) and
+// unavailable to host_tests/ (see logical_names.c's own RUN_TEST convention),
+// so the macros below fall back to plain abort() there instead.
+#ifndef RUN_TEST
+void why_die(char const *reason) __attribute__((noreturn));
+#define KHASH_DIE(_reason) why_die(_reason)
+#else
+#define KHASH_DIE(_reason) abort()
+#endif
+
 #define khash_get_str(_type, _val, _table_type, _table_ptr, _key, _error)                                              \
     _type _val = 0;                                                                                                    \
     do {                                                                                                               \
@@ -37,7 +52,7 @@
                 kh_value(_table_ptr, k) = _value;                                                                      \
             } else {                                                                                                   \
                 ESP_LOGE(TAG, "Unable to create %s", _key);                                                            \
-                abort();                                                                                               \
+                KHASH_DIE("khash_insert: unable to create hash entry");                                                \
             }                                                                                                          \
         } else {                                                                                                       \
             ESP_LOGE(TAG, _error ": %s", _key);                                                                        \
@@ -53,7 +68,7 @@
             kh_value(_table_ptr, k) = _value;                                                                          \
         } else {                                                                                                       \
             ESP_LOGE(TAG, "Unable to create %s", _key);                                                                \
-            abort();                                                                                                   \
+            KHASH_DIE("khash_insert: unable to create hash entry");                                                    \
         }                                                                                                              \
     } while (0);
 
@@ -89,7 +104,7 @@
                 kh_value(_table_ptr, k) = _value;                                                                      \
             } else {                                                                                                   \
                 ESP_LOGE(TAG, "Unable to create %p", _key);                                                            \
-                abort();                                                                                               \
+                KHASH_DIE("khash_insert: unable to create hash entry");                                                \
             }                                                                                                          \
         } else {                                                                                                       \
             ESP_LOGE(TAG, _error ": %p", _key);                                                                        \
@@ -105,7 +120,7 @@
             kh_value(_table_ptr, k) = _value;                                                                          \
         } else {                                                                                                       \
             ESP_LOGE(TAG, "Unable to create %p", _key);                                                                \
-            abort();                                                                                                   \
+            KHASH_DIE("khash_insert: unable to create hash entry");                                                    \
         }                                                                                                              \
     } while (0);
 

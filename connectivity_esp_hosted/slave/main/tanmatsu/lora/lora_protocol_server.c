@@ -10,10 +10,8 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/queue.h"
 #include "freertos/semphr.h"
-#include "interface.h"
 #include "lora_protocol.h"
 #include "priv_events.h"
-#include "sdio_slave_api.h"
 #include "sx126x.h"
 #include "tanmatsu_hardware.h"
 
@@ -348,7 +346,7 @@ static void send_status(uint32_t sequence_number) {
 
     if (res != ESP_OK) {
         ESP_LOGE(TAG, "Failed to read LoRa version string: %s", esp_err_to_name(res));
-        snprintf(status_params->version_string, LORA_PROTOCOL_VERSION_STRING_LENGTH, "UNKNOWN");
+        send_nack(sequence_number);
         return;
     }
 
@@ -362,6 +360,7 @@ static void send_status(uint32_t sequence_number) {
     res             = sx126x_get_device_errors(&lora_handle, &errors);
     if (res != ESP_OK) {
         ESP_LOGE(TAG, "Failed to get LoRa radio device errors: %s", esp_err_to_name(res));
+        send_nack(sequence_number);
         return;
     }
     status_params->errors = errors;

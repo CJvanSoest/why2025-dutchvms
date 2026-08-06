@@ -127,6 +127,11 @@ IRAM_ATTR void draw_window_box(uint16_t *fb, window_t *window, bool foreground) 
     } else {
         strncpy(title, foreground ? "FOREGROUND" : "BACKGROUND", 20);
     }
+    // strncpy() doesn't null-terminate when the source is >= 20 chars, and
+    // window_title_set() permits exactly-20-char titles (strndup(title, 20)) --
+    // without this, title[20] is left uninitialized and the strlen()/
+    // truncation loop below reads/writes out of bounds.
+    title[sizeof(title) - 1] = '\0';
     int max_text = strlen(title);
     int text_width;
     int title_bar_width = total_width - 4; // Account for borders

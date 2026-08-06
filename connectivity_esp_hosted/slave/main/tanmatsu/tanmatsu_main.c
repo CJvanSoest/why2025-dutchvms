@@ -24,8 +24,11 @@ static const char* TAG = "tanmatsu";
 // Sets an already-configured LEDC channel's duty from a 0-100 percent value
 // (factored out of why_pwm_init_channel() so the display-backlight RPC
 // callback below can reuse it at runtime instead of only ever setting duty
-// once at boot).
-static void why_pwm_set_duty_percent(ledc_channel_t channel, int duty_percent) {
+// once at boot). Returns esp_err_t instead of using ESP_ERROR_CHECK()
+// internally -- the RPC callback below runs on the shared esp-hosted Rx
+// thread, which must never abort, so failure has to be reportable to the
+// caller instead of always being fatal.
+static esp_err_t why_pwm_set_duty_percent(ledc_channel_t channel, int duty_percent) {
     if (duty_percent < 0) duty_percent = 0;
     if (duty_percent > 100) duty_percent = 100;
     // Panel needs a duty floor/ceiling of 10-80 (out of 256): below 10 the
@@ -45,8 +48,11 @@ static void why_pwm_set_duty_percent(ledc_channel_t channel, int duty_percent) {
         float gamma = powf((float)duty_percent / 100.0f, 2.2f);
         duty         = floor + (uint32_t)((ceil - floor) * gamma + 0.5f);
     }
-    ESP_ERROR_CHECK(ledc_set_duty(LEDC_LOW_SPEED_MODE, channel, duty));
-    ESP_ERROR_CHECK(ledc_update_duty(LEDC_LOW_SPEED_MODE, channel));
+    esp_err_t res = ledc_set_duty(LEDC_LOW_SPEED_MODE, channel, duty);
+    if (res != ESP_OK) {
+        return res;
+    }
+    return ledc_update_duty(LEDC_LOW_SPEED_MODE, channel);
 }
 
 static void why_pwm_init_channel(int gpio_num, ledc_channel_t channel, int duty_percent) {
@@ -70,7 +76,7 @@ static void why_pwm_init_channel(int gpio_num, ledc_channel_t channel, int duty_
     };
     ESP_ERROR_CHECK(ledc_channel_config(&channel_conf));
 
-    why_pwm_set_duty_percent(channel, duty_percent);
+    ESP_ERROR_CHECK(why_pwm_set_duty_percent(channel, duty_percent));
 }
 
 // ---------- Display backlight RPC (task #38) ----------
@@ -90,7 +96,10 @@ static void display_bl_protocol_packet_callback(uint32_t msg_id, const uint8_t* 
         ESP_LOGW(TAG, "Display backlight message too short (%d bytes)", (int)data_len);
         return;
     }
-    why_pwm_set_duty_percent(LEDC_CHANNEL_0, data[0]);
+    esp_err_t res = why_pwm_set_duty_percent(LEDC_CHANNEL_0, data[0]);
+    if (res != ESP_OK) {
+        ESP_LOGW(TAG, "why_pwm_set_duty_percent failed: %s", esp_err_to_name(res));
+    }
 }
 
 // ---------- LoRa SPI bus + TXEN switch ----------
