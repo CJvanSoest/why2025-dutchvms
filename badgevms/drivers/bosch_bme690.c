@@ -161,9 +161,13 @@ float get_gas_resistance(void *dev) {
 }
 
 device_t *bosch_bme690_sensor_create() {
-    bosch_bme690_device_t *dev      = calloc(1, sizeof(bosch_bme690_device_t));
-    gas_device_t          *gas_dev  = (gas_device_t *)dev;
-    device_t              *base_dev = (device_t *)dev;
+    bosch_bme690_device_t *dev = calloc(1, sizeof(bosch_bme690_device_t));
+    if (!dev) {
+        ESP_LOGE(TAG, "Failed to allocate bosch_bme690_device_t");
+        return NULL;
+    }
+    gas_device_t *gas_dev  = (gas_device_t *)dev;
+    device_t     *base_dev = (device_t *)dev;
 
     base_dev->type   = DEVICE_TYPE_GAS;
     base_dev->_open  = bme690_open;

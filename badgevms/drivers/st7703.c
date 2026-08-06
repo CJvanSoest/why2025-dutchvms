@@ -236,9 +236,13 @@ void set_refresh_cb(void *dev, void *user_data, void (*callback)(void *user_data
 
 device_t *st7703_create() {
     ESP_LOGI(TAG, "Initializing");
-    st7703_device_t *dev      = calloc(1, sizeof(st7703_device_t));
-    device_t        *base_dev = (device_t *)dev;
-    lcd_device_t    *lcd_dev  = (lcd_device_t *)dev;
+    st7703_device_t *dev = calloc(1, sizeof(st7703_device_t));
+    if (!dev) {
+        ESP_LOGE(TAG, "Failed to allocate st7703_device_t");
+        return NULL;
+    }
+    device_t     *base_dev = (device_t *)dev;
+    lcd_device_t *lcd_dev  = (lcd_device_t *)dev;
 
     lcd_dev->_draw           = draw;
     lcd_dev->_getfb          = get_framebuffer;

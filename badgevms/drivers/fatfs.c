@@ -144,8 +144,17 @@ device_t *fatfs_create_spi(char const *devname, char const *partname, bool rw) {
     };
 
     fatfs_device_t *dev = malloc(sizeof(fatfs_device_t));
-    dev->base_path      = malloc(strlen(devname) + 2);
-    dev->base_path[0]   = '/';
+    if (!dev) {
+        ESP_LOGE("fatfs-spi", "Failed to allocate fatfs_device_t");
+        return NULL;
+    }
+    dev->base_path = malloc(strlen(devname) + 2);
+    if (!dev->base_path) {
+        ESP_LOGE("fatfs-spi", "Failed to allocate base_path");
+        free(dev);
+        return NULL;
+    }
+    dev->base_path[0] = '/';
     strcpy(dev->base_path + 1, devname);
 
     esp_err_t err = esp_vfs_fat_spiflash_mount_rw_wl(dev->base_path, partname, &mount_config, &dev->wl_handle);
@@ -192,8 +201,17 @@ device_t *fatfs_create_sd(char const *devname, bool rw) {
     };
 
     fatfs_device_t *dev = malloc(sizeof(fatfs_device_t));
-    dev->base_path      = malloc(strlen(devname) + 2);
-    dev->base_path[0]   = '/';
+    if (!dev) {
+        ESP_LOGE("fatfs-sd", "Failed to allocate fatfs_device_t");
+        return NULL;
+    }
+    dev->base_path = malloc(strlen(devname) + 2);
+    if (!dev->base_path) {
+        ESP_LOGE("fatfs-sd", "Failed to allocate base_path");
+        free(dev);
+        return NULL;
+    }
+    dev->base_path[0] = '/';
     strcpy(dev->base_path + 1, devname);
 
     // Initialize base device

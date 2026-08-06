@@ -177,9 +177,16 @@ static void i2c_device_destroy(void *dev) {
 i2c_device_t *badgevms_i2c_device_create(badgevms_i2c_bus_device_t *bus, uint8_t address, uint32_t clk_speed) {
     ESP_LOGI(TAG, "Creating i2c device at address %u", address);
 
-    badgevms_i2c_device_t *dev      = calloc(1, sizeof(badgevms_i2c_device_t));
-    i2c_device_t          *i2c_dev  = (i2c_device_t *)dev;
-    device_t              *base_dev = (device_t *)dev;
+    badgevms_i2c_device_t *dev = calloc(1, sizeof(badgevms_i2c_device_t));
+    if (!dev) {
+        // task #121's architecture review: this check used to run AFTER
+        // several dereferences of `dev` below already happened -- moved
+        // here, before any of them.
+        ESP_LOGE(TAG, "Failed to allocate i2c device");
+        return NULL;
+    }
+    i2c_device_t *i2c_dev  = (i2c_device_t *)dev;
+    device_t     *base_dev = (device_t *)dev;
 
     base_dev->type     = DEVICE_TYPE_BLOCK;
     base_dev->_open    = i2c_device_open;
@@ -190,11 +197,6 @@ i2c_device_t *badgevms_i2c_device_create(badgevms_i2c_bus_device_t *bus, uint8_t
     base_dev->_destroy = i2c_device_destroy;
 
     i2c_dev->_get_address = i2c_device_get_address;
-
-    if (!dev) {
-        ESP_LOGE(TAG, "Failed to allocate i2c device");
-        return NULL;
-    }
 
     dev->bus       = bus;
     dev->clk_speed = clk_speed;
@@ -213,9 +215,13 @@ i2c_device_t *badgevms_i2c_device_create(badgevms_i2c_bus_device_t *bus, uint8_t
 
 device_t *badgevms_i2c_bus_create(char const *name, uint8_t port, uint32_t clk_speed) {
     ESP_LOGI(TAG, "Initializing");
-    badgevms_i2c_bus_device_t *dev      = calloc(1, sizeof(badgevms_i2c_bus_device_t));
-    i2c_bus_device_t          *i2c_bus  = (i2c_bus_device_t *)dev;
-    device_t                  *base_dev = (device_t *)dev;
+    badgevms_i2c_bus_device_t *dev = calloc(1, sizeof(badgevms_i2c_bus_device_t));
+    if (!dev) {
+        ESP_LOGE(TAG, "Failed to allocate i2c bus device");
+        return NULL;
+    }
+    i2c_bus_device_t *i2c_bus  = (i2c_bus_device_t *)dev;
+    device_t         *base_dev = (device_t *)dev;
 
     base_dev->type   = DEVICE_TYPE_BUS;
     base_dev->_open  = i2c_bus_open;
