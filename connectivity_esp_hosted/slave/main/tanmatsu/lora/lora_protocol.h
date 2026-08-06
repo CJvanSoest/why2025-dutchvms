@@ -4,6 +4,25 @@
 
 #define LORA_PROTOCOL_VERSION_STRING_LENGTH 16
 
+// Wire-format version tag, packed into the top byte of lora_protocol_header_t's
+// `type` field (bits 24-31); the opcode itself only ever needs the low byte, so
+// this costs no extra wire bytes. Bump this whenever a struct in this file
+// changes shape (field added/removed/resized) in a way that isn't already
+// covered by a length guard. This is a DETECTION mechanism, not an enforcement
+// one: a mismatch is logged loudly on both sides so a P4/C6 firmware skew is
+// obvious instead of showing up as silent misparsing or a confusing NACK with
+// no explanation -- the existing per-field length checks (apply_config(),
+// PACKET_TX's length-prefix check, etc.) remain the actual safety net that
+// decides whether to accept a given payload.
+#define LORA_PROTOCOL_VERSION       1
+#define LORA_PROTOCOL_VERSION_SHIFT 24
+#define LORA_PROTOCOL_TYPE_MASK     0x00FFFFFFu
+
+#define LORA_PROTOCOL_PACK_TYPE(type) \
+    (((uint32_t)(LORA_PROTOCOL_VERSION) << LORA_PROTOCOL_VERSION_SHIFT) | ((uint32_t)(type) & LORA_PROTOCOL_TYPE_MASK))
+#define LORA_PROTOCOL_UNPACK_VERSION(raw_type) ((uint32_t)(raw_type) >> LORA_PROTOCOL_VERSION_SHIFT)
+#define LORA_PROTOCOL_UNPACK_TYPE(raw_type)    ((uint32_t)(raw_type) & LORA_PROTOCOL_TYPE_MASK)
+
 typedef enum {
     LORA_PROTOCOL_TYPE_ACK        = 0x00,
     LORA_PROTOCOL_TYPE_NACK       = 0x01,
@@ -71,7 +90,11 @@ typedef struct {
 
 typedef struct {
     uint32_t sequence_number;
-    uint32_t type;  // lora_protocol_packet_type_t
+    // Packed via LORA_PROTOCOL_PACK_TYPE(): low 24 bits = lora_protocol_packet_type_t,
+    // top 8 bits = LORA_PROTOCOL_VERSION. Unpack with LORA_PROTOCOL_UNPACK_TYPE()/
+    // LORA_PROTOCOL_UNPACK_VERSION() -- never compare this field directly against
+    // a lora_protocol_packet_type_t value.
+    uint32_t type;
 } __attribute__((packed)) lora_protocol_header_t;
 
 // Signal quality of the most recently received packet, straight from the SX126x

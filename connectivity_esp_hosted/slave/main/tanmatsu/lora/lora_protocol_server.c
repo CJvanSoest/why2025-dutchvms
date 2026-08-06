@@ -56,19 +56,23 @@ static void generate_custom_event(uint32_t event_id, uint8_t* event_data, size_t
 // from lora_tx_task (see LORA_PROTOCOL_TYPE_PACKET_TX below), so reply_buffer
 // would otherwise be a cross-task data race.
 static void send_nack(uint32_t sequence_number) {
-    lora_protocol_header_t nack_packet = {.sequence_number = sequence_number, .type = LORA_PROTOCOL_TYPE_NACK};
+    lora_protocol_header_t nack_packet = {
+        .sequence_number = sequence_number, .type = LORA_PROTOCOL_PACK_TYPE(LORA_PROTOCOL_TYPE_NACK)
+    };
     generate_custom_event(TANMATSU_EVENT_LORA, (uint8_t*)&nack_packet, sizeof(nack_packet));
 }
 
 static void send_ack(uint32_t sequence_number) {
-    lora_protocol_header_t ack_packet = {.sequence_number = sequence_number, .type = LORA_PROTOCOL_TYPE_ACK};
+    lora_protocol_header_t ack_packet = {
+        .sequence_number = sequence_number, .type = LORA_PROTOCOL_PACK_TYPE(LORA_PROTOCOL_TYPE_ACK)
+    };
     generate_custom_event(TANMATSU_EVENT_LORA, (uint8_t*)&ack_packet, sizeof(ack_packet));
 }
 
 static void send_mode(uint32_t sequence_number) {
     lora_protocol_header_t* mode_packet = (lora_protocol_header_t*)reply_buffer;
     mode_packet->sequence_number        = sequence_number;
-    mode_packet->type                   = LORA_PROTOCOL_TYPE_GET_MODE;
+    mode_packet->type                   = LORA_PROTOCOL_PACK_TYPE(LORA_PROTOCOL_TYPE_GET_MODE);
     lora_protocol_mode_params_t* mode_params =
         (lora_protocol_mode_params_t*)(reply_buffer + sizeof(lora_protocol_header_t));
 
@@ -137,7 +141,7 @@ esp_err_t apply_mode(uint8_t* mode_data, size_t mode_length) {
 static void send_config(uint32_t sequence_number) {
     lora_protocol_header_t* config_packet = (lora_protocol_header_t*)reply_buffer;
     config_packet->sequence_number        = sequence_number;
-    config_packet->type                   = LORA_PROTOCOL_TYPE_GET_CONFIG;
+    config_packet->type                   = LORA_PROTOCOL_PACK_TYPE(LORA_PROTOCOL_TYPE_GET_CONFIG);
     lora_protocol_config_params_t* config_params =
         (lora_protocol_config_params_t*)(reply_buffer + sizeof(lora_protocol_header_t));
 
@@ -337,7 +341,7 @@ static esp_err_t apply_config(uint8_t* config_data, size_t config_length) {
 static void send_status(uint32_t sequence_number) {
     lora_protocol_header_t* status_packet = (lora_protocol_header_t*)reply_buffer;
     status_packet->sequence_number        = sequence_number;
-    status_packet->type                   = LORA_PROTOCOL_TYPE_GET_STATUS;
+    status_packet->type                   = LORA_PROTOCOL_PACK_TYPE(LORA_PROTOCOL_TYPE_GET_STATUS);
     lora_protocol_status_params_t* status_params =
         (lora_protocol_status_params_t*)(reply_buffer + sizeof(lora_protocol_header_t));
 
@@ -506,7 +510,22 @@ void lora_protocol_handle_packet(uint8_t* request_buffer, size_t request_length)
 
     lora_protocol_header_t* packet = (lora_protocol_header_t*)request_buffer;
 
-    switch (packet->type) {
+    // Version tag is a detection channel, not enforcement: log loudly on mismatch
+    // (P4/C6 firmware skew) but still dispatch on the unpacked opcode below --
+    // the per-command length guards remain the real safety net for malformed
+    // payloads. See LORA_PROTOCOL_VERSION in lora_protocol.h.
+    uint32_t peer_version = LORA_PROTOCOL_UNPACK_VERSION(packet->type);
+    if (peer_version != LORA_PROTOCOL_VERSION) {
+        ESP_LOGE(
+            TAG,
+            "LoRa protocol version mismatch: C6 is v%u, host sent v%u -- P4 and C6 firmware must be flashed as a "
+            "matching pair",
+            LORA_PROTOCOL_VERSION, (unsigned)peer_version
+        );
+    }
+    uint32_t packet_type = LORA_PROTOCOL_UNPACK_TYPE(packet->type);
+
+    switch (packet_type) {
         case LORA_PROTOCOL_TYPE_GET_MODE: {
             send_mode(packet->sequence_number);
             break;
@@ -576,7 +595,7 @@ void lora_protocol_handle_packet(uint8_t* request_buffer, size_t request_length)
             break;
         }
         default:
-            ESP_LOGW(TAG, "Unknown command: %d\r\n", packet->type);
+            ESP_LOGW(TAG, "Unknown command: %d\r\n", (int)packet_type);
             send_nack(packet->sequence_number);
             break;
     }
@@ -850,7 +869,7 @@ void read_data(void) {
     }
 
     lora_packet->sequence_number = 0;  // Sequence number is not used
-    lora_packet->type            = LORA_PROTOCOL_TYPE_PACKET_RX;
+    lora_packet->type            = LORA_PROTOCOL_PACK_TYPE(LORA_PROTOCOL_TYPE_PACKET_RX);
 
     size_t total_length = sizeof(lora_protocol_header_t) + sizeof(lora_protocol_rx_stats_t) + packet_length;
     generate_custom_event(TANMATSU_EVENT_LORA, data, total_length);

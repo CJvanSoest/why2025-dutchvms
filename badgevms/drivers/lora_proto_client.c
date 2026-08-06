@@ -17,6 +17,20 @@
  * connectivity_esp_hosted/slave/main/tanmatsu/lora/lora_protocol.h */
 #define LORA_PROTOCOL_VERSION_STRING_LENGTH 16
 
+/* Wire-format version tag packed into the top byte of lora_protocol_header_t's
+ * `type` field — see the matching comment on LORA_PROTOCOL_VERSION in the C6's
+ * lora_protocol.h for the full rationale. Detection channel, not enforcement:
+ * a mismatch is logged loudly (see check_reply_version() below) but the
+ * existing per-field length guards remain the actual safety net. */
+#define LORA_PROTOCOL_VERSION       1
+#define LORA_PROTOCOL_VERSION_SHIFT 24
+#define LORA_PROTOCOL_TYPE_MASK     0x00FFFFFFu
+
+#define LORA_PROTOCOL_PACK_TYPE(type) \
+    (((uint32_t)(LORA_PROTOCOL_VERSION) << LORA_PROTOCOL_VERSION_SHIFT) | ((uint32_t)(type) & LORA_PROTOCOL_TYPE_MASK))
+#define LORA_PROTOCOL_UNPACK_VERSION(raw_type) ((uint32_t)(raw_type) >> LORA_PROTOCOL_VERSION_SHIFT)
+#define LORA_PROTOCOL_UNPACK_TYPE(raw_type)    ((uint32_t)(raw_type) & LORA_PROTOCOL_TYPE_MASK)
+
 typedef enum {
     LORA_PROTOCOL_TYPE_ACK        = 0x00,
     LORA_PROTOCOL_TYPE_NACK       = 0x01,
@@ -31,6 +45,10 @@ typedef enum {
 
 typedef struct {
     uint32_t sequence_number;
+    /* Packed via LORA_PROTOCOL_PACK_TYPE(): low 24 bits = opcode, top 8 bits =
+     * LORA_PROTOCOL_VERSION. Unpack with LORA_PROTOCOL_UNPACK_TYPE()/
+     * LORA_PROTOCOL_UNPACK_VERSION() -- never compare this field directly
+     * against a lora_protocol_packet_type_t value. */
     uint32_t type;
 } __attribute__((packed)) lora_protocol_header_t;
 
@@ -100,6 +118,27 @@ static uint32_t          seq_ctr         = 1;
 
 static lora_rx_callback_t rx_cb = NULL;
 
+/* Logged once per boot rather than per-message: a real skew is a standing
+ * condition (mismatched firmware pair), not a transient one, and this runs on
+ * every single reply/event once LoRa is in use. */
+static void check_peer_version(uint32_t raw_type) {
+    static bool warned = false;
+    if (warned) {
+        return;
+    }
+    uint32_t peer_version = LORA_PROTOCOL_UNPACK_VERSION(raw_type);
+    if (peer_version != LORA_PROTOCOL_VERSION) {
+        ESP_LOGE(
+            TAG,
+            "LoRa protocol version mismatch: P4 is v%u, C6 sent v%u -- P4 and C6 firmware must be flashed as a "
+            "matching pair",
+            (unsigned)LORA_PROTOCOL_VERSION,
+            (unsigned)peer_version
+        );
+        warned = true;
+    }
+}
+
 /* RX ring buffer — fills from esp-hosted task, drained by app via lora_poll_packet.
  * Storage lives in firmware static memory; safe to share across tasks.
  * Callback-based delivery (rx_cb) is unsafe in BadgeVMS because cross-task
@@ -139,9 +178,11 @@ static void lora_callback(uint32_t msg_id, uint8_t const *data, size_t data_len)
         return;
     }
     lora_protocol_header_t const *hdr = (lora_protocol_header_t const *)data;
+    check_peer_version(hdr->type);
+    uint32_t hdr_type = LORA_PROTOCOL_UNPACK_TYPE(hdr->type);
 
     /* PACKET_RX with seq=0 is an unsolicited event from the radio. */
-    if (hdr->type == LORA_PROTOCOL_TYPE_PACKET_RX && hdr->sequence_number == 0) {
+    if (hdr_type == LORA_PROTOCOL_TYPE_PACKET_RX && hdr->sequence_number == 0) {
         size_t const prefix_len = sizeof(lora_protocol_header_t) + sizeof(lora_protocol_rx_stats_t);
         if (data_len < prefix_len) {
             /* Too short to contain the stats block — stale C6 firmware from before
@@ -163,7 +204,7 @@ static void lora_callback(uint32_t msg_id, uint8_t const *data, size_t data_len)
             TAG,
             "stale/unmatched reply seq=%u type=0x%02x (outstanding=%u)",
             (unsigned)hdr->sequence_number,
-            (unsigned)hdr->type,
+            (unsigned)hdr_type,
             (unsigned)outstanding_seq
         );
         return;
@@ -206,7 +247,7 @@ static esp_err_t request_reply(uint32_t type, void const *params, size_t params_
     }
     lora_protocol_header_t *hdr = (lora_protocol_header_t *)buf;
     hdr->sequence_number        = my_seq;
-    hdr->type                   = type;
+    hdr->type                   = LORA_PROTOCOL_PACK_TYPE(type);
     if (params_len) {
         memcpy(buf + sizeof(lora_protocol_header_t), params, params_len);
     }
@@ -241,7 +282,8 @@ static esp_err_t request_reply(uint32_t type, void const *params, size_t params_
         return ESP_FAIL;
     }
     lora_protocol_header_t const *rh = (lora_protocol_header_t const *)reply_buf;
-    if (rh->type == LORA_PROTOCOL_TYPE_NACK) {
+    check_peer_version(rh->type);
+    if (LORA_PROTOCOL_UNPACK_TYPE(rh->type) == LORA_PROTOCOL_TYPE_NACK) {
         ESP_LOGW(TAG, "request type=0x%02x got NACK", (unsigned)type);
         return ESP_FAIL;
     }
