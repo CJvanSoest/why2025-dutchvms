@@ -15,6 +15,8 @@
  */
 
 
+#include "badgevms/application.h"
+#include "badgevms/compositor.h"
 #include "badgevms/process.h"
 #include "esp_heap_caps.h"
 #include "esp_log.h"
@@ -454,9 +456,25 @@ void run_init(void) {
 
     printf("Entering main supervision loop...\n");
 
+    // Launcher supervision -- moved here from compositor.c's own task loop
+    // (task #124 item 10, architecture review). Same behavior: if the
+    // compositor's window stack is empty, relaunch the launcher, throttled
+    // to once per 2 seconds. This is intentionally a separate poll rather
+    // than folded into the app-config-driven restart_on_failure/start_every
+    // mechanism above: that mechanism triggers on PROCESS EXIT, while this
+    // triggers on WINDOW COUNT reaching zero -- a window can close without
+    // its process exiting (or vice versa via the compositor's force-close
+    // path), so the two aren't equivalent.
+    time_t launcher_last_started = time(NULL);
+
     time_t last_printed = time(NULL);
     while (1) {
         time_t current_time = time(NULL);
+
+        if (compositor_window_count() == 0 && current_time - launcher_last_started > 2) {
+            application_launch("badgevms_launcher");
+            launcher_last_started = current_time;
+        }
 
         if (current_time - last_printed > 5) {
             size_t free_ram = heap_caps_get_free_size(MALLOC_CAP_DEFAULT);

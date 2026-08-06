@@ -16,7 +16,6 @@
 
 #include "badgevms/compositor.h"
 
-#include "badgevms/application.h"
 #include "badgevms/device.h"
 #include "badgevms/event.h"
 #include "badgevms/pixel_formats.h"
@@ -461,9 +460,8 @@ static void IRAM_ATTR NOINLINE_ATTR compositor(void *ignored) {
     ppa_register_client(&ppa_srm_config, &ppa_srm_handle);
     // ppa_client_register_event_callbacks(ppa_srm_handle, &srm_callbacks);
 
-    bool   fn_down               = false;
-    bool   frame_ready           = false;
-    time_t launcher_last_started = time(NULL);
+    bool fn_down     = false;
+    bool frame_ready = false;
 
     while (1) {
         bool changes   = false;
@@ -474,14 +472,6 @@ static void IRAM_ATTR NOINLINE_ATTR compositor(void *ignored) {
             lcd_device->_draw(lcd_device, 0, 0, FRAMEBUFFER_MAX_W, FRAMEBUFFER_MAX_H, framebuffers[cur_fb]);
             cur_fb      = (cur_fb + 1) % DISPLAY_FRAMEBUFFERS;
             frame_ready = false;
-        }
-
-        if (!window_stack) {
-            time_t current_time = time(NULL);
-            if (current_time - launcher_last_started > 2) {
-                application_launch("badgevms_launcher");
-                launcher_last_started = current_time;
-            }
         }
 
         compositor_message_t message;
@@ -817,6 +807,10 @@ static void IRAM_ATTR NOINLINE_ATTR compositor(void *ignored) {
             frame_ready = true;
         }
     }
+}
+
+size_t compositor_window_count(void) {
+    return (size_t)atomic_load(&cur_num_windows);
 }
 
 void get_screen_info(int *width, int *height, pixel_format_t *format, float *refresh_rate) {
