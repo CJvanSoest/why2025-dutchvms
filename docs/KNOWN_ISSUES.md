@@ -20,6 +20,7 @@ Last updated: 2026-08-05.
 
 ### Open / partially resolved
 
+10. [SD-card write corruption (manifests + ELFs)](#10-sd-card-write-corruption-manifests--elfs)
 11. [P4 OTA never gets confirmed (validate_ota_partition)](#11-p4-ota-never-gets-confirmed-validate_ota_partition)
 12. [C6 radio sometimes reflashes on every boot](#12-c6-radio-sometimes-reflashes-on-every-boot)
 13. [Deploy PUT: OOM + UART overrun on large files](#13-deploy-put-oom--uart-overrun-on-large-files)
@@ -70,6 +71,10 @@ The boot-splash animation ran choppily. Two rounds of CPU draw-cost optimization
 ---
 
 ## Open / partially resolved
+
+### 10. SD-card write corruption (manifests + ELFs)
+Files on the SD card (`badgevms_launcher.json`, `cj_launcher.elf`, and separately-observed `cj_hello.json`/`cj_files.json`) have twice been found corrupted at the correct file length but with garbage content partway through — two different garbage signatures seen (a repeating byte pattern, and all-zero). First occurrence followed a WiFi app-repo self-update download; second followed a plain firmware reflash+reboot with no download involved, and hit two apps (`cj_hello`, `cj_files`) that never write their own manifest. That rules out "specific to the launcher's download code" as the sole cause and points at the underlying SD/FAT write path more broadly (`badgevms/drivers/fatfs.c` + the wear-leveling library) not being safe against a reset/power-cycle interrupting a write. Both occurrences recovered by rewriting the affected files directly via an external SD card reader, bypassing the badge. Root cause not yet found.
+**Full details:** [issue #65](https://github.com/CJvanSoest/why2025-dutchvms/issues/65)
 
 ### 11. P4 OTA never gets confirmed (validate_ota_partition)
 The OTA partition was never marked valid despite the new image running fine — four independent instrumentation channels (UART, SD, NVS flag, NVS stack watermark) all showed zero evidence the confirmation code itself executes. **Workaround applied**: bootloader rollback disabled (`CONFIG_BOOTLOADER_APP_ROLLBACK_ENABLE` off) since v1.3.17 — OTA updates have worked reliably since. The underlying mystery hasn't been found; that remains open and needs a JTAG session.
