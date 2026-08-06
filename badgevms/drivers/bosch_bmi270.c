@@ -17,6 +17,7 @@
 #include "bosch_bmi270.h"
 
 #include "badgevms_config.h"
+#include "badgevms_i2c_bus.h"
 #include "bmi270.h"
 #include "esp_log.h"
 
@@ -25,15 +26,6 @@
 #include <math.h>
 
 #define BMI270_I2C_ADDR 0x69
-
-#define UE_SW_I2C 0
-
-#define I2C_MASTER_SDA_IO 18
-#define I2C_MASTER_SCL_IO 20
-
-#define I2C_MASTER_NUM     I2C_NUM_0           /*!< I2C port number for master dev */
-#define I2C_MASTER_FREQ_HZ I2C0_MASTER_FREQ_HZ /*!< I2C master clock frequency */
-#define I2C_MASTER_TIMEOUT 100                 /*!< I2C master timeout in milliseconds */
 
 #define GRAVITY_EARTH (9.80665f)
 
@@ -438,19 +430,7 @@ device_t *bosch_bmi270_sensor_create() {
     orientation_dev->_get_orientation         = get_orientation;
     orientation_dev->_get_orientation_degrees = get_orientation_degrees;
 
-    i2c_config_t const i2c_bus_conf = {
-        .mode             = I2C_MODE_MASTER,
-        .sda_io_num       = I2C_MASTER_SDA_IO,
-        .sda_pullup_en    = GPIO_PULLUP_ENABLE,
-        .scl_io_num       = I2C_MASTER_SCL_IO,
-        .scl_pullup_en    = GPIO_PULLUP_ENABLE,
-        .master.clk_speed = I2C_MASTER_FREQ_HZ
-    };
-#if UE_SW_I2C
-    i2c_bus = i2c_bus_create(I2C_NUM_SW_1, &i2c_bus_conf);
-#else
-    i2c_bus = i2c_bus_create(I2C_MASTER_NUM, &i2c_bus_conf);
-#endif
+    i2c_bus = why_i2c0_main_bus_create();
     if (i2c_bus == NULL) {
         ESP_LOGE(TAG, "Failed initialising i2c bus");
         free(dev);

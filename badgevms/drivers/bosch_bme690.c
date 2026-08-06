@@ -17,20 +17,12 @@
 #include "bosch_bme690.h"
 
 #include "badgevms_config.h"
+#include "badgevms_i2c_bus.h"
 #include "bme690.h"
 
 #include <stdatomic.h>
 
 #define BME690_I2C_ADDR 0x76
-
-#define UE_SW_I2C 0
-
-#define I2C_MASTER_SDA_IO 18
-#define I2C_MASTER_SCL_IO 20
-
-#define I2C_MASTER_NUM     I2C_NUM_0           /*!< I2C port number for master dev */
-#define I2C_MASTER_FREQ_HZ I2C0_MASTER_FREQ_HZ /*!< I2C master clock frequency */
-#define I2C_MASTER_TIMEOUT 100
 
 #define TAG "BME690"
 
@@ -181,20 +173,7 @@ device_t *bosch_bme690_sensor_create() {
     gas_dev->_get_gas_resistance = get_gas_resistance;
     gas_dev->_get_humidity       = get_humidity;
 
-    i2c_config_t const i2c_bus_conf = {
-        .mode             = I2C_MODE_MASTER,
-        .sda_io_num       = I2C_MASTER_SDA_IO,
-        .sda_pullup_en    = GPIO_PULLUP_ENABLE,
-        .scl_io_num       = I2C_MASTER_SCL_IO,
-        .scl_pullup_en    = GPIO_PULLUP_ENABLE,
-        .master.clk_speed = I2C_MASTER_FREQ_HZ
-    };
-
-#if UE_SW_I2C
-    i2c_bus = i2c_bus_create(I2C_NUM_SW_1, &i2c_bus_conf);
-#else
-    i2c_bus = i2c_bus_create(I2C_MASTER_NUM, &i2c_bus_conf);
-#endif
+    i2c_bus = why_i2c0_main_bus_create();
     if (i2c_bus == NULL) {
         ESP_LOGE(TAG, "Failed initialising i2c bus");
         free(dev);

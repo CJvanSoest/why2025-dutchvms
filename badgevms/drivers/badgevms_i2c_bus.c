@@ -45,6 +45,18 @@ static i2c_config_t why_config = {
     .master.clk_speed = I2C_MASTER_FREQ_HZ,
 };
 
+i2c_bus_handle_t why_i2c0_main_bus_create(void) {
+    i2c_config_t const conf = {
+        .mode             = I2C_MODE_MASTER,
+        .sda_io_num       = I2C_MASTER_SDA_IO,
+        .sda_pullup_en    = GPIO_PULLUP_ENABLE,
+        .scl_io_num       = I2C_MASTER_SCL_IO,
+        .scl_pullup_en    = GPIO_PULLUP_ENABLE,
+        .master.clk_speed = I2C_MASTER_FREQ_HZ,
+    };
+    return i2c_bus_create(I2C_MASTER_NUM, &conf);
+}
+
 typedef struct {
     i2c_bus_device_t device;
     i2c_bus_handle_t handle;
