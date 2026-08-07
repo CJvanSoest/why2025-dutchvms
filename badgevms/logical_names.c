@@ -153,6 +153,9 @@ static char *parsed_components_serialize(parsed_components_t components) {
     if (components.unparsable.len != 0) {
         // Just copy the junk into a fresh c string
         char *res = malloc(components.unparsable.len + 1);
+        if (!res) {
+            return NULL;
+        }
         memcpy(res, components.unparsable.pointer, components.unparsable.len);
         res[components.unparsable.len] = '\0';
         return res;
@@ -175,7 +178,10 @@ static char *parsed_components_serialize(parsed_components_t components) {
     if (components.dir_count > 1)
         result_len += components.dir_count - 1;
 
-    char *res       = malloc(result_len + 1);
+    char *res = malloc(result_len + 1);
+    if (!res) {
+        return NULL;
+    }
     res[result_len] = '\0';
 
     size_t offset = 0;
@@ -493,6 +499,9 @@ int logical_name_set(char const *logical_name, char const *target, bool is_termi
     }
 
     name.target = malloc(num_targets * sizeof(char *));
+    if (!name.target) {
+        return 1;
+    }
 
     // See if we have a list
     for (size_t i = 0; i <= name_size; ++i) {
@@ -521,6 +530,11 @@ int logical_name_set(char const *logical_name, char const *target, bool is_termi
                 // Copy the string so we won't have to copy it later when resolving
                 // and add 1 more byte because we might need to resolve it as a device
                 char *t = malloc(component_size + 2);
+                if (!t) {
+                    // Bail out with whatever components we already parsed --
+                    // caller sees this as "no targets" only if none landed.
+                    break;
+                }
                 memcpy(t, target + last_name, component_size);
                 t[component_size]              = '\0';
                 name.target[name.target_count] = t;

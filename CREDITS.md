@@ -9,7 +9,7 @@ separate [why2025-apps](https://github.com/CJvanSoest/why2025-apps) repository
 | Component | Source | License |
 |---|---|---|
 | BadgeVMS OS / compositor / launcher base / firmware architecture | [Team:Badge / badge.team](https://github.com/badgeteam) | GPL-3.0-or-later |
-| ELF loader, badgelink | badgeteam `esp32-component-badge-elf`, `esp32-component-badgelink` | see upstream |
+| ELF loader | badgeteam `esp32-component-badge-elf` | see upstream |
 | LoRa radio driver (SX126x) | [Nicolai Electronics](https://github.com/Nicolai-Electronics) — Tanmatsu LoRa port | see upstream |
 | MeshCore protocol | [meshcore-dev/MeshCore](https://github.com/meshcore-dev/MeshCore) (upstream protocol) | — |
 | Display (ST7703), sensors (BMI270, BME690) | Espressif / Bosch reference drivers | see upstream |

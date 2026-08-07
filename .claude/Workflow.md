@@ -77,8 +77,7 @@ relevant — is the actual proof a driver or boot-path change works; a green
 ## 6. Push and confirm CI
 
 - Confirm the PR's checks are green before merging — `clang-format` and
-  `ESP-IDF build` are required; `ESP-IDF build (badgelink)` is informational
-  but worth checking too.
+  `ESP-IDF build` are required.
 - Report outcomes honestly. "CI is green" and "I flashed a badge and
   confirmed it boots" are different claims — say which one you actually did.
   Several real bugs on this fork (the LoRa off-by-one, the tca8418

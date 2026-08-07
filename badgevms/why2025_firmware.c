@@ -21,7 +21,6 @@
 #endif
 
 #include "application_private.h"
-#include "badgelink_transport_uart.h"
 #include "badgevms/device.h"
 #include "badgevms/notify.h"
 #include "badgevms/ota.h"
@@ -183,19 +182,10 @@ int app_main(void) {
     logical_name_set("SEARCH", "FLASH0:[SUBDIR], FLASH0:[SUBDIR.ANOTHER]", false);
 
     /* CJ-PATCH: start UART deploy protocol listener (Phase A: echo stub).
-     * Allowed to fail — non-critical for boot.
-     *
-     * Mutually exclusive with badgelink_transport_uart_init() — see
-     * CJ_BADGEVMS_ENABLE_BADGELINK in badgevms/Kconfig.projbuild. */
-#if CONFIG_CJ_BADGEVMS_ENABLE_BADGELINK
-    if (!badgelink_transport_uart_init()) {
-        ESP_LOGW(TAG, "badgelink_transport_uart_init failed (non-fatal)");
-    }
-#else
+     * Allowed to fail — non-critical for boot. */
     if (!deploy_protocol_init()) {
         ESP_LOGW(TAG, "deploy_protocol_init failed (non-fatal)");
     }
-#endif
 
     /* CJ-DEBUG task #115: the ESP_LOGE/printf lines that used to sit here
      * (and throughout run_init()) NEVER reached the serial capture on

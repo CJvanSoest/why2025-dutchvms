@@ -748,6 +748,15 @@ static void IRAM_ATTR zeus(void *ignored) {
         error:
             ESP_LOGE("ZEUS", "Process could not be started, too good for this world");
             pid_free(pid);
+            /* task_info_delete() doesn't touch task_info->thread -- for
+             * TASK_TYPE_ELF/ELF_PATH it's a freshly task_thread_init()'d
+             * struct (resource tables + open file handles) that would leak
+             * outright; for TASK_TYPE_THREAD it's a task_thread_ref()'d
+             * reference into the parent's thread struct, and skipping the
+             * matching task_thread_destroy() here permanently pins the
+             * parent's refcount above zero, so the parent's thread struct
+             * can never be freed even after the parent legitimately exits. */
+            task_thread_destroy(task_info->thread);
             task_info_delete(task_info);
         out:
             if (command.caller) {

@@ -782,17 +782,20 @@ pid_t application_launch(char const *unique_identifier) {
 
     if (!app || !app->binary_path || !app->installed_path) {
         ESP_LOGW(TAG, "Cannot launch %s, no binary path or installed_path?", unique_identifier);
+        application_free(app);
         return -1;
     }
 
     char *binary_path = path_concat(app->installed_path, app->binary_path);
     if (!binary_path) {
         ESP_LOGW(TAG, "Could not create a sane path out of %s and %s\n", app->installed_path, app->binary_path);
+        application_free(app);
         return -1;
     }
 
     ESP_LOGI(TAG, "Attempting to launch %s", binary_path);
     pid_t ret = process_create(binary_path, 0, 0, NULL);
     why_free(binary_path);
+    application_free(app);
     return ret;
 }

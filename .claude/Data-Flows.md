@@ -25,9 +25,8 @@ symptom to the wrong file or the wrong side of the P4/C6 boundary.
    WiFi (`wifi_create()`, which also calls `flash_slave_c6_if_needed()` —
    the C6 gets reflashed here, at every boot, whenever the SD-staged
    binaries' MD5 differs from what's already on the chip).
-7. `deploy_protocol_init()` (or `badgelink_transport_uart_init()` if
-   `CJ_BADGEVMS_ENABLE_BADGELINK` is on) — starts the UART app-deploy
-   listener. Non-fatal if it fails.
+7. `deploy_protocol_init()` — starts the UART app-deploy listener. Non-fatal
+   if it fails.
 8. `init.c`'s config/manifest parsing, `validate_ota_partition()` (marks
    this boot's partition valid, cancelling the ESP-IDF rollback timer).
 9. The launcher app is loaded via `run_task_path()` like any other app —

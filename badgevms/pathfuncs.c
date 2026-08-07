@@ -58,16 +58,22 @@ path_parse_result_t parse_path(char const *path, path_t *result) {
     // Everything up to the ':' is the device part
     while (*p && *p != ':') {
         if (!is_valid_device_char(*p)) {
+            why_free(result->buffer);
+            result->buffer = NULL;
             return PATH_PARSE_INVALID_DEVICE_CHAR;
         }
         p++;
     }
 
     if (*p != ':') {
+        why_free(result->buffer);
+        result->buffer = NULL;
         return PATH_PARSE_NO_DEVICE;
     }
 
     if (p == start) {
+        why_free(result->buffer);
+        result->buffer = NULL;
         return PATH_PARSE_EMPTY_DEVICE;
     }
 
@@ -83,12 +89,16 @@ path_parse_result_t parse_path(char const *path, path_t *result) {
         // Find closing ']'
         while (*p && *p != ']') {
             if (!is_valid_path_char(*p)) {
+                why_free(result->buffer);
+                result->buffer = NULL;
                 return PATH_PARSE_INVALID_DIR_CHAR;
             }
             p++;
         }
 
         if (*p != ']') {
+            why_free(result->buffer);
+            result->buffer = NULL;
             return PATH_PARSE_UNCLOSED_DIRECTORY;
         }
 
@@ -104,6 +114,8 @@ path_parse_result_t parse_path(char const *path, path_t *result) {
         start = p;
         while (*p) {
             if (!is_valid_path_char(*p)) {
+                why_free(result->buffer);
+                result->buffer = NULL;
                 return PATH_PARSE_INVALID_FILE_CHAR;
             }
             p++;
@@ -120,7 +132,10 @@ char *path_to_unix(path_t *path) {
     }
 
     // Most unix paths are shorter than BadgeVMS paths except for directory-less paths.
-    char  *unixpath      = malloc(path->len + 3);
+    char *unixpath = malloc(path->len + 3);
+    if (!unixpath) {
+        return NULL;
+    }
     size_t device_len    = strlen(path->device);
     size_t directory_len = 0;
     size_t filename_len  = 0;

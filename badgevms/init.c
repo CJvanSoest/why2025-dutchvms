@@ -212,7 +212,13 @@ int load_config(char const *filename, startup_config_t *config) {
             config->apps[found] = new_app;
         } else {
             // Add new app
-            config->apps                  = realloc(config->apps, (config->count + 1) * sizeof(startup_app_t));
+            startup_app_t *grown = realloc(config->apps, (config->count + 1) * sizeof(startup_app_t));
+            if (!grown) {
+                ESP_LOGE(TAG, "OOM growing startup config, dropping %s", new_app.name);
+                free_app(&new_app);
+                continue;
+            }
+            config->apps                  = grown;
             config->apps[config->count++] = new_app;
         }
     }
@@ -340,19 +346,46 @@ bool maybe_start_app(startup_app_t *app, nvs_handle_t nvs_handle, time_t boot_ti
 }
 
 bool update_flash0_init() {
-    rm_rf("FLASH0:init.toml");
+    /* Write to a temp file first and only replace the live init.toml once
+     * the write is confirmed complete -- previously this rm_rf()'d the live
+     * file unconditionally before attempting the rewrite, so a failed open
+     * or a short write (this project has a documented history of flash/SD
+     * write reliability issues, task #112) left FLASH0:init.toml missing
+     * entirely, which run_init() treats as fatal and returns from before
+     * the supervision loop (including the launcher-respawn watchdog) ever
+     * starts -- i.e. this exact failure mode could permanently halt boot
+     * supervision until a manual reflash. */
+    char const *tmp_path = "FLASH0:init.toml.tmp";
+    rm_rf(tmp_path);
 
-    FILE *fp = why_fopen("FLASH0:init.toml", "w");
+    FILE *fp = why_fopen(tmp_path, "w");
     if (!fp) {
-        ESP_LOGW(TAG, "Cannot open %s", "FLASH0:init.toml");
+        ESP_LOGW(TAG, "Cannot open %s", tmp_path);
         return false;
     }
 
     ESP_LOGW(TAG, "Updating FLASH0:init.toml");
 
-    why_fwrite(init_toml_start, 1, init_toml_size, fp);
-
+    size_t written = why_fwrite(init_toml_start, 1, init_toml_size, fp);
     why_fclose(fp);
+
+    if (written != init_toml_size) {
+        ESP_LOGE(
+            TAG,
+            "Short write to %s (%zu/%zu bytes), leaving old init.toml in place",
+            tmp_path,
+            written,
+            init_toml_size
+        );
+        rm_rf(tmp_path);
+        return false;
+    }
+
+    rm_rf("FLASH0:init.toml");
+    if (why_rename(tmp_path, "FLASH0:init.toml") != 0) {
+        ESP_LOGE(TAG, "Failed to move %s into place", tmp_path);
+        return false;
+    }
 
     return true;
 }

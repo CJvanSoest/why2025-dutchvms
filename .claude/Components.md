@@ -35,7 +35,6 @@ talk to each other at runtime.
 | `led_matrix_pca9698.c` / `led_matrix_internal.h` | The 12×20 PCA9698 LED-matrix driver (bit-bang + HW-i2c refresh backends). App-facing surface: `include/badgevms/led_matrix.h` + `led_matrix_bridge.c`. |
 | `status_led_ws2812.c` / `status_led_internal.h` | The 4× RGBW status LEDs (WS2812/RMT). App-facing surface: `include/badgevms/status_led.h` + `status_led_bridge.c`. |
 | `esp-serial-flasher/slave_c6_flasher.c` | Flashes the C6 over UART1 from SD-staged binaries (`flash_slave_c6_if_needed()`) — the proven "install from SD, MD5-gated" pattern other update mechanisms should mirror. |
-| `badgelink/` | An alternate, experimental UART app-deploy transport (Tanmatsu's own protocol) — off by default (`CJ_BADGEVMS_ENABLE_BADGELINK` Kconfig option), covered by its own non-blocking CI job so it doesn't silently bit-rot against `deploy_protocol.c`. |
 
 ## `connectivity_esp_hosted/slave/` — the C6 co-processor firmware
 
@@ -48,6 +47,19 @@ should be left alone; the first-party addition is:
 | `main/tanmatsu/lora/lora_protocol.h` | The wire-format structs shared *by convention* with `badgevms/drivers/lora_proto_client.c` — no common header, kept in sync by hand. |
 | `main/tanmatsu/infrared/` | IR protocol server (separate peripheral, same pattern as LoRa: a protocol server exposed to the P4 over esp-hosted custom events). |
 | `main/slave_control.c` | The esp-hosted custom-RPC dispatch this fork's LoRa/IR servers hook into (`handle_custom_rpc_request()`) — its own comment documents the "runs on the Rx thread, do not block" contract that the LoRa async-TX rework exists to respect. |
+
+## Rejected: BadgeLink (native badge.team UART/USB deploy protocol)
+
+Tried and removed (2026-08-07). Two independent blockers, both confirmed by
+hardware analysis rather than guessed: (1) native-USB variant — the P4's
+native-USB pins are not routed to any external connector on this carrier
+board (the bottom USB-C port only reaches the C6), so native USB/MSC is
+physically impossible here; (2) UART-workaround variant — BadgeLink's COBS
+framing isn't resilient against the console logs (ESP_LOG/printf) that keep
+flowing on the same CH340 UART, so every log line desyncs the frame parser.
+`deploy_protocol.c`'s own magic-sentinel scan exists specifically because it
+doesn't have that problem. Don't re-propose BadgeLink for this hardware
+without a different physical UART/USB path.
 
 ## Where the real apps live (not this repo)
 
