@@ -6,6 +6,7 @@ idf_component_register(
      "buddy_alloc.c"
      "compositor/compositor.c"
      "compositor/pixel_functions.c"
+     "compositor/rect_math.c"
      "compositor/window_decorations.c"
      "crypto.c"
      "curl.c"

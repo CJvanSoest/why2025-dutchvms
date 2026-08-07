@@ -20,21 +20,11 @@
 #include "badgevms/framebuffer.h"
 #include "badgevms_config.h"
 #include "memory.h"
+#include "rect_math.h"
 #include "task.h"
 
 #include <stdatomic.h>
 
-#define MAX_VISIBLE_RECTS 64
-
-typedef struct {
-    window_rect_t rects[MAX_VISIBLE_RECTS];
-    int           count;
-} rect_array_t;
-
-typedef struct {
-    window_rect_t rects[4];
-    int           count;
-} small_rect_array_t;
 
 typedef struct managed_framebuffer {
     framebuffer_t       framebuffer;

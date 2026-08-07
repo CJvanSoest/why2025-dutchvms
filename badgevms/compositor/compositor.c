@@ -194,47 +194,6 @@ out:
     atomic_fetch_sub(&cur_num_windows, 1);
 }
 
-// Workaround for the PPA hardware. It really does not like 65 pixel high strips.
-__attribute__((always_inline)) static inline bool is_problematic_block_height(int content_height, float scale) {
-    // Check if height is "N × 32 + 1"
-    int fb_height = (int)(content_height / scale);
-    if (fb_height > 32 && (fb_height % 32) == 1) {
-        return true;
-    }
-    return false;
-}
-
-__attribute__((always_inline)) static inline bool ppa_workaround_split_rects(rect_array_t *visible, float scale) {
-    rect_array_t new_visible = {0};
-    bool         split       = false;
-
-    for (int i = 0; i < visible->count; i++) {
-        window_rect_t rect = visible->rects[i];
-
-        if (is_problematic_block_height(rect.h, scale)) {
-            split           = true;
-            int first_half  = (rect.h / 2) - 1;
-            int second_half = rect.h - first_half;
-            ESP_LOGW(TAG, "Splitting block of problematic height %u in %u and %u", rect.h, first_half, second_half);
-
-            new_visible.rects[new_visible.count++] =
-                (window_rect_t){.x = rect.x, .y = rect.y, .w = rect.w, .h = first_half};
-
-            if (new_visible.count < MAX_VISIBLE_RECTS) {
-                new_visible.rects[new_visible.count++] =
-                    (window_rect_t){.x = rect.x, .y = rect.y + first_half, .w = rect.w, .h = second_half};
-            }
-        } else {
-            if (new_visible.count < MAX_VISIBLE_RECTS) {
-                new_visible.rects[new_visible.count++] = rect;
-            }
-        }
-    }
-
-    *visible = new_visible;
-    return split;
-}
-
 void window_calculate_visible_regions(window_t *window, window_t *window_list_head, float scale) {
     window->visible.count    = 1;
     window->visible.rects[0] = window->rect;
@@ -277,7 +236,11 @@ void window_calculate_visible_regions(window_t *window, window_t *window_list_he
     }
 
     merge_rectangles(&window->visible);
-    while (ppa_workaround_split_rects(&window->visible, scale)) {
+    int dropped = 0;
+    while (ppa_workaround_split_rects(&window->visible, scale, &dropped)) {
+    }
+    if (dropped) {
+        ESP_LOGW(TAG, "Dropped %d damage rect(s) past MAX_VISIBLE_RECTS -- expect stale pixels", dropped);
     }
 }
 
