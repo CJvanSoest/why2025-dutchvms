@@ -370,7 +370,13 @@ bool update_flash0_init() {
     why_fclose(fp);
 
     if (written != init_toml_size) {
-        ESP_LOGE(TAG, "Short write to %s (%zu/%zu bytes), leaving old init.toml in place", tmp_path, written, init_toml_size);
+        ESP_LOGE(
+            TAG,
+            "Short write to %s (%zu/%zu bytes), leaving old init.toml in place",
+            tmp_path,
+            written,
+            init_toml_size
+        );
         rm_rf(tmp_path);
         return false;
     }
