@@ -21,6 +21,7 @@
 #include "pixel_formats.h"
 
 #include <stdbool.h>
+#include <stddef.h>
 
 typedef enum {
     WINDOW_FLAG_NONE            = 0,
@@ -80,3 +81,10 @@ void           window_present(window_handle_t window, bool block, window_rect_t 
 event_t window_event_poll(window_handle_t window, bool block, uint32_t timeout_msec);
 
 void get_screen_info(int *width, int *height, pixel_format_t *format, float *refresh_rate);
+
+// Number of windows currently on the compositor's window stack. Used by
+// init.c's supervision loop to detect "no windows open" and relaunch the
+// launcher -- kept as a tiny read-only accessor rather than exposing
+// window_stack itself, since window_stack is compositor.c-internal state
+// shared with the damage-tracking/redraw hot path.
+size_t compositor_window_count(void);
