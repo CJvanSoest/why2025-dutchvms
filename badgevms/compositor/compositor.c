@@ -166,7 +166,17 @@ __attribute__((always_inline)) static inline void push_window(window_t *window) 
 }
 
 __attribute__((always_inline)) static inline void remove_window(window_t *window) {
-    // If we were forcibly removed we won't be in the list
+    // If we were forcibly removed we won't be in the list. This guard only
+    // catches a double-remove if the FIRST remove_window() call actually
+    // clears prev/next on the way out (below) -- previously it didn't, so
+    // this guard only worked at call sites that also explicitly nulled
+    // both fields themselves right after calling remove_window() (as the
+    // ALT-TAB close-window handler does), while other call sites (e.g. the
+    // render loop's window_destroy-detected-via-NULL-task_info path) could
+    // remove the same window twice -- once there, once again when the
+    // deferred WINDOW_DESTROY message for it was later drained -- each
+    // decrementing cur_num_windows, which run_init()'s launcher-respawn
+    // watchdog depends on via compositor_window_count().
     if (!window->prev || !window->next) {
         return;
     }
@@ -191,6 +201,10 @@ __attribute__((always_inline)) static inline void remove_window(window_t *window
     prev->next   = next;
     window_stack = next;
 out:
+    // Make the guard at the top of this function actually work regardless
+    // of which call site removed us -- see the comment there.
+    window->prev = NULL;
+    window->next = NULL;
     atomic_fetch_sub(&cur_num_windows, 1);
 }
 
