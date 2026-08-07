@@ -21,6 +21,16 @@ Entries from here on are the source of truth going forward.
 
 ## [Unreleased]
 
+## [1.3.19] - 2026-08-07
+
+### Fixed
+- **`why2025_sponsors` startup entry no longer exists but was still listed
+  in `init.toml`**, so the boot supervisor retried launching its missing
+  ELF once per second for the entire life of the boot: `start_app()` fails
+  before a pid exists, so the `run_once` guard's NVS flag never got
+  persisted (only a genuine process exit persists it). The entry is
+  removed.
+
 ## [1.3.18] - 2026-08-07
 
 ### Changed
