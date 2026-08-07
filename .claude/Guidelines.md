@@ -141,7 +141,7 @@ symptom is actually on before picking a file.
 # Full build (both P4 badgevms.bin and the C6 network_adapter.bin sub-build)
 idf.py build
 
-# Host tests (pure logic: logical names, COBS framing)
+# Host tests (pure logic: logical names, compositor rect math)
 cmake -S host_tests -B build/host_tests && cmake --build build/host_tests
 ctest --test-dir build/host_tests --output-on-failure
 
