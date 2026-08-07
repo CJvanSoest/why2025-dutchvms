@@ -132,18 +132,37 @@ firmware repo's build can't bundle it). A badge that's only had firmware
 flashed will boot to a blank/fallback screen or, if something else was
 installed as a launcher previously, that instead of DutchVMS branding.
 
-After flashing the P4 and C6 as above, deploy `cj_launcher` from the
-why2025-apps repo as the very first app, over the P4's UART (side port —
-see "Installing/updating individual apps" below for the general form):
+After flashing the P4 and C6 as above, deploy `cj_launcher` as the very
+first app, over the P4's UART (side port — see "Installing/updating
+individual apps" below for the general form). **You do not need to build it
+yourself** — a current, ready-to-use build is published in the
+[why2025-app-repository](https://github.com/CJvanSoest/why2025-app-repository)
+(the same store `cj_launcher`'s own APP REPO tile pulls from once it's
+running), so grab the two files straight from there:
 
 ```bash
-# from a why2025-apps checkout, after ./apps/build.sh cj_launcher (see that
-# repo's README for build prerequisites)
+curl -LO https://raw.githubusercontent.com/CJvanSoest/why2025-app-repository/main/badgevms_launcher/cj_launcher.elf
+curl -LO https://raw.githubusercontent.com/CJvanSoest/why2025-app-repository/main/badgevms_launcher/badgevms_launcher.json
+
 python3 tools/badge_deploy.py --port /dev/ttyUSB0 \
-  put apps/cj_launcher/cj_launcher.elf 'SD0:[BADGEVMS.APPS.badgevms_launcher]cj_launcher.elf'
+  put cj_launcher.elf 'SD0:[BADGEVMS.APPS.badgevms_launcher]cj_launcher.elf'
 python3 tools/badge_deploy.py --port /dev/ttyUSB0 \
-  put apps/cj_launcher/manifest.json 'SD0:[BADGEVMS.APPS]badgevms_launcher.json'
+  put badgevms_launcher.json 'SD0:[BADGEVMS.APPS]badgevms_launcher.json'
 ```
+
+(`tools/badge_deploy.py` itself still comes from a
+[why2025-apps](https://github.com/CJvanSoest/why2025-apps) checkout — only
+the two files being deployed no longer need building from source. If you'd
+rather build `cj_launcher` yourself instead of using the published build,
+that's still `./apps/build.sh cj_launcher`, see that repo's README.)
+
+No cable or command line at all also works: the SD card is a normal FAT
+filesystem, so with the badge powered off you can pull the microSD card,
+put it in a card reader, and copy the same two downloaded files directly
+into `BADGEVMS/APPS/badgevms_launcher/cj_launcher.elf` (create that folder)
+and `BADGEVMS/APPS/badgevms_launcher.json` (next to it, **not** inside the
+folder — the launcher only reads the sibling copy). Put the card back in
+and power the badge on.
 
 `cj_launcher`'s manifest intentionally sets `"unique_identifier":
 "badgevms_launcher"` — that's not a leftover from forking the reference
