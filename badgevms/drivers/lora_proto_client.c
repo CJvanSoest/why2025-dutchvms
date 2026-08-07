@@ -7,6 +7,8 @@
 #include "freertos/semphr.h"
 #include "freertos/task.h"
 
+#include <stddef.h>
+
 #include <string.h>
 
 /* Tanmatsu esp-hosted custom_data channel IDs.
@@ -82,7 +84,11 @@ typedef struct {
 
 typedef struct {
     uint16_t errors;
-    uint8_t  chip_type;
+    /* uint32_t for the same reason as lora_protocol_mode_params_t::mode: the
+     * slave declares this as lora_protocol_chip_t and the compiler gives that
+     * enum 4 bytes, so a uint8_t here put version_string 3 bytes early and it
+     * always read back empty. */
+    uint32_t chip_type;
     char     version_string[LORA_PROTOCOL_VERSION_STRING_LENGTH];
 } __attribute__((packed)) lora_protocol_status_params_t;
 
@@ -103,6 +109,17 @@ typedef struct {
     int8_t  snr_db_x4;       /* quarter-dB units; dB = snr_db_x4 / 4.0 */
     int16_t signal_rssi_dbm; /* dBm, ignoring interference/blockers */
 } __attribute__((packed)) lora_protocol_rx_stats_t;
+
+/* The structs above are hand-copied from the slave's lora_protocol.h and there
+ * is no shared header to keep them honest, so pin the layout the slave actually
+ * sends. scripts/check_wire_sync.py checks the same thing across the two files;
+ * these catch it at compile time. */
+_Static_assert(sizeof(lora_protocol_header_t) == 8, "wire: header is 8 bytes");
+_Static_assert(sizeof(lora_protocol_mode_params_t) == 4, "wire: mode params are 4 bytes");
+_Static_assert(sizeof(lora_protocol_config_params_t) == 17, "wire: config params are 17 bytes");
+_Static_assert(sizeof(lora_protocol_status_params_t) == 22, "wire: status params are 22 bytes");
+_Static_assert(offsetof(lora_protocol_status_params_t, version_string) == 6, "wire: version_string at 6");
+_Static_assert(sizeof(lora_protocol_rx_stats_t) == 5, "wire: rx stats are 5 bytes");
 
 #define LORA_REPLY_BUF_SIZE   (sizeof(lora_protocol_header_t) + LORA_MAX_PACKET_LEN + 32)
 #define LORA_REPLY_TIMEOUT_MS 2000
