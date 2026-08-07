@@ -21,6 +21,47 @@ Entries from here on are the source of truth going forward.
 
 ## [Unreleased]
 
+## [1.3.18] - 2026-08-07
+
+### Changed
+- Launcher supervision (the "no windows open -> relaunch the launcher"
+  watchdog) moved from the compositor's own task loop into the boot
+  supervisor (`init.c`), consolidating boot-time responsibility in one
+  place.
+- The PPA damage-rectangle splitting workaround was split out into
+  host-testable pure geometry (`rect_math.c`), covered by a new host test
+  (`ctest`).
+
+### Removed
+- **BadgeLink UART transport.** Confirmed non-viable on this hardware: the
+  P4's native-USB pins aren't routed to any external connector, and
+  BadgeLink's COBS framing isn't resilient against console logs sharing
+  the same UART. `deploy_protocol.c` remains the actual working deploy
+  path `badge_deploy.py` uses.
+
+### Fixed
+- **The launcher never started on boot (blank screen).** The UART
+  deploy-listener task ran at a priority that outranked `app_main`, so it
+  permanently starved the boot sequence before `run_init()` was ever
+  reached; lowered to tie with `app_main`'s own priority instead.
+- **The C6 radio firmware version always read back empty.** The P4 mirrored
+  the C6's `chip_type` wire field as 1 byte instead of the enum's real
+  4-byte size, misreading `version_string` 3 bytes early; now pinned with
+  compile-time size/offset asserts on both sides.
+- **`flash_binary()` write failures during C6 auto-reflash were silently
+  ignored** — a real write failure could leave the C6 with stale/partial
+  firmware with no indication anything went wrong.
+- **A stale-pixel rendering artefact** in the PPA damage-rectangle split:
+  one unchecked write could overflow into the rectangle array's own count
+  field at capacity, corrupting the iteration that followed.
+- Several memory-safety issues found in a follow-up quality review: an OOM
+  during boot's `init.toml` parsing could crash via a NULL-pointer write
+  instead of returning a clean error; a path-parsing buffer leaked on
+  every malformed path; `application_launch()` leaked one struct per app
+  launch; a failed task spawn could leak thread state or pin a parent
+  task's refcount; and a failed `init.toml` rewrite could leave the boot
+  supervisor's config missing entirely instead of keeping the old file.
+
 ## [1.3.17] - 2026-08-04
 
 ### Changed
