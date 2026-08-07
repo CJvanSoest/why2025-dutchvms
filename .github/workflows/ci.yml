@@ -37,6 +37,31 @@ jobs:
           done
           exit $fail
 
+  host-tests:
+    name: Host tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # These build with the system gcc, not the IDF toolchain: the modules
+      # under test are pure enough to compile on the host, which is the point.
+      - name: Build and run
+        run: |
+          cmake -S host_tests -B build/host_tests
+          cmake --build build/host_tests
+          ctest --test-dir build/host_tests --output-on-failure
+
+  wire-sync:
+    name: P4/C6 wire sync
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # badgevms/ and connectivity_esp_hosted/ share no header, so the LoRa
+      # wire structs are duplicated by hand and have drifted twice already.
+      - name: Compare the duplicated wire structs
+        run: python3 scripts/check_wire_sync.py
+
   build:
     name: ESP-IDF build
     runs-on: ubuntu-latest
