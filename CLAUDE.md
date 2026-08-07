@@ -47,7 +47,7 @@ Before changing code, read the handbook in [`.claude/`](.claude):
   LoRa RPC, and the app install/launch flow, with real function names.
 - [`.claude/Build-And-CI.md`](.claude/Build-And-CI.md) — build invocation,
   the NAS-docker pattern (most work here happens without a local IDF
-  toolchain), and what the 3 CI jobs actually check.
+  toolchain), and what the 5 CI jobs actually check.
 - [`.claude/Workflow.md`](.claude/Workflow.md) — first read to a green,
   physically-verified commit.
 - [`.claude/Pitfalls.md`](.claude/Pitfalls.md) — traps that already cost
@@ -95,7 +95,13 @@ binary onto a physical badge.
    exactly in `badgevms/drivers/lora_proto_client.c` (P4) — see
    `lora_protocol_config_params_t`'s own "WIRE-COMPATIBILITY WARNING"
    comment for the pattern to follow when extending a wire struct. Getting
-   this wrong doesn't error, it just silently breaks LoRa.
+   this wrong doesn't error, it just silently breaks LoRa. Two things now
+   check it: `_Static_assert`s on the sizes and offsets in
+   `lora_proto_client.c`, and `scripts/check_wire_sync.py`, which compiles
+   both definitions together and compares them. **Beware the enum trap** the
+   asserts exist for: the C6 declares wire fields as enums, which the
+   compiler gives 4 bytes, so a `uint8_t` on the P4 side shifts every field
+   after it. That has now happened twice.
 4. **Physical hardware is the real gate for anything touching radio,
    compositor, drivers, or boot.** CI proves it compiles, links, and stays
    under the stack-usage threshold. It does not prove a driver initializes

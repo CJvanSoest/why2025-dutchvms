@@ -31,8 +31,48 @@ target_compile_options(logical_names_test PRIVATE
 
 add_test(NAME logical_names_test COMMAND logical_names_test)
 
+# COBS framing for the badgelink UART transport. Pure byte manipulation, so it
+# links against the shipping cobs.c directly instead of the in-file RUN_TEST
+# pattern logical_names.c uses.
+add_executable(cobs_test
+    ${CMAKE_CURRENT_SOURCE_DIR}/test_cobs.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/../badgevms/drivers/badgelink/cobs.c
+)
+
+target_include_directories(cobs_test PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/../badgevms/drivers/badgelink
+)
+
+target_compile_options(cobs_test PRIVATE
+    -Wall
+    -Wextra
+    -Werror
+)
+
+add_test(NAME cobs_test COMMAND cobs_test)
+
+# Compositor damage-rectangle maths. Pure geometry, split out of the ESP-bound
+# compositor into rect_math.c precisely so it can be exercised here.
+add_executable(rect_math_test
+    ${CMAKE_CURRENT_SOURCE_DIR}/test_rect_math.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/../badgevms/compositor/rect_math.c
+)
+
+target_include_directories(rect_math_test PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/../badgevms/include
+    ${CMAKE_CURRENT_SOURCE_DIR}/../badgevms/compositor
+)
+
+target_compile_options(rect_math_test PRIVATE
+    -Wall
+    -Wextra
+    -Werror
+)
+
+add_test(NAME rect_math_test COMMAND rect_math_test)
+
 add_custom_target(run_tests
     COMMAND ${CMAKE_CTEST_COMMAND} --output-on-failure --verbose
-    DEPENDS logical_names_test
+    DEPENDS logical_names_test cobs_test rect_math_test
     COMMENT "Running all host tests"
 )

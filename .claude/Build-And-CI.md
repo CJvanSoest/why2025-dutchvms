@@ -66,6 +66,16 @@ into an image you keep reusing.
 
 - **`clang-format`** — `badgevms/*.c`/`*.h` only (`thirdparty/`/`nanopb/`
   excluded), against the pinned clang-format-18.1.8.
+- **`Host tests`** — builds `host_tests/` with the system gcc and runs ctest.
+  The modules under test are pure enough to compile off-target, which is the
+  point: they are the parts where a logic error is silent on hardware.
+  `logical_names.c` uses an in-file `RUN_TEST` harness; newer tests are
+  separate files linking the shipping source. Add both the executable and the
+  `add_test()` in `host_tests/CMakeLists.txt`.
+- **`P4/C6 wire sync`** — `scripts/check_wire_sync.py`. Compiles the LoRa wire
+  structs from both trees into one host program and asserts their sizes and
+  field offsets match. Needs no toolchain. See the enum pitfall in
+  [Pitfalls.md](Pitfalls.md) for what it is guarding against.
 - **`ESP-IDF build`** — the default `idf.py build`, both P4 and C6 images,
   plus the stack-usage check (below).
 - **`ESP-IDF build (badgelink)`** — the same build with
