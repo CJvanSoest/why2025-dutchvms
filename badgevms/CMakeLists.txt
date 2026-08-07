@@ -2,7 +2,6 @@ idf_component_register(
     SRCS
      ${CMAKE_CURRENT_BINARY_DIR}/generated_symbols.c
      "application.c"
-     "badgelink_transport_uart.c"
      "buddy_alloc.c"
      "compositor/compositor.c"
      "compositor/pixel_functions.c"
@@ -13,17 +12,6 @@ idf_component_register(
      "deploy_protocol.c"
      "device.c"
      "display_bridge.c"
-     "drivers/badgelink/badgelink.c"
-     "drivers/badgelink/badgelink.pb.c"
-     "drivers/badgelink/badgelink_appfs.c"
-     "drivers/badgelink/badgelink_fs.c"
-     "drivers/badgelink/badgelink_nvs.c"
-     "drivers/badgelink/badgelink_setusbmode.c"
-     "drivers/badgelink/badgelink_startapp.c"
-     "drivers/badgelink/cobs.c"
-     "drivers/badgelink/nanopb/pb_common.c"
-     "drivers/badgelink/nanopb/pb_decode.c"
-     "drivers/badgelink/nanopb/pb_encode.c"
      "drivers/badgevms_i2c_bus.c"
      "drivers/ble_gatt_server.c"
      "drivers/board_bringup.c"
@@ -63,8 +51,6 @@ idf_component_register(
     INCLUDE_DIRS
      ${CMAKE_CURRENT_SOURCE_DIR}/
      ${CMAKE_CURRENT_SOURCE_DIR}/include
-     ${CMAKE_CURRENT_SOURCE_DIR}/drivers/badgelink
-     ${CMAKE_CURRENT_SOURCE_DIR}/drivers/badgelink/nanopb
     PRIV_REQUIRES
      "app_update"
      "bmi270"

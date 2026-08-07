@@ -83,7 +83,7 @@ symptom is actually on before picking a file.
 | UART app-deploy protocol | `badgevms/deploy_protocol.c` | CRC-framed binary protocol, client is `why2025-apps/tools/badge_deploy.py`. Validate every path this touches — see the path-traversal fix in Pitfalls.md. |
 | OTA partition write/rollback | `badgevms/ota.c` + `include/badgevms/ota.h` | Generic, already app-facing. Writes only the `ota_0`/`ota_1` app partition, never `storage` — see `docs/design/SD-and-OTA-Updates.md`. |
 | C6 co-processor firmware (WiFi/BT slave + LoRa) | `connectivity_esp_hosted/slave/main/` | `tanmatsu/lora/lora_protocol_server.c` is the first-party LoRa addition; the rest tracks upstream esp-hosted. |
-| Kernel build config, Kconfig options | `badgevms/Kconfig.projbuild`, `sdkconfig.defaults` | New experimental features get a Kconfig option (see `CJ_BADGEVMS_ENABLE_BADGELINK`) with a dedicated CI job, not a bare `#define`. |
+| Kernel build config, Kconfig options | `badgevms/Kconfig.projbuild`, `sdkconfig.defaults` | New experimental features get a Kconfig option with a dedicated CI job, not a bare `#define`. |
 | SDK examples | `sdk_apps/` | BadgeVMS SDK demos, built here for SDK regression coverage. Not the fork's real apps. |
 | Design proposals (not yet implemented) | `docs/design/` | Written before code, reviewed, then implemented as a normal PR. |
 

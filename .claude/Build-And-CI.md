@@ -34,10 +34,6 @@ ssh build-host "docker run --rm -v /path/to/build/dir:/project -w /project \
   espressif/idf:v5.5.1 bash -c '. \$IDF_PATH/export.sh; idf.py build'"
 ```
 
-For a `CJ_BADGEVMS_ENABLE_BADGELINK=y` build (the second CI job), add
-`-D SDKCONFIG_DEFAULTS="sdkconfig.defaults;sdkconfig.ci-badgelink"` to the
-`idf.py build` invocation.
-
 For clang-format (CI pins **clang-format-18**, specifically 18.1.8 —
 `.github/workflows/ci.yml` installs it from `apt.llvm.org`'s exact recipe;
 a bare `apt-get install clang-format-18` on Ubuntu can silently resolve to a
@@ -78,10 +74,6 @@ into an image you keep reusing.
   [Pitfalls.md](Pitfalls.md) for what it is guarding against.
 - **`ESP-IDF build`** — the default `idf.py build`, both P4 and C6 images,
   plus the stack-usage check (below).
-- **`ESP-IDF build (badgelink)`** — the same build with
-  `CJ_BADGEVMS_ENABLE_BADGELINK=y`, non-blocking (informational, not a
-  required check), so the experimental BadgeLink transport can't silently
-  bit-rot against the rest of `badgevms/` even though it's off by default.
 
 `.github/workflows/release.yml` runs only on a `vX.Y.Z` tag push: builds
 `badgevms.bin` in the same container and publishes it as a GitHub Release
@@ -105,8 +97,7 @@ chains; a passing build is not enough on its own.
 ## Branch protection
 
 `main` requires a PR with the `clang-format` and `ESP-IDF build` checks
-green (`ESP-IDF build (badgelink)` is informational, not required).
-`enforce_admins` is off, so a repo admin *can* push directly, but don't —
+green. `enforce_admins` is off, so a repo admin *can* push directly, but don't —
 direct-to-main pushes are exactly what made this repo's changelog
 unreliable before branch protection was turned on. One PR per issue, tied
 to a GitHub issue where one exists — see [Workflow.md](Workflow.md).
