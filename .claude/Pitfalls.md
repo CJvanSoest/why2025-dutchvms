@@ -45,6 +45,27 @@ format), not by anything CI or a build could catch. When a wire-format bug
 is suspected, get a real captured packet from both sides and diff it
 byte-for-byte against a working implementation before guessing.
 
+## An enum on the C6 side is four bytes, and a `uint8_t` mirror shifts the rest
+
+The wire structs are hand-copied between `lora_protocol.h` (C6) and
+`lora_proto_client.c` (P4), and the C6 declares several wire fields as enums.
+The compiler gives those 4 bytes, `__attribute__((packed))` on the struct does
+not shrink them, and a `uint8_t` on the P4 side therefore moves every field
+after it. It has happened twice:
+
+- `lora_protocol_mode_params_t::mode` — the P4 sent 1 byte, the slave's
+  `sizeof(struct)` length check rejected it, and every `SET_MODE` came back
+  NACK. Loud, so it got found.
+- `lora_protocol_status_params_t::chip_type` — the P4 read `version_string`
+  three bytes early, landing on the enum's zero padding, so the radio firmware
+  version silently came back as an empty string. The length check did not fire,
+  because the P4 expected 19 bytes and the C6 sent 22, and the check is `>=`.
+
+Mirror the slave's enum fields as `uint32_t` with a comment saying why. The
+`_Static_assert`s at the top of `lora_proto_client.c` and
+`scripts/check_wire_sync.py` now both catch this, but only for the structs
+they list — add new ones to both.
+
 ## `abort()` reboots the whole badge, not just the offending task
 
 BadgeVMS has real per-task crash isolation (`cerberos`,

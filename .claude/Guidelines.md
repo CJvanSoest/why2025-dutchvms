@@ -11,7 +11,7 @@ matches what you are about to do:
 - **[Data-Flows.md](Data-Flows.md)**: cold start, the P4↔C6 LoRa RPC, and the
   app install/launch flow, with real function names.
 - **[Build-And-CI.md](Build-And-CI.md)**: build invocation, the NAS-docker
-  build pattern, and what the 3 CI jobs check.
+  build pattern, and what the 5 CI jobs check.
 - **[Workflow.md](Workflow.md)**: how to carry a change from first read to a
   green, physically-verified commit.
 - **[Pitfalls.md](Pitfalls.md)**: traps that already cost real time or
@@ -112,8 +112,10 @@ symptom is actually on before picking a file.
   isolation for a corrupted kernel data structure) but logs a reason via
   `esp_system_abort()` instead of an undiagnosable bare abort.
 - **Physical hardware is the real gate, CI is necessary but not
-  sufficient.** The 3 CI jobs (clang-format, ESP-IDF build ×2, stack-usage)
-  prove the code compiles, links, and doesn't blow a function's stack frame.
+  sufficient.** The 5 CI jobs (clang-format, host tests, P4/C6 wire sync,
+  ESP-IDF build ×2, stack-usage) prove the code compiles, links, keeps the
+  pure logic correct, keeps the two sides of the LoRa wire format agreeing,
+  and doesn't blow a function's stack frame.
   They do not prove a driver initializes correctly against real silicon, a
   radio packet actually round-trips to another MeshCore node, or the badge
   boots past a given driver at all — several real bugs this session
@@ -138,6 +140,13 @@ symptom is actually on before picking a file.
 ```sh
 # Full build (both P4 badgevms.bin and the C6 network_adapter.bin sub-build)
 idf.py build
+
+# Host tests (pure logic: logical names, COBS framing)
+cmake -S host_tests -B build/host_tests && cmake --build build/host_tests
+ctest --test-dir build/host_tests --output-on-failure
+
+# P4/C6 wire-struct sync (needs no toolchain, plain host cc)
+python3 scripts/check_wire_sync.py
 
 # Stack-usage gate (mirrors the CI job exactly)
 python3 scripts/check_stack_usage.py --threshold 5120 --root build/esp-idf/badgevms
