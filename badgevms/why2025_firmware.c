@@ -29,6 +29,7 @@
 #include "compositor/compositor_private.h"
 #include "deploy_protocol.h"
 #include "device_private.h"
+#include "driver/uart.h"
 #include "drivers/badgevms_i2c_bus.h"
 #include "drivers/bosch_bme690.h"
 #include "drivers/bosch_bmi270.h"
@@ -156,6 +157,25 @@ int app_main(void) {
 
     if (!device_register("TT01", tty_create(true, true))) {
         ESP_LOGE(TAG, "Failed to initialize TT01 driver");
+        invalidate_ota_partition();
+    }
+
+    /* UART0 is shared by TT01 stdin (drivers/tty.c) and deploy_protocol.c
+     * (BadgeLink's own UART transport was removed as non-viable on this
+     * hardware — see git history) — install the interrupt-driven driver
+     * once, here, before either consumer can touch UART0. Both used to do
+     * raw ROM-level uart_rx_one_char() polling with no RX ring buffer,
+     * which meant nothing drained the hardware FIFO while deploy_protocol's
+     * PUT handler was blocked in a slow SD-card write() — a real overflow
+     * risk on large file transfers. The driver's own ISR drains the FIFO
+     * into RX_BUF_BYTES regardless of what any consumer task is doing.
+     * No uart_param_config()/uart_set_pin() call here: UART0's pins/baud
+     * are already fully configured by the IDF console/bootloader before
+     * app_main() runs, and reusing that configuration is safer than
+     * risking a mismatch by re-specifying it. */
+#define UART0_RX_BUF_BYTES 4096
+    if (uart_driver_install(UART_NUM_0, UART0_RX_BUF_BYTES, 0, 0, NULL, 0) != ESP_OK) {
+        ESP_LOGE(TAG, "Failed to install UART0 driver");
         invalidate_ota_partition();
     }
 

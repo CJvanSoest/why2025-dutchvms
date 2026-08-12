@@ -22,7 +22,9 @@
 #include "badgevms/process.h"
 #include "badgevms_config.h"
 #include "compositor_private.h"
+#if CONFIG_CJ_BADGEVMS_COMPOSITOR_USE_PPA
 #include "driver/ppa.h"
+#endif
 #include "esp_cache.h"
 #include "esp_ipc.h"
 #include "esp_log.h"
@@ -99,6 +101,7 @@ static inline void mark_scene_damaged(void) {
     background_damaged    = ALL_DISPLAY_FB_MASK;
 }
 
+#if CONFIG_CJ_BADGEVMS_COMPOSITOR_USE_PPA
 __attribute__((always_inline)) static inline ppa_srm_rotation_angle_t rotation_to_srm(rotation_angle_t rotation) {
     switch (rotation) {
         case ROTATION_ANGLE_270: return PPA_SRM_ROTATION_ANGLE_90;
@@ -108,6 +111,7 @@ __attribute__((always_inline)) static inline ppa_srm_rotation_angle_t rotation_t
     }
     return PPA_SRM_ROTATION_ANGLE_0;
 }
+#endif
 
 __attribute__((always_inline)) static inline window_size_t window_clamp_size(window_t *window, window_size_t size) {
     window_size_t ret;
@@ -250,12 +254,14 @@ void window_calculate_visible_regions(window_t *window, window_t *window_list_he
     }
 
     merge_rectangles(&window->visible);
+#if CONFIG_CJ_BADGEVMS_COMPOSITOR_USE_PPA
     int dropped = 0;
     while (ppa_workaround_split_rects(&window->visible, scale, &dropped)) {
     }
     if (dropped) {
         ESP_LOGW(TAG, "Dropped %d damage rect(s) past MAX_VISIBLE_RECTS -- expect stale pixels", dropped);
     }
+#endif
 }
 
 window_rect_t content_to_framebuffer_rect(window_rect_t content_rect, window_t *window, float scale) {
@@ -423,6 +429,7 @@ IRAM_ATTR static void on_refresh(void *ignored) {
 // }
 
 static void IRAM_ATTR NOINLINE_ATTR compositor(void *ignored) {
+#if CONFIG_CJ_BADGEVMS_COMPOSITOR_USE_PPA
     static ppa_client_handle_t ppa_srm_handle = NULL;
 
     ppa_client_config_t ppa_srm_config = {
@@ -436,6 +443,7 @@ static void IRAM_ATTR NOINLINE_ATTR compositor(void *ignored) {
 
     ppa_register_client(&ppa_srm_config, &ppa_srm_handle);
     // ppa_client_register_event_callbacks(ppa_srm_handle, &srm_callbacks);
+#endif
 
     bool fn_down     = false;
     bool frame_ready = false;
@@ -685,6 +693,7 @@ static void IRAM_ATTR NOINLINE_ATTR compositor(void *ignored) {
                 }
 
                 if (need_content_draw) {
+#if CONFIG_CJ_BADGEVMS_COMPOSITOR_USE_PPA
                     ppa_srm_rotation_angle_t ppa_rotation = rotation_to_srm(rotation);
                     bool                     rgb_swap     = false;
                     bool                     byte_swap    = false;
@@ -748,6 +757,54 @@ static void IRAM_ATTR NOINLINE_ATTR compositor(void *ignored) {
                             window->fb_dirty &= ~(1 << cur_fb);
                         }
                     }
+#else  // !CONFIG_CJ_BADGEVMS_COMPOSITOR_USE_PPA
+       // CPU replacement for the PPA path above -- see
+       // pixel_functions.c's blit_rect_rotated() and
+       // docs/tanmatsu-launcher-port-analysis.md for why.
+                    if (window->flags & WINDOW_FLAG_FLIP_HORIZONTAL) {
+                        // Not implemented on this path: the old PPA path got
+                        // this "for free" by abusing its own rotation_angle
+                        // field, which has no equivalent here. No shipped app
+                        // sets this flag today -- see the port-analysis doc.
+                        ESP_LOGW(TAG, "WINDOW_FLAG_FLIP_HORIZONTAL is not supported by the CPU compositor path");
+                    }
+
+                    // Same cache-sync bracketing draw_window_box() already
+                    // does below for the same DMA-backed framebuffers[cur_fb]
+                    // -- the CPU blit writes with plain stores same as
+                    // decoration drawing does, not a DMA engine that handles
+                    // coherency itself the way the PPA did.
+                    esp_cache_msync(framebuffers[cur_fb], FRAMEBUFFER_BYTES, ESP_CACHE_MSYNC_FLAG_DIR_M2C);
+
+                    for (int i = 0; i < window->visible.count; i++) {
+                        window_rect_t visible_content = window->visible.rects[i];
+                        window_rect_t fb_rect         = content_to_framebuffer_rect(visible_content, window, scale);
+
+                        if (fb_rect.w <= 0 || fb_rect.h <= 0) {
+                            continue;
+                        }
+
+                        blit_rect_rotated(
+                            framebuffers[cur_fb],
+                            framebuffer->framebuffer.pixels,
+                            framebuffer->w,
+                            framebuffer->format,
+                            fb_rect,
+                            visible_content,
+                            scale,
+                            rotation
+                        );
+
+                        changes           = true;
+                        window->fb_dirty &= ~(1 << cur_fb);
+                    }
+
+                    esp_cache_msync(
+                        framebuffers[cur_fb],
+                        FRAMEBUFFER_BYTES,
+                        ESP_CACHE_MSYNC_FLAG_DIR_C2M | ESP_CACHE_MSYNC_FLAG_INVALIDATE
+                    );
+#endif // CONFIG_CJ_BADGEVMS_COMPOSITOR_USE_PPA
 
                     // Notify app that content was processed
                     if (!is_clean) {

@@ -29,5 +29,25 @@ menu "WHY2025 Custom Board Selection"
                 The screens have a black border where the ribbon cable is connected
     endchoice
 
+    config CJ_BADGEVMS_COMPOSITOR_USE_PPA
+        bool "Compositor: use the ESP32-P4 PPA hardware for window compositing"
+        default n
+        help
+            Off by default: the compositor blits window content into the
+            panel framebuffer on the CPU (badgevms/compositor/pixel_functions.c's
+            blit_rect_rotated()) instead of via the ESP32-P4's PPA
+            (Pixel Processing Accelerator) hardware unit's
+            ppa_do_scale_rotate_mirror(). This exists to remove a suspected
+            root cause of an unresolved color-render bug (a static
+            two-tone "stripe" for certain colors, a time-varying flicker
+            for others) -- see docs/tanmatsu-launcher-port-analysis.md.
+            CPU-blit performance under realistic multi-window load has not
+            been benchmarked on hardware yet. Enable this to fall back to
+            the original, PPA-hardware-accelerated path if the CPU path
+            proves too slow or the color bug turns out to have a different
+            root cause -- keep this option working for at least one
+            release cycle as an escape hatch, don't let it bit-rot
+            silently.
+
 endmenu
 

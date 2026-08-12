@@ -92,3 +92,22 @@ void draw_rect_rotated(uint16_t *fb, int x, int y, int width, int height, uint16
 int  char_to_font_index(char c);
 void draw_char_rotated(uint16_t *fb, char c, int x, int y, uint16_t color);
 void draw_text_rotated(uint16_t *fb, char const *text, int x, int y, uint16_t color);
+
+/* CPU replacement for ppa_do_scale_rotate_mirror() -- scales src_rect (in
+ * src's own native format, src_w pixels per row) by `scale`, rotates it by
+ * `rotation`, and writes it into dst (always a FRAMEBUFFER_MAX_W x
+ * FRAMEBUFFER_MAX_H RGB565 buffer) at dst_rect, which is given in
+ * PRE-rotation output/screen pixel space -- i.e. the same space
+ * content_to_framebuffer_rect()'s caller already computes as
+ * `visible_content` before calling rotate_rect() on it, not the
+ * already-rotated result. See compositor.c's call site. */
+void blit_rect_rotated(
+    uint16_t        *dst,
+    void const      *src,
+    int              src_w,
+    pixel_format_t   src_format,
+    window_rect_t    src_rect,
+    window_rect_t    dst_rect,
+    float            scale,
+    rotation_angle_t rotation
+);

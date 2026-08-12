@@ -62,7 +62,7 @@ simple_function:
   - a64l
 #  - abort
   - abs
-#  - aligned_alloc
+  - aligned_alloc
 #  - arc4random
 #  - arc4random_buf
 #  - arc4random_uniform

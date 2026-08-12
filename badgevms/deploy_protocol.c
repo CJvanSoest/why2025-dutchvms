@@ -40,12 +40,12 @@
 
 #include "deploy_protocol.h"
 
+#include "driver/uart.h"
 #include "esp_rom_crc.h"
 #include "esp_rom_sys.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "rom/ets_sys.h"
-#include "rom/uart.h"
 #include "task.h"
 
 #include <stdint.h>
@@ -98,21 +98,26 @@ static TaskHandle_t deploy_handle = NULL;
 
 /* ============== UART I/O helpers ============== */
 
+/* Both now go through the interrupt-driven UART0 driver installed in
+ * why2025_firmware.c's app_main() (shared with drivers/tty.c's stdin),
+ * instead of raw ROM uart_rx_one_char()/uart_tx_one_char() polling. The
+ * old rx_blocking() had no RX ring buffer behind it, so nothing drained
+ * the hardware FIFO while handle_put_streamed() was blocked in a slow SD
+ * write() — the driver's own ISR now does that regardless of what this
+ * task is doing, which is what actually removes the overflow risk on
+ * large PUTs (this doesn't change the wire protocol at all, only how
+ * bytes get from the FIFO into these functions). */
 static void rx_blocking(uint8_t *buf, size_t n) {
-    for (size_t i = 0; i < n; i++) {
-        while (1) {
-            ETS_STATUS s = uart_rx_one_char(&buf[i]);
-            if (s == ETS_OK)
-                break;
-            vTaskDelay(2 / portTICK_PERIOD_MS);
-        }
+    size_t got = 0;
+    while (got < n) {
+        int r = uart_read_bytes(UART_NUM_0, buf + got, n - got, portMAX_DELAY);
+        if (r > 0)
+            got += (size_t)r;
     }
 }
 
 static void tx_bytes(uint8_t const *buf, size_t n) {
-    for (size_t i = 0; i < n; i++) {
-        uart_tx_one_char(buf[i]);
-    }
+    uart_write_bytes(UART_NUM_0, (char const *)buf, n);
 }
 
 static void send_response(uint8_t status, uint8_t const *payload, uint32_t len) {
@@ -315,9 +320,32 @@ static void handle_put_streamed(uint8_t const hdr[5], uint32_t len) {
         return;
     }
 
-    uint8_t  chunk[PUT_CHUNK_BYTES];
-    uint32_t remain   = data_len;
-    bool     write_ok = true;
+    /* Preallocate the full file size up front: FATFS otherwise grows the
+     * cluster chain incrementally on each write(), and that allocation
+     * work is what was stretching individual per-chunk writes long enough
+     * to overflow the UART's tiny hardware RX FIFO (uart_rx_one_char() is
+     * raw ROM polling with no interrupt-driven buffer -- see rx_blocking()
+     * above -- so nothing drains the FIFO while we're blocked in write()).
+     * ftruncate() does all the cluster-chain bookkeeping in one shot before
+     * the timing-sensitive receive loop starts; the writes below then just
+     * fill already-allocated clusters. */
+    if (ftruncate(fd, (off_t)data_len) != 0) {
+        close(fd);
+        unlink(posix_path);
+        send_status(ST_ERR_WRITE);
+        esp_rom_printf("[deploy] PUT ftruncate failed for '%s' (errno=%d)\n", posix_path, errno);
+        return;
+    }
+
+    /* static, not stack-local: deploy_listener_task only has a 6144-byte
+     * stack (see deploy_protocol_init()) and vms_path[256]+posix_path[288]
+     * already eat into that -- a 4096-byte stack buffer here overflowed it
+     * (confirmed via a WDT reset while testing this fix on hardware: PUT
+     * would silently never respond, no crash log, task alive again after
+     * reset). Not called from more than one task, so no locking needed. */
+    static uint8_t chunk[PUT_CHUNK_BYTES];
+    uint32_t       remain   = data_len;
+    bool           write_ok = true;
     while (remain > 0) {
         uint32_t n = remain < sizeof(chunk) ? remain : sizeof(chunk);
         rx_blocking(chunk, n);
