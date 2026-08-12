@@ -1222,7 +1222,39 @@ bool compositor_init(char const *lcd_device_name, char const *keyboard_device_na
     lcd_device->_set_refresh_cb(lcd_device, NULL, on_refresh);
 
     compositor_queue = xQueueCreate(10, sizeof(compositor_message_t));
-    create_kernel_task(compositor, "Compositor", 8192, NULL, 20, &compositor_handle, 0);
+    /* Core 1, not 0: this used to be safe pinned to core 0 because the PPA
+     * hardware did the actual pixel work off-CPU, so this task mostly just
+     * queued PPA commands and waited. Now that CONFIG_CJ_BADGEVMS_COMPOSITOR_
+     * USE_PPA=n makes it do real CPU-side blit_rect_rotated() work every
+     * frame, keeping it on core 0 starves badgevms/drivers/led_matrix_pca9698.c's
+     * mtx_refresh_task_hw -- that task has no vTaskDelay in its per-row I2C
+     * loop and depends on tight, undisturbed core-0 scheduling for its
+     * ~460 Hz refresh (see the "no flicker" comment in led_matrix_pca9698.c);
+     * losing that turns its multiplexed row-scan into visible flicker.
+     *
+     * Priority also has to drop on the CPU path, not just the core. App
+     * processes run at priority 5 (task.c's zeus()); this task was priority
+     * 20 from day one, which was fine when it barely touched the CPU (PPA
+     * hardware did the work). A strictly higher priority than every app
+     * means FreeRTOS never preempts it for a lower-priority app no matter
+     * how long it runs -- taskYIELD() inside this task wouldn't have helped,
+     * since yielding only matters when something of equal-or-higher priority
+     * is ready. With real per-frame CPU work now sharing core 1 with app
+     * processes, that turned into outright starvation, not "ordinary jank"
+     * as an earlier version of this comment assumed: a busy screen (several
+     * windows/rects queued at once) could keep this task runnable long
+     * enough to freeze every app on core 1 -- including input handling,
+     * which is why a stuck app looked unresponsive to the keyboard too, not
+     * just visually static. Matching the app priority (5) lets FreeRTOS's
+     * equal-priority round-robin time-slicing interleave rendering with app
+     * work instead of one strictly dominating the other. Only the CPU path
+     * needs this: the PPA path's original priority-20/core-0 pairing is left
+     * alone since it never had this problem. */
+#if CONFIG_CJ_BADGEVMS_COMPOSITOR_USE_PPA
+    create_kernel_task(compositor, "Compositor", 8192, NULL, 20, &compositor_handle, 1);
+#else
+    create_kernel_task(compositor, "Compositor", 8192, NULL, 5, &compositor_handle, 1);
+#endif
 
     return true;
 }
