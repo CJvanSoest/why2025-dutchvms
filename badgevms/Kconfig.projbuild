@@ -31,23 +31,42 @@ menu "WHY2025 Custom Board Selection"
 
     config CJ_BADGEVMS_COMPOSITOR_USE_PPA
         bool "Compositor: use the ESP32-P4 PPA hardware for window compositing"
+        default y
+        help
+            On by default, chosen for speed: the compositor blits window
+            content via the ESP32-P4's PPA (Pixel Processing Accelerator)
+            hardware unit's ppa_do_scale_rotate_mirror() instead of on the
+            CPU (badgevms/compositor/pixel_functions.c's
+            blit_rect_rotated()). PPA has a known, unresolved color-render
+            bug (a static two-tone "stripe"/split for certain colors, e.g.
+            bright orange, plus broken rendering on some tile content) --
+            see docs/compositor-architecture-and-tanmatsu-port-analysis.md
+            §1 for the full investigation. Three independent fix hypotheses
+            (esp-idf#17531's integer-scaling explanation, PPA's hardware
+            rgb_swap bit via CJ_BADGEVMS_COMPOSITOR_PPA_SW_RGB_SWAP, and a
+            missing input-buffer cache flush) were hardware-tested and
+            ruled out 2026-08-12/13 -- CJ made the explicit call to keep
+            PPA on anyway, trading the known visual bug for compositor
+            speed over the CPU path's real scheduling costs (see
+            CJ_BADGEVMS_COMPOSITOR_USE_PPA's git history / that doc's §1.1
+            for why CPU rendering isn't free). Disable this to fall back to
+            the CPU path if the color bug becomes unacceptable or a real
+            fix is found later -- keep this option working as an escape
+            hatch, don't let it bit-rot silently.
+
+    config CJ_BADGEVMS_COMPOSITOR_PPA_SW_RGB_SWAP
+        bool "Compositor (PPA path): do rgb_swap in software instead of via PPA hardware"
+        depends on CJ_BADGEVMS_COMPOSITOR_USE_PPA
         default n
         help
-            Off by default: the compositor blits window content into the
-            panel framebuffer on the CPU (badgevms/compositor/pixel_functions.c's
-            blit_rect_rotated()) instead of via the ESP32-P4's PPA
-            (Pixel Processing Accelerator) hardware unit's
-            ppa_do_scale_rotate_mirror(). This exists to remove a suspected
-            root cause of an unresolved color-render bug (a static
-            two-tone "stripe" for certain colors, a time-varying flicker
-            for others) -- see docs/tanmatsu-launcher-port-analysis.md.
-            CPU-blit performance under realistic multi-window load has not
-            been benchmarked on hardware yet. Enable this to fall back to
-            the original, PPA-hardware-accelerated path if the CPU path
-            proves too slow or the color bug turns out to have a different
-            root cause -- keep this option working for at least one
-            release cycle as an escape hatch, don't let it bit-rot
-            silently.
+            Diagnostic-only, ruled out 2026-08-12: hardware-tested and
+            confirmed to NOT fix the color bug described in
+            CJ_BADGEVMS_COMPOSITOR_USE_PPA's help text -- kept available in
+            case it's worth revisiting, not because it's expected to help.
+            When enabled, the compositor pre-swaps the R/B channels of the
+            source framebuffer into a scratch buffer on the CPU and tells
+            PPA rgb_swap=false, instead of asking PPA's hardware to do that
+            swap itself.
 
 endmenu
 
