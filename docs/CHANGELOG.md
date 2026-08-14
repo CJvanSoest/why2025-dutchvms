@@ -21,6 +21,24 @@ Entries from here on are the source of truth going forward.
 
 ## [Unreleased]
 
+## [1.4.0] - 2026-08-14
+
+### Added
+- **`cj_launcher` now ships baked into the firmware image** as a recovery safety net
+  (`flash_storage/skel/BADGEVMS/APPS/`) — a corrupted launcher can't run its own self-update to
+  fix itself, so a plain firmware reflash now always restores a working one. The app-repository
+  self-update flow stays the normal route for end users; this is a fallback, not a replacement.
+
+### Changed
+- **C6: `nicolaielectronics/sx126x` LoRa driver upgraded 0.0.3 → 0.3.0** — picks up automatic
+  LDRO activation, automatic image-rejection calibration, and packet-status functions corrected
+  against the SX1261/62/68 datasheet. Fixed two breaking API changes this pulled in
+  (`sx126x_set_modulation_params_lora()`'s new `automatic_ldro` param, and
+  `sx126x_get_packet_status_lora()`'s new float-based signature) and worked around a real bug in
+  the new driver's SNR computation (missing sign-extension on the raw byte, corrupting every
+  negative SNR reading — routine for real LoRa links). See `lora_protocol_server.c` for the
+  fix and its reasoning.
+
 ### Fixed
 - **Color-value-dependent render glitch (stripe/flicker)** — root-caused to MIPI DSI lane
   signal integrity between the P4 and the display panel, not the PPA/compositor path
@@ -30,6 +48,11 @@ Entries from here on are the source of truth going forward.
 - **`CONFIG_SCREEN_TYPE_MOUNTAIN` never actually compiled** — a copy-paste bug in
   `badgevms/drivers/st7703.h`'s DPI config macro (two struct fields merged onto one line with
   a missing comma) meant nobody had build-tested that screen variant before. Fixed.
+- **CI failed to configure on every checkout path except one specific NAS docker mount** — the
+  committed `dependencies.lock` had an absolute filesystem path baked into the
+  `espressif/esp_hosted` local-override entry (ESP-IDF's component manager always writes these
+  as absolute, never portable). Stopped tracking `dependencies.lock`; every environment now
+  regenerates its own.
 
 ## [1.3.19] - 2026-08-07
 
