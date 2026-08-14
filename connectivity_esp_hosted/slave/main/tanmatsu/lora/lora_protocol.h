@@ -112,16 +112,17 @@ typedef struct {
 // meshcore firmware (components/mc_radio/radio.c in CJvanSoest/meshcore),
 // which vendors this identical nicolaielectronics/sx126x driver and already
 // ships a working Coverage/signal-quality feature built on exactly this
-// interpretation. Note that the vendored driver's own
-// sx126x_get_packet_status_lora() out-parameter names
-// (out_rx_status/out_rssi_sync/out_rssi_avg) are MISLEADING: they actually
-// return, in order, raw RssiPkt / raw SnrPkt / raw SignalRssiPkt — not
-// "rx status", "rssi sync" or "rssi avg". Do not rename them here since that
-// driver lives in a component-manager-fetched managed_components/ tree that
-// isn't part of this repo (see connectivity_esp_hosted/slave/main/idf_component.yml,
-// nicolaielectronics/sx126x ~0.0.3) and would be silently reset on the next
-// dependency fetch; the correct interpretation is applied at the call site in
-// lora_protocol_server.c instead.
+// interpretation.
+//
+// UPDATE (sx126x 0.0.3 -> 0.3.0, see idf_component.yml): the driver's
+// sx126x_get_packet_status_lora() got fixed against the datasheet upstream --
+// out-params are now correctly-named real float dB/dBm values (snr, rssi,
+// signal_rssi, that order) instead of the old misleadingly-named raw uint8_t
+// register bytes this comment used to describe. The correct-units conversion
+// now happens inside the driver itself; lora_protocol_server.c just rounds
+// the floats into this struct's fixed-point wire fields (and works around a
+// known upstream sign-extension bug in the driver's own SNR computation --
+// see the comment at that call site).
 //
 // WIRE-COMPATIBILITY WARNING: this struct was newly inserted into the
 // PACKET_RX event payload and there is no protocol version field anywhere in
