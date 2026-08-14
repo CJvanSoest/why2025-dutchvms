@@ -27,4 +27,4 @@ dependencies:
         version: "~1"
   # Tanmatsu LoRa port — SX1262 driver van Nicolai Electronics
   nicolaielectronics/sx126x:
-    version: "~0.0.3"
+    version: "~0.3.0"

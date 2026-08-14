@@ -263,7 +263,10 @@ static esp_err_t apply_config_locked(uint8_t* config_data, size_t config_length)
             return ESP_ERR_INVALID_ARG;
     }
 
-    res = sx126x_set_modulation_params_lora(&lora_handle, spreading_factor, bandwidth, coding_rate,
+    // automatic_ldro=false: keep our own explicit low_data_rate_optimization wire field
+    // as the sole source of truth (sx126x >=0.1.0 can auto-derive LDRO from SF/BW instead,
+    // but that would be a behavior change beyond this dependency bump).
+    res = sx126x_set_modulation_params_lora(&lora_handle, spreading_factor, bandwidth, coding_rate, false,
                                             config_params->low_data_rate_optimization);
     if (res != ESP_OK) {
         ESP_LOGE(TAG, "Failed to set LoRa modulation parameters: %s", esp_err_to_name(res));

@@ -50,7 +50,7 @@ dependencies:
       type: service
     version: 0.1.4
   espressif/mqtt:
-    component_hash: ffdad5659706b4dc14bc63f8eb73ef765efa015bf7e9adf71c813d52a2dc9342
+    component_hash: fb18bc3b65aa8c94693a9811ffc322cca8a65d92d5ec84983d3e385080e3969c
     dependencies:
     - name: idf
       require: private
@@ -58,18 +58,18 @@ dependencies:
     source:
       registry_url: https://components.espressif.com/
       type: service
-    version: 1.0.0
+    version: 1.1.0
   idf:
     source:
       type: idf
     version: 5.5.1
   nicolaielectronics/sx126x:
-    component_hash: bcd14ddf5981071ce4734eced3082f425098826bcce514a8f467d41d18f1d291
+    component_hash: f236b1290c2725b7d5df5e5e286a355429951ce491649bab558377ebc46f7b2d
     dependencies: []
     source:
       registry_url: https://components.espressif.com/
       type: service
-    version: 0.0.3
+    version: 0.3.0
 direct_dependencies:
 - cmd_system
 - esp-qa/ping-cmd
@@ -78,6 +78,6 @@ direct_dependencies:
 - espressif/iperf-cmd
 - espressif/mqtt
 - nicolaielectronics/sx126x
-manifest_hash: dfc8b3539e4092c89270fafac295922baf8f45b6b8127dc8bf6de9cee7032f25
+manifest_hash: 69c4391c215a38da8b547dd22af8981c24260938abb66baab132a68280d34912
 target: esp32c6
 version: 2.0.0
