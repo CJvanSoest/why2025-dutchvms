@@ -18,6 +18,7 @@ Last updated: 2026-08-14.
 8. [PAX app-side symbol gaps](#8-pax-app-side-symbol-gaps)
 9. [cj_launcher PAX splash performance](#9-cj_launcher-pax-splash-performance)
 17. [Color-value-dependent render glitch (stripe/flicker)](#17-color-value-dependent-render-glitch-stripeflicker)
+18. [C6 LoRa custom-RPC handler registration silently fails](#18-c6-lora-custom-rpc-handler-registration-silently-fails)
 
 ### Open / partially resolved
 
@@ -73,6 +74,10 @@ The boot-splash animation ran choppily. Two rounds of CPU draw-cost optimization
 Certain solid-fill colors (e.g. `0x7AA2F7`, `0xBB9AF7`) rendered as two different colors within one fill, or flickered over time. Three PPA-specific hypotheses were ruled out first (integer-upscaling interpolation, hardware `rgb_swap`, missing input cache-flush) and the bug was confirmed to reproduce identically with PPA fully disabled — so the compositor was never the cause. Root cause, found via 5 further hardware A/B tests (screen-panel timing swap, PSRAM speed, a physical connector flex test, and finally MIPI DSI lane bitrate): **MIPI DSI signal integrity** between the P4 and the display panel. Fix: `LCD_MIPI_DSI_LANE_BITRATE_MBPS` lowered from 1000 to 700 in `badgevms/drivers/st7703.c`. Also refutes the earlier "B=247 threshold" theory — a full blue-channel sweep banded identically at every value from 230 to 255. Hardware-confirmed.
 **Full details:** [issue #65](https://github.com/CJvanSoest/why2025-dutchvms/issues/65) (closed), [issue #77](https://github.com/CJvanSoest/why2025-dutchvms/issues/77) (full test log)
 
+### 18. C6 LoRa custom-RPC handler registration silently fails
+`CONFIG_ESP_HOSTED_MAX_CUSTOM_MSG_HANDLERS` defaulted to 3 on the C6. `tanmatsu_main.c` registers 3 non-LoRa custom RPC callbacks (echo, display backlight, keyboard backlight) before `lora_protocol_server.c`'s `lora_initialize()` tries to register a 4th (`TANMATSU_EVENT_LORA`). The table was full, so that registration silently failed with `ESP_ERR_NO_MEM` ("No space for callback") — LoRa never started (no crash, C6 stayed quiet), so every P4-side LoRa RPC call got `ESP_ERR_NOT_FOUND` forever, which showed up on the badge as the LoRa status LED (LED0) stuck red after the 15s startup grace period, with an otherwise perfectly healthy boot. Shipped in v1.4.0 undetected — the sx126x driver upgrade in that release was the first time anyone watched LoRa init closely on hardware after a clean build. Fixed by raising the limit to 6 in `sdkconfig.defaults`. Hardware-confirmed (LED0 + LED1 both green, no more `ESP_ERR_NOT_FOUND` in the boot log).
+**Full details:** [issue #82](https://github.com/CJvanSoest/why2025-dutchvms/issues/82)
+
 ---
 
 ## Open / partially resolved
@@ -87,6 +92,7 @@ The OTA partition was never marked valid despite the new image running fine — 
 
 ### 12. C6 radio sometimes reflashes on every boot
 After a P4 reflash, the C6 radio started reflashing itself on every boot despite matching MD5s — an app-level resync via the launcher didn't fix it. **Workaround**: a direct esptool bin-flash of the C6 from the NAS (bypassing the app-level flash logic) works reliably. The underlying bug in `slave_c6_flasher.c`'s own flash-then-verify logic hasn't been found.
+**2026-08-14 correction**: "works reliably" above is misleading — a direct esptool flash of the C6 alone does **not** stick. `flash_slave_c6_if_needed()` (`badgevms/drivers/esp-serial-flasher/slave_c6_flasher.c`) runs on every P4 boot and compares the on-chip C6 firmware's MD5 against the SD-staged `APPS:[why2025_firmware_ota_c6]` bundle, silently reflashing the C6 back to whatever's staged there on any mismatch. The P4 stays powered even with its own USB cable unplugged (shared board power), and this badge appears to reset one chip whenever the other's USB cable is (re)connected — so a cable-only esptool C6 flash gets silently reverted the next time the P4 reboots, which on this hardware can be triggered just by plugging in the other chip's cable. Confirmed by direct reproduction: an esptool flash that verified correct by hash immediately failed a `verify_flash` check a few minutes later, with the boot log showing the pre-fix firmware's behavior again. This is expected/correct behavior of the auto-heal mechanism itself, not a new bug — but it means any manual C6 firmware change (including this session's fix for #82) must also update the SD-staged bundle (3 `.bin` files + `.md5` sidecars), or it silently reverts.
 **Full details:** [issue #60](https://github.com/CJvanSoest/why2025-dutchvms/issues/60)
 
 ### 13. Deploy PUT: OOM + UART overrun on large files
