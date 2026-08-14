@@ -44,3 +44,15 @@ CONFIG_ESP_WIFI_ENTERPRISE_SUPPORT=n
 ## WHY badge Tanmatsu LoRa port — Tanmatsu's tanmatsu_main.c provides app_main,
 ## so disable upstream's app_main in esp_hosted_coprocessor.c to avoid duplicate symbol.
 CONFIG_ESP_HOSTED_COPROCESSOR_APP_MAIN=n
+
+## tanmatsu_main.c's app_main() registers 3 custom RPC callbacks (echo,
+## display backlight, keyboard backlight) before lora_protocol_server.c's
+## lora_initialize() tries to register a 4th (TANMATSU_EVENT_LORA). The
+## upstream default of 3 leaves no room for it: registration silently fails
+## with ESP_ERR_NO_MEM ("No space for callback"), LoRa never starts, and
+## every P4-side LoRa RPC then fails with ESP_ERR_NOT_FOUND (no handler
+## registered) -- no crash, no error on the P4 side beyond that, just a
+## LoRa status LED stuck red. Each handler is ~12 bytes; 6 leaves headroom
+## for IR (also wired through this same table, though unused on WHY badge
+## since it has no IR-TX pad) without landing on this exact edge again.
+CONFIG_ESP_HOSTED_MAX_CUSTOM_MSG_HANDLERS=6
