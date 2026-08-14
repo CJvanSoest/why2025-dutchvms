@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 #include "lora_protocol_server.h"
+#include <math.h>
 #include <stddef.h>
 #include <stdio.h>
 #include "esp_err.h"
@@ -263,7 +264,10 @@ static esp_err_t apply_config_locked(uint8_t* config_data, size_t config_length)
             return ESP_ERR_INVALID_ARG;
     }
 
-    res = sx126x_set_modulation_params_lora(&lora_handle, spreading_factor, bandwidth, coding_rate,
+    // automatic_ldro=false: keep our own explicit low_data_rate_optimization wire field
+    // as the sole source of truth (sx126x >=0.1.0 can auto-derive LDRO from SF/BW instead,
+    // but that would be a behavior change beyond this dependency bump).
+    res = sx126x_set_modulation_params_lora(&lora_handle, spreading_factor, bandwidth, coding_rate, false,
                                             config_params->low_data_rate_optimization);
     if (res != ESP_OK) {
         ESP_LOGE(TAG, "Failed to set LoRa modulation parameters: %s", esp_err_to_name(res));
@@ -848,16 +852,30 @@ void read_data(void) {
     printf("\r\n");
 
     // Read signal quality of the packet we just pulled out of the RX buffer.
-    // NOTE: the driver's out-parameter names are misleading (see the big comment
-    // on lora_protocol_rx_stats_t in lora_protocol.h) — despite their names,
-    // this call returns raw RssiPkt, raw SnrPkt, raw SignalRssiPkt in that order.
-    uint8_t   raw_rssi_pkt = 0, raw_snr_pkt = 0, raw_signal_rssi_pkt = 0;
-    esp_err_t stats_res =
-        sx126x_get_packet_status_lora(&lora_handle, &raw_rssi_pkt, &raw_snr_pkt, &raw_signal_rssi_pkt);
+    // sx126x >=0.2.0 fixed this call's out-params against the datasheet: it now
+    // returns real float dB/dBm values (snr, rssi, signal_rssi, in that order --
+    // NOTE the order changed too, SNR moved first) instead of the old raw,
+    // misleadingly-named uint8_t register bytes this code used to interpret by
+    // hand (see git history for that version).
+    //
+    // Known upstream bug (sx126x.c as of v0.3.0): the driver computes SNR as
+    // `result[3] / 4.0f` without sign-extending result[3] first, so a real
+    // negative SNR (very common -- LoRa routinely decodes below the noise
+    // floor) comes back as a large bogus positive value instead. A single
+    // quarter-dB byte can't legitimately read above 127/4 = 31.75 dB, so any
+    // reported value at or above 32.0 dB is actually a wrapped negative one;
+    // correct it by subtracting 64.0 (256/4). This self-heals if upstream
+    // fixes the sign bug later: a real fix would also never emit >=32 dB, so
+    // the correction becomes a no-op instead of double-correcting.
+    float     snr_pkt_db = 0, rssi_pkt_dbm = 0, signal_rssi_pkt_db = 0;
+    esp_err_t stats_res  = sx126x_get_packet_status_lora(&lora_handle, &snr_pkt_db, &rssi_pkt_dbm, &signal_rssi_pkt_db);
     if (stats_res == ESP_OK) {
-        stats->rssi_dbm        = (int16_t)(-(int16_t)raw_rssi_pkt / 2);
-        stats->snr_db_x4       = (int8_t)raw_snr_pkt;  // already a signed quarter-dB value
-        stats->signal_rssi_dbm = (int16_t)(-(int16_t)raw_signal_rssi_pkt / 2);
+        if (snr_pkt_db >= 32.0f) {
+            snr_pkt_db -= 64.0f;
+        }
+        stats->rssi_dbm        = (int16_t)lroundf(rssi_pkt_dbm);
+        stats->snr_db_x4       = (int8_t)lroundf(snr_pkt_db * 4.0f);
+        stats->signal_rssi_dbm = (int16_t)lroundf(signal_rssi_pkt_db);
     } else {
         ESP_LOGW(TAG, "Failed to get LoRa packet status: %s", esp_err_to_name(stats_res));
         // 0 dBm never occurs for a real received LoRa packet, so it doubles as an
