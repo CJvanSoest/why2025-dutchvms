@@ -2,7 +2,7 @@
 
 This document collects the significant bugs/root-cause investigations from the WHY2025 badge project (DutchVMS firmware): what exactly was wrong, which files/code it affected, what fix attempts were made, and the result. Each item has its own GitHub issue with the full details.
 
-Last updated: 2026-08-05.
+Last updated: 2026-08-14.
 
 ## Table of contents
 
@@ -17,6 +17,7 @@ Last updated: 2026-08-05.
 7. [Display backlight GPIO + PWM curve](#7-display-backlight-gpio--pwm-curve)
 8. [PAX app-side symbol gaps](#8-pax-app-side-symbol-gaps)
 9. [cj_launcher PAX splash performance](#9-cj_launcher-pax-splash-performance)
+17. [Color-value-dependent render glitch (stripe/flicker)](#17-color-value-dependent-render-glitch-stripeflicker)
 
 ### Open / partially resolved
 
@@ -68,13 +69,17 @@ PAX apps wouldn't start — initial diagnosis suspected a missing kernel TLS run
 The boot-splash animation ran choppily. Two rounds of CPU draw-cost optimization had zero effect — the real bottleneck was a fixed 60ms `usleep()` after every frame plus a halved rotation counter. Fix: 60ms→15ms + stop halving the rotation. Hardware-confirmed.
 **Full details:** [issue #58](https://github.com/CJvanSoest/why2025-dutchvms/issues/58)
 
+### 17. Color-value-dependent render glitch (stripe/flicker)
+Certain solid-fill colors (e.g. `0x7AA2F7`, `0xBB9AF7`) rendered as two different colors within one fill, or flickered over time. Three PPA-specific hypotheses were ruled out first (integer-upscaling interpolation, hardware `rgb_swap`, missing input cache-flush) and the bug was confirmed to reproduce identically with PPA fully disabled — so the compositor was never the cause. Root cause, found via 5 further hardware A/B tests (screen-panel timing swap, PSRAM speed, a physical connector flex test, and finally MIPI DSI lane bitrate): **MIPI DSI signal integrity** between the P4 and the display panel. Fix: `LCD_MIPI_DSI_LANE_BITRATE_MBPS` lowered from 1000 to 700 in `badgevms/drivers/st7703.c`. Also refutes the earlier "B=247 threshold" theory — a full blue-channel sweep banded identically at every value from 230 to 255. Hardware-confirmed.
+**Full details:** [issue #65](https://github.com/CJvanSoest/why2025-dutchvms/issues/65) (closed), [issue #77](https://github.com/CJvanSoest/why2025-dutchvms/issues/77) (full test log)
+
 ---
 
 ## Open / partially resolved
 
 ### 10. SD-card write corruption (manifests + ELFs)
-Files on the SD card (`badgevms_launcher.json`, `cj_launcher.elf`, and separately-observed `cj_hello.json`/`cj_files.json`) have twice been found corrupted at the correct file length but with garbage content partway through — two different garbage signatures seen (a repeating byte pattern, and all-zero). First occurrence followed a WiFi app-repo self-update download; second followed a plain firmware reflash+reboot with no download involved, and hit two apps (`cj_hello`, `cj_files`) that never write their own manifest. That rules out "specific to the launcher's download code" as the sole cause and points at the underlying SD/FAT write path more broadly (`badgevms/drivers/fatfs.c` + the wear-leveling library) not being safe against a reset/power-cycle interrupting a write. Both occurrences recovered by rewriting the affected files directly via an external SD card reader, bypassing the badge. Root cause not yet found.
-**Full details:** [issue #65](https://github.com/CJvanSoest/why2025-dutchvms/issues/65)
+Files on the SD card (`badgevms_launcher.json`, `cj_launcher.elf`, and separately-observed `cj_hello.json`/`cj_files.json`) have twice been found corrupted at the correct file length but with garbage content partway through — two different garbage signatures seen (a repeating byte pattern, and all-zero). First occurrence followed a WiFi app-repo self-update download; second followed a plain firmware reflash+reboot with no download involved, and hit two apps (`cj_hello`, `cj_files`) that never write their own manifest. That rules out "specific to the launcher's download code" as the sole cause and points at the underlying SD/FAT write path more broadly (`badgevms/drivers/fatfs.c` + the wear-leveling library) not being safe against a reset/power-cycle interrupting a write. Both occurrences recovered by rewriting the affected files directly via an external SD card reader, bypassing the badge. Root cause not yet found. **2026-08-14: reproduced again** — a `cj_launcher.elf` UART deploy failed mid-transfer (see #13) and left the file fully truncated to 0 bytes rather than garbage-filled, a third distinct corruption signature; recovered the same way (direct SD card reader). No GitHub issue has actually been filed for this topic yet despite the number below — flagging rather than leaving a dangling/misleading link.
+**Full details:** issue #65 was believed to be reserved for this when this doc was written, but that number was later used for a different, unrelated (now-closed) issue — see [#17](#17-color-value-dependent-render-glitch-stripeflicker) above. This SD-corruption topic still needs its own real issue filed.
 
 ### 11. P4 OTA never gets confirmed (validate_ota_partition)
 The OTA partition was never marked valid despite the new image running fine — four independent instrumentation channels (UART, SD, NVS flag, NVS stack watermark) all showed zero evidence the confirmation code itself executes. **Workaround applied**: bootloader rollback disabled (`CONFIG_BOOTLOADER_APP_ROLLBACK_ENABLE` off) since v1.3.17 — OTA updates have worked reliably since. The underlying mystery hasn't been found; that remains open and needs a JTAG session.
@@ -85,7 +90,7 @@ After a P4 reflash, the C6 radio started reflashing itself on every boot despite
 **Full details:** [issue #60](https://github.com/CJvanSoest/why2025-dutchvms/issues/60)
 
 ### 13. Deploy PUT: OOM + UART overrun on large files
-Two related bugs in the same code path. The OOM bug (mallocing the whole frame) was fixed via a streaming rewrite, but that PR isn't merged — blocked by a separate, not cleanly isolated intermittent early-boot heap crash. Separately, a large file (>100KB) still crashes the badge via a suspected UART RX FIFO overflow during SD writes — two mitigation attempts (smaller chunks, upfront `ftruncate`) didn't fix it.
+Two related bugs in the same code path. The OOM bug (mallocing the whole frame) was fixed via a streaming rewrite, but that PR isn't merged — blocked by a separate, not cleanly isolated intermittent early-boot heap crash. Separately, a large file (>100KB) still crashes the badge via a suspected UART RX FIFO overflow during SD writes — two mitigation attempts (smaller chunks, upfront `ftruncate`) didn't fix it. **2026-08-14: reproduced again** deploying a 203KB `cj_launcher.elf` — failed consistently across 3 attempts (2 with a "no response magic" timeout, 1 with a raw `OSError: Input/output error` on the serial write), corrupting the file to 0 bytes and crash-looping the launcher. Recovered via direct SD-card-reader file replacement, not UART. Still not root-caused; **do not deploy `cj_launcher` over UART** until this is fixed — use the app-repository publish flow or bake it into the firmware's `flash_storage/skel` instead.
 **Full details:** [issue #61](https://github.com/CJvanSoest/why2025-dutchvms/issues/61)
 
 ### 14. Factory flash wipes WiFi credentials
@@ -97,5 +102,5 @@ The About screen occasionally crashes right after a firmware update. No targeted
 **Full details:** [issue #63](https://github.com/CJvanSoest/why2025-dutchvms/issues/63)
 
 ### 16. Stray render dots on Home tiles
-Render artifacts on the Apps/Storage tiles whose position shifts between frames. Not yet investigated.
+Render artifacts on the Apps/Storage tiles whose position shifts between frames. Not yet investigated. **2026-08-14: confirmed independent of #17's color-glitch fix** — the DSI-signal-integrity fix that resolved the stripe/flicker bug left these dots unchanged, so they have a separate root cause, not the shared one #17's issue originally speculated about.
 **Full details:** [issue #64](https://github.com/CJvanSoest/why2025-dutchvms/issues/64)

@@ -21,6 +21,16 @@ Entries from here on are the source of truth going forward.
 
 ## [Unreleased]
 
+### Fixed
+- **Color-value-dependent render glitch (stripe/flicker)** — root-caused to MIPI DSI lane
+  signal integrity between the P4 and the display panel, not the PPA/compositor path
+  originally suspected. Fixed by lowering `LCD_MIPI_DSI_LANE_BITRATE_MBPS` from 1000 to 700
+  in `badgevms/drivers/st7703.c`. See [issue #77](https://github.com/CJvanSoest/why2025-dutchvms/issues/77)
+  for the full test log; closes #65.
+- **`CONFIG_SCREEN_TYPE_MOUNTAIN` never actually compiled** — a copy-paste bug in
+  `badgevms/drivers/st7703.h`'s DPI config macro (two struct fields merged onto one line with
+  a missing comma) meant nobody had build-tested that screen variant before. Fixed.
+
 ## [1.3.19] - 2026-08-07
 
 ### Fixed
