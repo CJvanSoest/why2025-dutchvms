@@ -21,6 +21,16 @@ Entries from here on are the source of truth going forward.
 
 ## [Unreleased]
 
+## [1.4.1] - 2026-08-14
+
+### Fixed
+- **C6 LoRa never started, showing as the LoRa status LED stuck red** — `CONFIG_ESP_HOSTED_MAX_CUSTOM_MSG_HANDLERS`
+  defaulted to 3, but the C6 registers 4 custom RPC callbacks (echo, display backlight, keyboard
+  backlight, then LoRa); the table was full by the time LoRa's own registration ran, so it silently
+  failed with `ESP_ERR_NO_MEM` and every P4-side LoRa RPC call got `ESP_ERR_NOT_FOUND` forever.
+  Shipped in v1.4.0 undetected. Fixed by raising the limit to 6 in `sdkconfig.defaults`
+  (GitHub issue #82).
+
 ## [1.4.0] - 2026-08-14
 
 ### Added
