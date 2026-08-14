@@ -52,8 +52,10 @@
 #define MIPI_DSI_PHY_PWR_LDO_CHAN       (3) // LDO_VO3 is connected to VDD_MIPI_DPHY
 #define MIPI_DSI_PHY_PWR_LDO_VOLTAGE_MV (2500)
 #define LCD_MIPI_DSI_BUS_ID             (0)
-#define LCD_MIPI_DSI_LANE_NUM           (2)    // 2 data lanes
-#define LCD_MIPI_DSI_LANE_BITRATE_MBPS  (1000) // 1Gbps
+#define LCD_MIPI_DSI_LANE_NUM           (2) // 2 data lanes
+#define LCD_MIPI_DSI_LANE_BITRATE_MBPS                                                                                 \
+    (700) // was 1000 (1Gbps); lowered to fix a signal-integrity
+          // stripe/dot artifact on certain colors, see issue #65
 
 #ifdef CUSTOM_INIT_CMDS
 static st7703_lcd_init_cmd_t const custom_init[] = CUSTOM_INIT_CMDS();

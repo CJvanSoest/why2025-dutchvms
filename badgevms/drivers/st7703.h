@@ -38,7 +38,8 @@ extern "C" {
         .dpi_clock_freq_mhz = 58,                                                                                      \
         .virtual_channel    = 0,                                                                                       \
         .pixel_format       = (FRAMEBUFFER_BPP == 2 ? LCD_COLOR_PIXEL_FORMAT_RGB565 : LCD_COLOR_PIXEL_FORMAT_RGB888),  \
-        .num_fbs            = DISPLAY_FRAMEBUFFERS.video_timing =                                                      \
+        .num_fbs            = DISPLAY_FRAMEBUFFERS,                                                                    \
+        .video_timing =                                                                                                \
             {                                                                                                          \
                 .h_size            = 720,                                                                              \
                 .v_size            = 720,                                                                              \
