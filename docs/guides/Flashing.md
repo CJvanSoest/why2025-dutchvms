@@ -120,22 +120,40 @@ python -m esptool --chip esp32p4 -b 460800 --port /dev/ttyUSB0 \
 
 ## Getting the DutchVMS launcher onto a fresh badge
 
-**This step is easy to miss and the badge will not show DutchVMS without
-it.** The factory `storage.bin` (see above) only bakes in two small
-diagnostic apps (`cj_i2c_scan`, `cj_lora_info` — see
-`flash_storage/skel/BADGEVMS/APPS/`) and the C6 OTA bundle. It does **not**
-include a launcher: not the generic BadgeVMS reference launcher
-(`sdk_apps/badgevms_launcher` here is source only, never copied into
-`storage.bin`) and not `cj_launcher` (it lives in the separate
-[why2025-apps](https://github.com/CJvanSoest/why2025-apps) repo, so this
-firmware repo's build can't bundle it). A badge that's only had firmware
-flashed will boot to a blank/fallback screen or, if something else was
-installed as a launcher previously, that instead of DutchVMS branding.
+**As of v1.4.0, the factory `storage.bin` already bakes in a working
+`cj_launcher`** (`flash_storage/skel/BADGEVMS/APPS/badgevms_launcher/`,
+alongside the small diagnostic apps `cj_i2c_scan`/`cj_lora_info` and the C6
+OTA bundle) — added as a recovery safety net, since a corrupted launcher
+can't run its own self-update to fix itself (see `docs/CHANGELOG.md`
+`[1.4.0]`). A badge freshly flashed with `esp32p4-factory-erases-storage.bin`
+(or `build/storage.bin` from source) now boots straight into DutchVMS with no
+extra step needed.
 
-After flashing the P4 and C6 as above, deploy `cj_launcher` as the very
-first app, over the P4's UART (side port — see "Installing/updating
-individual apps" below for the general form). **You do not need to build it
-yourself** — a current, ready-to-use build is published in the
+The version baked in is whatever was committed at release time, so it can be
+older than what's in the store — after first boot, Launcher → Settings →
+Update Firmware or the APP REPO tile picks up the current published version.
+If you're building from source and the skel's `badgevms_launcher/` is
+missing or you want a newer build baked in, regenerate it with
+`why2025-apps/apps/install-to-firmware-skel.sh` before `idf.py build` (see
+that script's own comments — it reads each app's `unique_identifier` from
+its manifest, so the target directory name won't match the source folder
+name for this app).
+
+**Recovering an already-provisioned badge with a corrupted launcher:**
+using the factory image/`storage.bin` to restore the baked-in launcher also
+wipes every other installed app, WiFi credentials, and MeshCore identity —
+it's provisioning a blank badge, not a surgical launcher-only fix. For a
+badge that already has real data on it, either pull the SD card and copy a
+known-good `cj_launcher.elf` + manifest onto it directly with a card reader
+(no reflash, nothing else touched — see `docs/KNOWN_ISSUES.md` #13 for a
+worked example), or deploy a fresh build over UART instead (see below) if
+the deploy listener is still reachable.
+
+Deploying `cj_launcher` manually over UART (below) is still the right move
+if you're running an older release whose skel predates v1.4.0, or if you
+just want the very latest build without waiting for the next firmware
+release. **You do not need to build it yourself** — a current, ready-to-use
+build is published in the
 [why2025-app-repository](https://github.com/CJvanSoest/why2025-app-repository)
 (the same store `cj_launcher`'s own APP REPO tile pulls from once it's
 running), so grab the two files straight from there:
