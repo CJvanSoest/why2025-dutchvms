@@ -16,9 +16,9 @@
 
 #include "tty.h"
 
+#include "driver/uart.h"
 #include "esp_log.h"
 #include "freertos/FreeRTOS.h"
-#include "rom/uart.h"
 
 #include <stdbool.h>
 #include <stdio.h>
@@ -56,13 +56,13 @@ static ssize_t tty_read(void *dev, int fd, void *buf, size_t count) {
     tty_device_t *device = dev;
 
     if (device->is_stdin) {
+        /* Reads through the UART0 driver installed in why2025_firmware.c's
+         * app_main() (shared with deploy_protocol.c) instead of raw ROM
+         * uart_rx_one_char() polling — see the install site for why. */
         uint8_t c;
-        while (1) {
-            ETS_STATUS s = uart_rx_one_char(&c);
-            if (s == ETS_OK)
-                break;
-            vTaskDelay(10 / portTICK_PERIOD_MS);
-        }
+        int     got = uart_read_bytes(UART_NUM_0, &c, 1, portMAX_DELAY);
+        if (got != 1)
+            return 0;
         ((char *)buf)[0] = c;
         return 1;
     }

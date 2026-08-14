@@ -22,7 +22,12 @@
 #include "badgevms/process.h"
 #include "badgevms_config.h"
 #include "compositor_private.h"
+#if CONFIG_CJ_BADGEVMS_COMPOSITOR_USE_PPA
 #include "driver/ppa.h"
+#endif
+#if CONFIG_CJ_BADGEVMS_COMPOSITOR_USE_PPA && CONFIG_CJ_BADGEVMS_COMPOSITOR_PPA_SW_RGB_SWAP
+#include "esp_heap_caps.h"
+#endif
 #include "esp_cache.h"
 #include "esp_ipc.h"
 #include "esp_log.h"
@@ -99,6 +104,7 @@ static inline void mark_scene_damaged(void) {
     background_damaged    = ALL_DISPLAY_FB_MASK;
 }
 
+#if CONFIG_CJ_BADGEVMS_COMPOSITOR_USE_PPA
 __attribute__((always_inline)) static inline ppa_srm_rotation_angle_t rotation_to_srm(rotation_angle_t rotation) {
     switch (rotation) {
         case ROTATION_ANGLE_270: return PPA_SRM_ROTATION_ANGLE_90;
@@ -108,6 +114,7 @@ __attribute__((always_inline)) static inline ppa_srm_rotation_angle_t rotation_t
     }
     return PPA_SRM_ROTATION_ANGLE_0;
 }
+#endif
 
 __attribute__((always_inline)) static inline window_size_t window_clamp_size(window_t *window, window_size_t size) {
     window_size_t ret;
@@ -250,12 +257,14 @@ void window_calculate_visible_regions(window_t *window, window_t *window_list_he
     }
 
     merge_rectangles(&window->visible);
+#if CONFIG_CJ_BADGEVMS_COMPOSITOR_USE_PPA
     int dropped = 0;
     while (ppa_workaround_split_rects(&window->visible, scale, &dropped)) {
     }
     if (dropped) {
         ESP_LOGW(TAG, "Dropped %d damage rect(s) past MAX_VISIBLE_RECTS -- expect stale pixels", dropped);
     }
+#endif
 }
 
 window_rect_t content_to_framebuffer_rect(window_rect_t content_rect, window_t *window, float scale) {
@@ -422,7 +431,40 @@ IRAM_ATTR static void on_refresh(void *ignored) {
 //     return true;
 // }
 
+#if CONFIG_CJ_BADGEVMS_COMPOSITOR_USE_PPA && CONFIG_CJ_BADGEVMS_COMPOSITOR_PPA_SW_RGB_SWAP
+// Swaps the R and B channels of a sub-rectangle of `src` (stride `src_stride_px`
+// pixels) into `dst`, tightly packed at rect.w stride. Used to pre-swap into a
+// scratch buffer so PPA's own rgb_swap bit can stay off -- see this option's
+// Kconfig help text for why.
+static void copy_swap_rb_rect(void *dst, void const *src, int src_stride_px, int bytes_per_pixel, window_rect_t rect) {
+    if (bytes_per_pixel == 2) {
+        uint16_t       *d = (uint16_t *)dst;
+        uint16_t const *s = (uint16_t const *)src;
+        for (int y = 0; y < rect.h; y++) {
+            uint16_t const *srow = s + (size_t)(rect.y + y) * src_stride_px + rect.x;
+            uint16_t       *drow = d + (size_t)y * rect.w;
+            for (int x = 0; x < rect.w; x++) {
+                uint16_t p = srow[x];
+                drow[x]    = (uint16_t)((p & 0x07E0) | ((p & 0xF800) >> 11) | ((p & 0x001F) << 11));
+            }
+        }
+    } else {
+        uint32_t       *d = (uint32_t *)dst;
+        uint32_t const *s = (uint32_t const *)src;
+        for (int y = 0; y < rect.h; y++) {
+            uint32_t const *srow = s + (size_t)(rect.y + y) * src_stride_px + rect.x;
+            uint32_t       *drow = d + (size_t)y * rect.w;
+            for (int x = 0; x < rect.w; x++) {
+                uint32_t p = srow[x];
+                drow[x]    = (p & 0xFF00FF00u) | ((p & 0x00FF0000u) >> 16) | ((p & 0x000000FFu) << 16);
+            }
+        }
+    }
+}
+#endif
+
 static void IRAM_ATTR NOINLINE_ATTR compositor(void *ignored) {
+#if CONFIG_CJ_BADGEVMS_COMPOSITOR_USE_PPA
     static ppa_client_handle_t ppa_srm_handle = NULL;
 
     ppa_client_config_t ppa_srm_config = {
@@ -436,6 +478,14 @@ static void IRAM_ATTR NOINLINE_ATTR compositor(void *ignored) {
 
     ppa_register_client(&ppa_srm_config, &ppa_srm_handle);
     // ppa_client_register_event_callbacks(ppa_srm_handle, &srm_callbacks);
+#if CONFIG_CJ_BADGEVMS_COMPOSITOR_PPA_SW_RGB_SWAP
+    // Max size any single block could need: a full 720x720 frame at 4 bytes/pixel.
+    void *rgb_swap_scratch = heap_caps_malloc(FRAMEBUFFER_MAX_W * FRAMEBUFFER_MAX_H * 4, MALLOC_CAP_DEFAULT);
+    if (!rgb_swap_scratch) {
+        ESP_LOGE(TAG, "No memory for PPA rgb_swap scratch buffer -- falling back to hardware rgb_swap");
+    }
+#endif
+#endif
 
     bool fn_down     = false;
     bool frame_ready = false;
@@ -685,6 +735,7 @@ static void IRAM_ATTR NOINLINE_ATTR compositor(void *ignored) {
                 }
 
                 if (need_content_draw) {
+#if CONFIG_CJ_BADGEVMS_COMPOSITOR_USE_PPA
                     ppa_srm_rotation_angle_t ppa_rotation = rotation_to_srm(rotation);
                     bool                     rgb_swap     = false;
                     bool                     byte_swap    = false;
@@ -704,6 +755,24 @@ static void IRAM_ATTR NOINLINE_ATTR compositor(void *ignored) {
                         default:
                     }
 
+#if CONFIG_CJ_BADGEVMS_COMPOSITOR_PPA_SW_RGB_SWAP
+                    bool do_sw_rgb_swap = rgb_swap && rgb_swap_scratch;
+                    if (do_sw_rgb_swap) {
+                        rgb_swap = false; // done on the CPU below instead -- see Kconfig help text
+                    }
+#endif
+
+                    // PPA DMA-reads this buffer below; flush the CPU cache first so it sees the
+                    // app's latest writes. Hardware-tested 2026-08-12/13: this alone doesn't fix
+                    // the known PPA color bug (see CJ_BADGEVMS_COMPOSITOR_USE_PPA's Kconfig help
+                    // text), but it's a real correctness fix on its own merits regardless, so it
+                    // stays unconditional rather than behind a diagnostic flag.
+                    esp_cache_msync(
+                        framebuffer->framebuffer.pixels,
+                        (size_t)framebuffer->w * framebuffer->h * BADGEVMS_BYTESPERPIXEL(framebuffer->format),
+                        ESP_CACHE_MSYNC_FLAG_DIR_C2M
+                    );
+
                     for (int i = 0; i < window->visible.count; i++) {
                         window_rect_t visible_content = window->visible.rects[i];
                         window_rect_t fb_rect         = content_to_framebuffer_rect(visible_content, window, scale);
@@ -714,14 +783,43 @@ static void IRAM_ATTR NOINLINE_ATTR compositor(void *ignored) {
 
                         window_rect_t rotated_output = rotate_rect(visible_content, rotation);
 
+                        void *ppa_in_buffer      = framebuffer->framebuffer.pixels;
+                        int   ppa_in_pic_w       = framebuffer->w;
+                        int   ppa_in_pic_h       = framebuffer->h;
+                        int   ppa_in_block_off_x = fb_rect.x;
+                        int   ppa_in_block_off_y = fb_rect.y;
+
+#if CONFIG_CJ_BADGEVMS_COMPOSITOR_PPA_SW_RGB_SWAP
+                        if (do_sw_rgb_swap) {
+                            int bpp = BADGEVMS_BYTESPERPIXEL(framebuffer->format);
+                            copy_swap_rb_rect(
+                                rgb_swap_scratch,
+                                framebuffer->framebuffer.pixels,
+                                framebuffer->w,
+                                bpp,
+                                fb_rect
+                            );
+                            esp_cache_msync(
+                                rgb_swap_scratch,
+                                (size_t)fb_rect.w * fb_rect.h * bpp,
+                                ESP_CACHE_MSYNC_FLAG_DIR_C2M
+                            );
+                            ppa_in_buffer      = rgb_swap_scratch;
+                            ppa_in_pic_w       = fb_rect.w;
+                            ppa_in_pic_h       = fb_rect.h;
+                            ppa_in_block_off_x = 0;
+                            ppa_in_block_off_y = 0;
+                        }
+#endif
+
                         ppa_srm_oper_config_t oper_config = {
-                            .in.buffer         = framebuffer->framebuffer.pixels,
-                            .in.pic_w          = framebuffer->w,
-                            .in.pic_h          = framebuffer->h,
+                            .in.buffer         = ppa_in_buffer,
+                            .in.pic_w          = ppa_in_pic_w,
+                            .in.pic_h          = ppa_in_pic_h,
                             .in.block_w        = fb_rect.w,
                             .in.block_h        = fb_rect.h,
-                            .in.block_offset_x = fb_rect.x,
-                            .in.block_offset_y = fb_rect.y,
+                            .in.block_offset_x = ppa_in_block_off_x,
+                            .in.block_offset_y = ppa_in_block_off_y,
                             .in.srm_cm         = mode,
 
                             .out.buffer         = framebuffers[cur_fb],
@@ -748,6 +846,54 @@ static void IRAM_ATTR NOINLINE_ATTR compositor(void *ignored) {
                             window->fb_dirty &= ~(1 << cur_fb);
                         }
                     }
+#else  // !CONFIG_CJ_BADGEVMS_COMPOSITOR_USE_PPA
+       // CPU replacement for the PPA path above -- see
+       // pixel_functions.c's blit_rect_rotated() and
+       // docs/tanmatsu-launcher-port-analysis.md for why.
+                    if (window->flags & WINDOW_FLAG_FLIP_HORIZONTAL) {
+                        // Not implemented on this path: the old PPA path got
+                        // this "for free" by abusing its own rotation_angle
+                        // field, which has no equivalent here. No shipped app
+                        // sets this flag today -- see the port-analysis doc.
+                        ESP_LOGW(TAG, "WINDOW_FLAG_FLIP_HORIZONTAL is not supported by the CPU compositor path");
+                    }
+
+                    // Same cache-sync bracketing draw_window_box() already
+                    // does below for the same DMA-backed framebuffers[cur_fb]
+                    // -- the CPU blit writes with plain stores same as
+                    // decoration drawing does, not a DMA engine that handles
+                    // coherency itself the way the PPA did.
+                    esp_cache_msync(framebuffers[cur_fb], FRAMEBUFFER_BYTES, ESP_CACHE_MSYNC_FLAG_DIR_M2C);
+
+                    for (int i = 0; i < window->visible.count; i++) {
+                        window_rect_t visible_content = window->visible.rects[i];
+                        window_rect_t fb_rect         = content_to_framebuffer_rect(visible_content, window, scale);
+
+                        if (fb_rect.w <= 0 || fb_rect.h <= 0) {
+                            continue;
+                        }
+
+                        blit_rect_rotated(
+                            framebuffers[cur_fb],
+                            framebuffer->framebuffer.pixels,
+                            framebuffer->w,
+                            framebuffer->format,
+                            fb_rect,
+                            visible_content,
+                            scale,
+                            rotation
+                        );
+
+                        changes           = true;
+                        window->fb_dirty &= ~(1 << cur_fb);
+                    }
+
+                    esp_cache_msync(
+                        framebuffers[cur_fb],
+                        FRAMEBUFFER_BYTES,
+                        ESP_CACHE_MSYNC_FLAG_DIR_C2M | ESP_CACHE_MSYNC_FLAG_INVALIDATE
+                    );
+#endif // CONFIG_CJ_BADGEVMS_COMPOSITOR_USE_PPA
 
                     // Notify app that content was processed
                     if (!is_clean) {
@@ -1165,7 +1311,52 @@ bool compositor_init(char const *lcd_device_name, char const *keyboard_device_na
     lcd_device->_set_refresh_cb(lcd_device, NULL, on_refresh);
 
     compositor_queue = xQueueCreate(10, sizeof(compositor_message_t));
-    create_kernel_task(compositor, "Compositor", 8192, NULL, 20, &compositor_handle, 0);
+    /* Core 1, not 0: this used to be safe pinned to core 0 because the PPA
+     * hardware did the actual pixel work off-CPU, so this task mostly just
+     * queued PPA commands and waited. Now that CONFIG_CJ_BADGEVMS_COMPOSITOR_
+     * USE_PPA=n makes it do real CPU-side blit_rect_rotated() work every
+     * frame, keeping it on core 0 starves badgevms/drivers/led_matrix_pca9698.c's
+     * mtx_refresh_task_hw -- that task has no vTaskDelay in its per-row I2C
+     * loop and depends on tight, undisturbed core-0 scheduling for its
+     * ~460 Hz refresh (see the "no flicker" comment in led_matrix_pca9698.c);
+     * losing that turns its multiplexed row-scan into visible flicker.
+     *
+     * Priority also has to drop on the CPU path, not just the core. App
+     * processes run at priority 5 (task.c's zeus()); this task was priority
+     * 20 from day one, which was fine when it barely touched the CPU (PPA
+     * hardware did the work). A strictly higher priority than every app
+     * means FreeRTOS never preempts it for a lower-priority app no matter
+     * how long it runs -- taskYIELD() inside this task wouldn't have helped,
+     * since yielding only matters when something of equal-or-higher priority
+     * is ready. With real per-frame CPU work now sharing core 1 with app
+     * processes, that turned into outright starvation, not "ordinary jank"
+     * as an earlier version of this comment assumed: a busy screen (several
+     * windows/rects queued at once) could keep this task runnable long
+     * enough to freeze every app on core 1 -- including input handling,
+     * which is why a stuck app looked unresponsive to the keyboard too, not
+     * just visually static. Matching the app priority (5) lets FreeRTOS's
+     * equal-priority round-robin time-slicing interleave rendering with app
+     * work instead of one strictly dominating the other. Only the CPU path
+     * needs this: the PPA path's original priority-20/core-0 pairing is left
+     * alone since it never had this problem. */
+#if CONFIG_CJ_BADGEVMS_COMPOSITOR_USE_PPA
+    create_kernel_task(compositor, "Compositor", 8192, NULL, 20, &compositor_handle, 1);
+#else
+    /* Priority 5, matching app-process priority -- NOT a tunable knob for
+     * "smoother but still safe" rendering. Tried priority 8 as an
+     * experiment (hardware-tested 2026-08-12): still above app priority,
+     * so FreeRTOS still never preempts this task for an app no matter how
+     * small the gap -- confirmed on hardware to reproduce the same
+     * starvation as priority 20, just manifesting as a black screen
+     * (stuck even before the first frame) rather than a static spinner.
+     * Equal priority is the only value confirmed safe: it's what makes
+     * FreeRTOS's round-robin time-slicing actually interleave this task
+     * with app work, instead of one strictly dominating the other. Do not
+     * raise this without also giving the CPU render path real internal
+     * yield points (breaking a multi-window redraw into smaller chunks) --
+     * priority alone cannot buy back throughput here. */
+    create_kernel_task(compositor, "Compositor", 8192, NULL, 5, &compositor_handle, 1);
+#endif
 
     return true;
 }

@@ -22,10 +22,10 @@ static const char* TAG = "tanmatsu";
 #define WHY_PWM_FREQ_HZ    25000  // Above audible
 
 // Sets an already-configured LEDC channel's duty from a 0-100 percent value
-// (factored out of why_pwm_init_channel() so the display-backlight RPC
-// callback below can reuse it at runtime instead of only ever setting duty
-// once at boot). Returns esp_err_t instead of using ESP_ERROR_CHECK()
-// internally -- the RPC callback below runs on the shared esp-hosted Rx
+// (factored out of why_pwm_init_channel() so the display/keyboard-backlight
+// RPC callbacks below can reuse it at runtime instead of only ever setting
+// duty once at boot). Returns esp_err_t instead of using ESP_ERROR_CHECK()
+// internally -- the RPC callbacks below run on the shared esp-hosted Rx
 // thread, which must never abort, so failure has to be reportable to the
 // caller instead of always being fatal.
 static esp_err_t why_pwm_set_duty_percent(ledc_channel_t channel, int duty_percent) {
@@ -102,6 +102,24 @@ static void display_bl_protocol_packet_callback(uint32_t msg_id, const uint8_t* 
     }
 }
 
+// ---------- Keyboard backlight RPC (why2025-apps#1) ----------
+// P4-side sender: badgevms/drivers/keyboard_backlight_client.c
+// (bv_keyboard_set_backlight() -> esp_hosted_send_custom_data()).
+static void keyboard_bl_protocol_packet_callback(uint32_t msg_id, const uint8_t* data, size_t data_len) {
+    if (msg_id != TANMATSU_EVENT_KEYBOARD_BL) {
+        ESP_LOGW(TAG, "Received message with unexpected ID: %d", msg_id);
+        return;
+    }
+    if (data_len < 1) {
+        ESP_LOGW(TAG, "Keyboard backlight message too short (%d bytes)", (int)data_len);
+        return;
+    }
+    esp_err_t res = why_pwm_set_duty_percent(LEDC_CHANNEL_1, data[0]);
+    if (res != ESP_OK) {
+        ESP_LOGW(TAG, "why_pwm_set_duty_percent failed: %s", esp_err_to_name(res));
+    }
+}
+
 // ---------- LoRa SPI bus + TXEN switch ----------
 
 static esp_err_t spi_initialize(void) {
@@ -173,6 +191,11 @@ void app_main(void) {
     res = esp_hosted_register_custom_callback(TANMATSU_EVENT_DISPLAY_BL, display_bl_protocol_packet_callback);
     if (res != ESP_OK) {
         ESP_LOGE(TAG, "Failed to register display backlight callback: %s", esp_err_to_name(res));
+    }
+
+    res = esp_hosted_register_custom_callback(TANMATSU_EVENT_KEYBOARD_BL, keyboard_bl_protocol_packet_callback);
+    if (res != ESP_OK) {
+        ESP_LOGE(TAG, "Failed to register keyboard backlight callback: %s", esp_err_to_name(res));
     }
 
     // IR is not wired on WHY badge — skip if BSP_IR_TX is sentinel

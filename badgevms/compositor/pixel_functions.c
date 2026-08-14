@@ -114,3 +114,94 @@ IRAM_ATTR void draw_text_rotated(uint16_t *fb, char const *text, int x, int y, u
         draw_char_rotated(fb, text[i], x + i * (FONT_WIDTH + 1), y, color);
     }
 }
+/* Sample one pixel of `src` (row width src_w) at (x,y) and convert it to
+ * this compositor's RGB565 output format. Only the 6 pixel_format_t values
+ * framebuffer_allocate() ever actually hands out reach here (everything
+ * else is coerced to RGB565 at allocation time).
+ *
+ * RGB565/BGR565 mirror the exact net R/B transform the old PPA path's
+ * rgb_swap flag produced for these two formats -- the only two any shipped
+ * app currently uses -- to preserve known (mostly correct; the narrow
+ * value-dependent bug this rewrite exists to fix aside) color behavior
+ * rather than risk a much worse blind regression by guessing at a "fix"
+ * with no hardware to verify it on. The panel wants BGR-ordered RGB565
+ * (st7703.c sets LCD_RGB_ELEMENT_ORDER_BGR) -- that swap still has to
+ * happen somewhere; this is the one and only place it happens now, instead
+ * of composing with a second swap at the panel/MADCTL level the way the
+ * old PPA rgb_swap did.
+ *
+ * The four *8888 formats use SDL3's own bit-layout convention directly
+ * (first-named channel = bits 31-24 of a native uint32 load) rather than
+ * mirroring the old PPA rgb_swap/mode grouping, which -- on inspection --
+ * doesn't self-consistently distinguish all four of them. Doesn't matter in
+ * practice today (no shipped app uses any of them), but NOT
+ * hardware-verified -- test with a real app before relying on it. */
+__attribute__((always_inline)) static inline uint16_t
+    sample_pixel_rgb565(void const *src, int src_w, int x, int y, pixel_format_t format) {
+    switch (format) {
+        case BADGEVMS_PIXELFORMAT_BGR565: return ((uint16_t const *)src)[(size_t)y * src_w + x];
+
+        case BADGEVMS_PIXELFORMAT_ARGB8888: {
+            uint32_t val = ((uint32_t const *)src)[(size_t)y * src_w + x];
+            return rgb888_to_rgb565((val >> 16) & 0xFF, (val >> 8) & 0xFF, val & 0xFF);
+        }
+        case BADGEVMS_PIXELFORMAT_RGBA8888: {
+            uint32_t val = ((uint32_t const *)src)[(size_t)y * src_w + x];
+            return rgb888_to_rgb565((val >> 24) & 0xFF, (val >> 16) & 0xFF, (val >> 8) & 0xFF);
+        }
+        case BADGEVMS_PIXELFORMAT_ABGR8888: {
+            uint32_t val = ((uint32_t const *)src)[(size_t)y * src_w + x];
+            return rgb888_to_rgb565(val & 0xFF, (val >> 8) & 0xFF, (val >> 16) & 0xFF);
+        }
+        case BADGEVMS_PIXELFORMAT_BGRA8888: {
+            uint32_t val = ((uint32_t const *)src)[(size_t)y * src_w + x];
+            return rgb888_to_rgb565((val >> 8) & 0xFF, (val >> 16) & 0xFF, (val >> 24) & 0xFF);
+        }
+        case BADGEVMS_PIXELFORMAT_RGB565:
+        default: {
+            uint16_t px = ((uint16_t const *)src)[(size_t)y * src_w + x];
+            uint16_t r  = (px >> 11) & 0x1F;
+            uint16_t g  = (px >> 5) & 0x3F;
+            uint16_t b  = px & 0x1F;
+            return (uint16_t)((b << 11) | (g << 5) | r);
+        }
+    }
+}
+
+IRAM_ATTR void blit_rect_rotated(
+    uint16_t        *dst,
+    void const      *src,
+    int              src_w,
+    pixel_format_t   src_format,
+    window_rect_t    src_rect,
+    window_rect_t    dst_rect,
+    float            scale,
+    rotation_angle_t rotation
+) {
+    if (dst_rect.w <= 0 || dst_rect.h <= 0 || src_rect.w <= 0 || src_rect.h <= 0)
+        return;
+
+    float inv_scale = 1.0f / scale;
+    int   src_max_x = src_rect.x + src_rect.w - 1;
+    int   src_max_y = src_rect.y + src_rect.h - 1;
+
+    for (int dy = 0; dy < dst_rect.h; dy++) {
+        int sy = src_rect.y + (int)((float)dy * inv_scale);
+        if (sy > src_max_y)
+            sy = src_max_y;
+
+        for (int dx = 0; dx < dst_rect.w; dx++) {
+            int sx = src_rect.x + (int)((float)dx * inv_scale);
+            if (sx > src_max_x)
+                sx = src_max_x;
+
+            uint16_t color = sample_pixel_rgb565(src, src_w, sx, sy, src_format);
+
+            int fb_x = 0, fb_y = 0;
+            rotate_coordinates(dst_rect.x + dx, dst_rect.y + dy, rotation, &fb_x, &fb_y);
+            if (fb_x >= 0 && fb_x < FRAMEBUFFER_MAX_W && fb_y >= 0 && fb_y < FRAMEBUFFER_MAX_H) {
+                dst[fb_y * FRAMEBUFFER_MAX_W + fb_x] = color;
+            }
+        }
+    }
+}
