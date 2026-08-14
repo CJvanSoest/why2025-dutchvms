@@ -6,6 +6,15 @@ build_sdkgen/
 managed_components/
 sdk_dist/
 
+# Not connectivity_esp_hosted/slave/dependencies.lock (registry-only deps,
+# portable). This one pins espressif/esp_hosted via a local override_path,
+# and ESP-IDF's component manager always writes that as an ABSOLUTE
+# filesystem path -- committing it bakes in whatever machine/container path
+# last regenerated it, breaking every other checkout location (this broke
+# CI while every local NAS build happened to reuse the same /project mount
+# point and never caught it). Let every environment regenerate its own.
+/dependencies.lock
+
 *.swp
 .vscode
 .clangd
