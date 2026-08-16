@@ -974,6 +974,7 @@ simple_function:
   - notify_increment
   - ota_get_invalid_version
   - ota_get_running_version
+  - ota_restart
   - ota_session_abort
   - ota_session_commit
   - ota_session_open

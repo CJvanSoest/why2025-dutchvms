@@ -535,6 +535,13 @@ static esp_err_t http_event_handler(esp_http_client_event_t *evt) {
             break;
 
         case HTTP_EVENT_ON_DATA:
+            // Headers are fully parsed by the time the first data chunk
+            // arrives, so the real Content-Length is already known here --
+            // refreshed every call (cheap) rather than waiting for
+            // HTTP_EVENT_ON_FINISH below, so a caller's write_function can
+            // show live "downloaded / total" progress instead of only
+            // finding out the total after the transfer is already done.
+            curl->content_length = esp_http_client_get_content_length(curl->esp_client);
             if (curl->write_function) {
                 curl->write_function(evt->data, 1, evt->data_len, curl->write_data);
             }
