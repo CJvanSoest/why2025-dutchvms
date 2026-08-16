@@ -95,6 +95,7 @@ idf_component_register(
      "nvs_flash"
      "sd_card"
      "spi_flash"
+     "usb"
      "vfs"
      "why_stdio"
      EMBED_TXTFILES

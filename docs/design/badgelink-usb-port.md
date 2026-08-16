@@ -5,8 +5,13 @@ in [`.claude/Components.md`](../../.claude/Components.md)'s former "Rejected:
 BadgeLink" note — see the correction below.
 
 **Status (2026-08-16, `feature/badgelink-usb-port` branch): items 1-3 below
-are implemented — build-untested, not yet flashed to real hardware.** See
-"Implementation status" after item 5 for exactly what landed and what's
+are implemented and build-verified — both `badgevms.bin` (P4) and
+`network_adapter.bin` (C6) build clean via the NAS `espressif/idf:v5.5.1`
+docker image, zero warnings/errors in the new code, stack-usage gate passes
+(`fs_copy_file`'s 4128-byte frame, from the vendored `badgelink_fs.c` copy
+buffer, is the largest new one and still well under the 5120 threshold).
+Not yet flashed to real hardware.** See "Implementation status" after item 5
+for exactly what landed, the two build fixes that were needed, and what's
 still open (item 4, the mode-switch trigger, and all of the `tanmatsu-usb-msc`
 section are still just plan/no-code). Same "code exists, hardware not yet
 confirmed" convention as [SD-and-OTA-Updates.md](SD-and-OTA-Updates.md) §2/§3
@@ -150,9 +155,30 @@ or flashed:
   above. Needs real hardware to iterate on.
 - `tanmatsu-usb-msc` (next section) is untouched — still plan only.
 
-**Before flashing:** confirm `esp_tinyusb` actually resolves against IDF
-5.5.1 (see item 1 above), then flip `CJ_BADGEVMS_ENABLE_BADGELINK_USB` to 1
-for the test build, per the "Recommended next step" below.
+**Build verification (2026-08-16, NAS `espressif/idf:v5.5.1` docker), two
+fixes needed beyond the initial port:**
+1. `esp_tinyusb` *did* resolve cleanly against this repo's IDF 5.5.1 pin (the
+   open question item 1 originally flagged) — no version conflict, pulls in
+   `espressif__tinyusb` itself as a transitive dependency.
+2. First build failed: `usb_device.c:58:10: fatal error: esp_private/usb_phy.h:
+   No such file or directory`. `esp_new_phy()`'s header lives in ESP-IDF's
+   `usb` component, which nothing in `badgevms/CMakeLists.txt` had
+   `PRIV_REQUIRES`'d before (it was only present transitively, via
+   `esp_tinyusb`'s own deps, which doesn't propagate private-header include
+   paths to *this* component) — fixed by adding `"usb"` to `PRIV_REQUIRES`.
+3. Second build failed: `implicit declaration of function 'tud_vendor_write'`
+   (and `_write_flush`/`_available`/`_read`). TinyUSB's vendor class is
+   compiled out unless `CONFIG_TINYUSB_VENDOR_COUNT > 0` — nothing had ever
+   set it, since this is the first vendor-class USB code in the tree. Fixed
+   via `sdkconfig.defaults` (`CONFIG_TINYUSB_VENDOR_COUNT=1`); the RX/TX
+   FIFO and endpoint sizes esp_tinyusb picks by default for ESP32P4 (512
+   bytes) already match the high-speed endpoint size `usb_device.c` declares,
+   so no further tuning was needed there.
+
+After both fixes: clean build, both `badgevms.bin` and `network_adapter.bin`
+produced, stack-usage gate green. Still needed before this is real
+end-to-end: flip `CJ_BADGEVMS_ENABLE_BADGELINK_USB` to 1 and flash to a
+physical badge, per the "Recommended next step" below.
 
 ## What `tanmatsu-usb-msc` would additionally need
 
@@ -179,14 +205,13 @@ Porting it into DutchVMS means:
 
 ## Recommended next step
 
-Items 1-3 are now code, not just plan, but nothing here has touched a real
-badge yet. Next: build via the NAS docker toolchain (see
-`.claude/Build-And-CI.md`), fix whatever the `esp_tinyusb` dependency
-resolution or first compile turns up, flip
-`CJ_BADGEVMS_ENABLE_BADGELINK_USB` to 1, flash, and confirm the bottom USB-C
-port enumerates as `16d0:0f9a` and `badgelink.py fs list /SD0` works — the
-same hardware-verification spike originally planned here, just against
-actual new code instead of a hypothetical port.
+Items 1-3 are now code and build-verified (see above), but nothing here has
+touched a real badge yet. Next: flip `CJ_BADGEVMS_ENABLE_BADGELINK_USB` to 1
+in `badgevms/drivers/usb_device.c`, flash both `badgevms.bin` and
+`network_adapter.bin` to a physical badge, and confirm the bottom USB-C port
+enumerates as `16d0:0f9a` and `badgelink.py fs list /SD0` works — the
+hardware-verification spike this document originally recommended, now with
+a build in hand to actually flash.
 
 ## Today's Senna-launcher bug fixes — relevance to DutchVMS
 

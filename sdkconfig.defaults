@@ -140,3 +140,11 @@ CONFIG_BT_NIMBLE_PINNED_TO_CORE_1=y
 CONFIG_BT_NIMBLE_NVS_PERSIST=y
 CONFIG_ESP_HOSTED_ENABLE_BT_NIMBLE=y
 CONFIG_ESP_HOSTED_NIMBLE_HCI_VHCI=y
+
+# BadgeLink-over-USB (badgevms/drivers/usb_device.c, docs/design/
+# badgelink-usb-port.md) — TinyUSB's vendor class is off by default
+# (TINYUSB_VENDOR_COUNT=0); without this, tud_vendor_write()/tud_vendor_read()
+# et al. aren't even declared and usb_device.c fails to compile.
+# TINYUSB_VENDOR_{RX,TX}_BUFSIZE and _EPSIZE default to 512 on ESP32P4
+# already, matching the high-speed endpoint size used in usb_device.c.
+CONFIG_TINYUSB_VENDOR_COUNT=1
