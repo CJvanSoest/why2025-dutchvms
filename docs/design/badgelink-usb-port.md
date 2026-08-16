@@ -4,19 +4,30 @@ Design document, 2026-08-16. Supersedes the "physically impossible" verdict
 in [`.claude/Components.md`](../../.claude/Components.md)'s former "Rejected:
 BadgeLink" note — see the correction below.
 
-**Status (2026-08-16, `feature/badgelink-usb-port` branch): items 1-4 are
-implemented and build-verified** — `badgevms.bin`/`network_adapter.bin`
-build clean (NAS `espressif/idf:v5.5.1`), stack-usage gate passes, and a
-boot-time-forced spike of item 1-3 has booted clean on a real badge (not yet
-independently confirmed the bottom port enumerates, see below). Item 4 (the
-diamond-key mode-switch trigger, in `cj_launcher`) is now real and
-build-verified in the separate `why2025-apps` repo too. `tanmatsu-usb-msc`
-has a build-verified kernel skeleton + launcher tile,
-**but the actual SD-card storage handoff is a deliberate stub** — see
-"Implementation status" below for exactly what landed and why MSC storage
-itself isn't live yet. Same "code exists, hardware not fully confirmed"
-convention as [SD-and-OTA-Updates.md](SD-and-OTA-Updates.md) §2/§3 before
-their hardware verification passes.
+**Status (2026-08-16): BadgeLink over native USB is hardware-confirmed
+working end-to-end on a real badge, via the diamond key.** `badgelink.py fs
+list`/`fs download` both succeed against the badge's actual `/SD0` over the
+bottom USB-C port (`16d0:0f9a "MCS WHY2025 badge"`), file content verified
+byte-correct. Items 1-4 (TinyUSB+mux, the badgelink component, the
+`badgelink_fs.c` glue, and the diamond-key app trigger) are all real, and
+all hardware-verified now, not just build-verified.
+
+**The bug that blocked this and its fix:** the mux GPIO (GPIO2) needed
+`gpio_reset_pin()` before `gpio_set_direction()`/`gpio_set_level()` --
+without it, the pin never actually left its default IOMUX state and the mux
+silently stayed on the C6 no matter what the software did (no crash, no
+error, `bv_usb_device_set_mode()` still returned `true`, the state was
+tracked as "active" -- just no physical effect). This codebase already hit
+the identical bug class once before, on GPIO3 (`board_bringup.c`'s
+vibrator-motor fix) -- same root cause: BadgeVMS has no badge-bsp-style
+board-wide pin bring-up step before user driver code runs, so a pin can't be
+assumed to start in a plain-GPIO-ready state just because Senna's badge-bsp-based
+firmware (which does do that bring-up) never needed the same reset call.
+
+`tanmatsu-usb-msc` has a build-verified kernel skeleton + launcher tile, but
+the actual SD-card storage handoff is still a deliberate stub — see
+"Implementation status" below for what landed and why MSC storage itself
+isn't live yet.
 
 ## Corrected hardware fact: there is a USB mux
 

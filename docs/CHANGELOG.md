@@ -39,9 +39,18 @@ Entries from here on are the source of truth going forward.
   `tanmatsu-usb-msc`-equivalent USB mass-storage mode end-to-end in the API and a small
   `cj_usb_msc` launcher tile, but is a deliberate stub (`usb_msc_activate()` always fails) — the
   SD-card FAT-mount handoff between BadgeVMS's own `fatfs.c` and `esp_tinyusb`'s storage helper
-  needs verifying against a spare SD card before it's real. Not flashed with the new
-  diamond-key/MSC-tile code yet — only the earlier boot-forced BadgeLink spike has touched real
-  hardware. See `docs/design/badgelink-usb-port.md`.
+  needs verifying against a spare SD card before it's real.
+
+  **2026-08-16, hardware-confirmed end-to-end**: the diamond-key toggle initially showed no effect
+  on real hardware (`bv_usb_device_set_mode()` returned `true`, state tracked correctly, but the
+  bottom port kept showing the C6's `303a:1001` identity, not BadgeLink's `16d0:0f9a`). Root cause:
+  GPIO2 needed `gpio_reset_pin()` before `gpio_set_direction()`/`gpio_set_level()` — without it the
+  pin never left its default IOMUX state and the mux silently stayed on the C6 regardless of what
+  the software did. Same bug class this codebase already hit once on GPIO3 (`board_bringup.c`'s
+  vibrator-motor fix). After the fix (plus a genuinely clean rebuild — `build/`, `managed_components/`,
+  and `sdkconfig` all removed and regenerated from scratch): `16d0:0f9a "MCS WHY2025 badge"`
+  enumerates, and `badgelink.py fs list`/`fs download` both succeed against the badge's real `/SD0`
+  with byte-correct file content. See `docs/design/badgelink-usb-port.md`.
 
 ## [1.4.1] - 2026-08-14
 

@@ -63,13 +63,15 @@ UART0** without solving that first.
 The removal's *other* stated blocker — "the P4's native-USB pins are not
 routed to any external connector on this carrier board" — turned out to be
 wrong: 2026-08-16 hardware testing found a physical GPIO2 mux between the
-C6's native USB and the P4's own HS-OTG PHY on the bottom USB-C port
-(`16d0:0f9a "MCS WHY2025"` enumerated, `badgelink.py appfs list` succeeded
-via Senna-chan's `tanmatsu-launcher`). BadgeLink now lives at `usb_device.c`
-+ `drivers/badgelink/` in the table above, over that native-USB path instead
-— unverified on this firmware specifically, see
+C6's native USB and the P4's own HS-OTG PHY on the bottom USB-C port.
+BadgeLink now lives at `usb_device.c` + `drivers/badgelink/` in the table
+above, over that native-USB path instead — **hardware-confirmed working on
+this firmware** (`16d0:0f9a "MCS WHY2025 badge"` enumerated, `badgelink.py
+fs list`/`fs download` both succeeded against the badge's real `/SD0`, via
+the diamond key on `cj_launcher`'s HOME screen). See
 [`docs/design/badgelink-usb-port.md`](../docs/design/badgelink-usb-port.md)
-for status and what's still open.
+for the full story, including a real GPIO-reset bug that blocked this
+until today (same class of bug as GPIO3's vibrator-motor fix).
 
 ## Where the real apps live (not this repo)
 

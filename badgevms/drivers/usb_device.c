@@ -254,6 +254,20 @@ bool usb_device_init(void) {
         mac[5]
     );
 
+    /* gpio_reset_pin() first: this codebase already hit the exact same class
+     * of bug on GPIO3 (board_bringup.c's vibrator-motor fix) -- a plain
+     * gpio_set_direction()/gpio_config() alone didn't reliably take hold of
+     * the pad, the pin needed to be explicitly detached from its default
+     * IOMUX function first. GPIO2 has the same profile here: it's not a
+     * plain unused GPIO, badge-bsp's own hardware.h calls it BSP_KBD_INT, so
+     * whatever IOMUX/pull state it resets to at boot may not already be
+     * "generic output" the way an actually-unused pin's would be. Senna's
+     * reference code (which does enumerate on real hardware) never called
+     * this either, but her badge-bsp does its own board-wide pin bring-up
+     * before user code like usb_device.c runs -- BadgeVMS has no equivalent
+     * step, so this firmware can't assume GPIO2 starts in the same state
+     * hers does. */
+    gpio_reset_pin(WHY2025_USB_MUX_GPIO);
     gpio_set_direction(WHY2025_USB_MUX_GPIO, GPIO_MODE_OUTPUT);
     gpio_set_level(WHY2025_USB_MUX_GPIO, 1); // default: mux -> C6, matches Senna's reference default.
 
