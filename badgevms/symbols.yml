@@ -46,6 +46,7 @@ include:
   - badgevms/keyboard_backlight.h
   - badgevms/led_matrix.h
   - badgevms/status_led.h
+  - badgevms/usb_device.h
   - badgevms/meminfo.h
   - curl/curl.h
   - wrapped_funcs.h
@@ -952,6 +953,8 @@ simple_function:
   - bv_status_led_set_brightness_for
   - bv_status_led_show
   - bv_status_led_take
+  - bv_usb_device_get_mode
+  - bv_usb_device_set_mode
   - device_get
   - get_mac_address
   - get_num_tasks

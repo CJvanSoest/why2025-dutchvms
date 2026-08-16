@@ -23,9 +23,11 @@
 #include "elf_symbols.h"
 #include "esp_elf.h"
 #include "esp_log.h"
+#include "esp_private/panic_internal.h"
 #include "esp_tls.h"
 #include "hash_helper.h"
 #include "memory.h"
+#include "riscv/rvruntime-frames.h"
 #include "thirdparty/khash.h"
 #include "why_io.h"
 
@@ -319,7 +321,24 @@ void IRAM_ATTR cerberos() {
 void IRAM_ATTR __wrap_xt_unhandled_exception(void *frame) {
     task_info_t *task_info = get_task_info();
     if (task_info && task_info->pid) {
+        // CJ-DEBUG: temporary fault detail dump for the MSC-activation crash
+        // investigation -- frame is the RvExcFrame* pushed by the RISC-V
+        // trap vector (components/riscv/vectors.S), never dereferenced here
+        // before. Remove once the MSC crash is root-caused.
+        RvExcFrame *ef = (RvExcFrame *)frame;
         esp_rom_printf("Task %u caused an unhandled exception, Cerberos will deal with it\n", task_info->pid);
+        esp_rom_printf(
+            "CJ-DEBUG: mcause=0x%x mepc=0x%x mtval=0x%x ra=0x%x sp=0x%x a0=0x%x\n",
+            ef->mcause,
+            ef->mepc,
+            ef->mtval,
+            ef->ra,
+            ef->sp,
+            ef->a0
+        );
+        if (g_panic_abort && g_panic_abort_details) {
+            esp_rom_printf("CJ-DEBUG: abort details: %s\n", g_panic_abort_details);
+        }
 
         // Send task off to think about what it did until its timeslice runs out
         __asm__ volatile("csrw mepc, %0\n\t" // Set return address

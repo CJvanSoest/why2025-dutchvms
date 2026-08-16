@@ -20,3 +20,10 @@
 
 device_t *fatfs_create_spi(char const *devname, char const *partname, bool rw);
 device_t *fatfs_create_sd(char const *devname, bool rw);
+
+/* Build a device_t wrapper around a "/<devname>" FAT mount that's already
+ * been registered by someone else (usb_msc.c's usb_msc_init(), for
+ * FLASH0/MSC) -- same fatfs_open/_read/... plain-POSIX plumbing as
+ * fatfs_create_spi(), just without mounting anything itself. See
+ * usb_msc.h for why FLASH0 needs this instead of fatfs_create_spi(). */
+device_t *fatfs_wrap_mounted_spi(char const *devname);

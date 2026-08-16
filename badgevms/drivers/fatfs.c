@@ -192,6 +192,46 @@ error:
     return NULL;
 }
 
+device_t *fatfs_wrap_mounted_spi(char const *devname) {
+    fatfs_device_t *dev = malloc(sizeof(fatfs_device_t));
+    if (!dev) {
+        ESP_LOGE("fatfs-spi", "Failed to allocate fatfs_device_t");
+        return NULL;
+    }
+    dev->base_path = malloc(strlen(devname) + 2);
+    if (!dev->base_path) {
+        ESP_LOGE("fatfs-spi", "Failed to allocate base_path");
+        free(dev);
+        return NULL;
+    }
+    dev->base_path[0] = '/';
+    strcpy(dev->base_path + 1, devname);
+    dev->wl_handle       = WL_INVALID_HANDLE; // not this wrapper's to own -- see usb_msc.c
+    dev->sdmmc_handle    = NULL;
+    dev->pwr_ctrl_handle = NULL;
+
+    device_t *base_dev = &dev->filesystem.device;
+    base_dev->type     = DEVICE_TYPE_FILESYSTEM;
+    base_dev->_open    = fatfs_open;
+    base_dev->_close   = fatfs_close;
+    base_dev->_write   = fatfs_write;
+    base_dev->_read    = fatfs_read;
+    base_dev->_lseek   = fatfs_lseek;
+
+    filesystem_device_t *fs_dev = &dev->filesystem;
+    fs_dev->_stat               = fatfs_stat;
+    fs_dev->_fstat              = fatfs_fstat;
+    fs_dev->_unlink             = fatfs_unlink;
+    fs_dev->_rename             = fatfs_rename;
+    fs_dev->_mkdir              = fatfs_mkdir;
+    fs_dev->_rmdir              = fatfs_rmdir;
+    fs_dev->_opendir            = fatfs_opendir;
+    fs_dev->_readdir            = fatfs_readdir;
+    fs_dev->_closedir           = fatfs_closedir;
+
+    return (device_t *)dev;
+}
+
 device_t *fatfs_create_sd(char const *devname, bool rw) {
     esp_vfs_fat_mount_config_t const mount_config = {
         .max_files              = 256,

@@ -35,6 +35,9 @@ talk to each other at runtime.
 | `led_matrix_pca9698.c` / `led_matrix_internal.h` | The 12×20 PCA9698 LED-matrix driver (bit-bang + HW-i2c refresh backends). App-facing surface: `include/badgevms/led_matrix.h` + `led_matrix_bridge.c`. |
 | `status_led_ws2812.c` / `status_led_internal.h` | The 4× RGBW status LEDs (WS2812/RMT). App-facing surface: `include/badgevms/status_led.h` + `status_led_bridge.c`. |
 | `esp-serial-flasher/slave_c6_flasher.c` | Flashes the C6 over UART1 from SD-staged binaries (`flash_slave_c6_if_needed()`) — the proven "install from SD, MD5-gated" pattern other update mechanisms should mirror. |
+| `usb_device.c` / `.h` | Hardware-boot-verified, mode is app-driven (not a boot-time flag). TinyUSB device stack + the WHY2025 carrier's GPIO2 USB-mux toggle for the bottom USB-C port. Tracks a 3-state `usb_device_mode_t` (DEBUG/BADGELINK/MSC) via `usb_device_switch_to()` — app-facing surface is `usb_device_bridge.c` + `include/badgevms/usb_device.h`'s `bv_usb_device_set_mode()`, bound to the diamond key on `cj_launcher`'s HOME screen (why2025-apps repo). See `docs/design/badgelink-usb-port.md`. |
+| `badgelink/` | Vendored `badgeteam/esp32-component-badgelink` (protocol/COBS/nanopb, MIT) with `badgelink_fs.c`/`badgelink_nvs.c` reused as-is (plain libc `fopen()` et al. — deliberate, see the design doc — retargeted to this repo's `/SD0` mount) and `badgelink_appfs.c`/`badgelink_startapp.c` stubbed `StatusNotSupported` (no AppFS/slug-addressed app store here). Depends on `usb_device.c` for transport. |
+| `usb_msc.c` / `.h` | **Deliberate stub** — `usb_msc_activate()`/`deactivate()` always return `false`. Reachable via `usb_device_switch_to(USB_DEVICE_MODE_MSC)` / the `cj_usb_msc` launcher tile, but SD-card mount handoff with `fatfs.c` needs verifying against a spare card before it's real — see the file's own comment and `docs/design/badgelink-usb-port.md`. |
 
 ## `connectivity_esp_hosted/slave/` — the C6 co-processor firmware
 
@@ -48,18 +51,27 @@ should be left alone; the first-party addition is:
 | `main/tanmatsu/infrared/` | IR protocol server (separate peripheral, same pattern as LoRa: a protocol server exposed to the P4 over esp-hosted custom events). |
 | `main/slave_control.c` | The esp-hosted custom-RPC dispatch this fork's LoRa/IR servers hook into (`handle_custom_rpc_request()`) — its own comment documents the "runs on the Rx thread, do not block" contract that the LoRa async-TX rework exists to respect. |
 
-## Rejected: BadgeLink (native badge.team UART/USB deploy protocol)
+## BadgeLink (native badge.team UART/USB deploy protocol) — history
 
-Tried and removed (2026-08-07). Two independent blockers, both confirmed by
-hardware analysis rather than guessed: (1) native-USB variant — the P4's
-native-USB pins are not routed to any external connector on this carrier
-board (the bottom USB-C port only reaches the C6), so native USB/MSC is
-physically impossible here; (2) UART-workaround variant — BadgeLink's COBS
-framing isn't resilient against the console logs (ESP_LOG/printf) that keep
-flowing on the same CH340 UART, so every log line desyncs the frame parser.
+Tried over UART (2026-07-10), removed (2026-08-07): BadgeLink's COBS framing
+isn't resilient against the console logs (ESP_LOG/printf) that keep flowing
+on the shared CH340 UART0, so every log line desyncs the frame parser.
 `deploy_protocol.c`'s own magic-sentinel scan exists specifically because it
-doesn't have that problem. Don't re-propose BadgeLink for this hardware
-without a different physical UART/USB path.
+doesn't have that problem — **still true, don't re-propose BadgeLink over
+UART0** without solving that first.
+
+The removal's *other* stated blocker — "the P4's native-USB pins are not
+routed to any external connector on this carrier board" — turned out to be
+wrong: 2026-08-16 hardware testing found a physical GPIO2 mux between the
+C6's native USB and the P4's own HS-OTG PHY on the bottom USB-C port.
+BadgeLink now lives at `usb_device.c` + `drivers/badgelink/` in the table
+above, over that native-USB path instead — **hardware-confirmed working on
+this firmware** (`16d0:0f9a "MCS WHY2025 badge"` enumerated, `badgelink.py
+fs list`/`fs download` both succeeded against the badge's real `/SD0`, via
+the diamond key on `cj_launcher`'s HOME screen). See
+[`docs/design/badgelink-usb-port.md`](../docs/design/badgelink-usb-port.md)
+for the full story, including a real GPIO-reset bug that blocked this
+until today (same class of bug as GPIO3's vibrator-motor fix).
 
 ## Where the real apps live (not this repo)
 
