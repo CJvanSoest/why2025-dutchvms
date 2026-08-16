@@ -21,8 +21,10 @@ Entries from here on are the source of truth going forward.
 
 ## [Unreleased]
 
+## [1.5.0] - 2026-08-16
+
 ### Added
-- **BadgeLink over native USB, app-controlled** (`feature/badgelink-usb-port` branch) — a new
+- **BadgeLink over native USB, app-controlled** (PR #84) — a new
   `badgevms/drivers/usb_device.c` brings up TinyUSB device mode + the WHY2025 carrier's GPIO2 USB
   mux (discovered 2026-08-16 via Senna-chan's `tanmatsu-launcher` port; the earlier 2026-08-07
   BadgeLink removal's "native USB is physically impossible here" verdict was wrong), and
@@ -70,6 +72,8 @@ Entries from here on are the source of truth going forward.
   mode switch always runs on now — `usb_device_switch_to()` just posts a request to it and blocks
   on a semaphore, so the free() always happens in the kernel arena that allocated the memory in the
   first place. Hardware-confirmed: MSC now activates without crashing.
+
+## [1.4.1] - 2026-08-14
 
 ### Fixed
 - **C6 LoRa never started, showing as the LoRa status LED stuck red** — `CONFIG_ESP_HOSTED_MAX_CUSTOM_MSG_HANDLERS`
