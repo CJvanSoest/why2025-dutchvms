@@ -21,6 +21,22 @@ Entries from here on are the source of truth going forward.
 
 ## [Unreleased]
 
+## [1.5.1] - 2026-08-17
+
+### Added
+- **`ota_restart()` app-facing API** (PR #85) — apps can now reboot into a partition they just set
+  as the boot target via `ota_session_commit()`. Previously nothing in the OTA path could restart
+  the badge; `cj_launcher`'s "Update Firmware" screen always required a manual restart to actually
+  boot a newly installed image, even on a clean, error-free update.
+
+### Fixed
+- **OTA download progress had no visible total** — `curl.c`'s `HTTP_EVENT_ON_DATA` handler only
+  read the response's Content-Length at `HTTP_EVENT_ON_FINISH`, i.e. after the whole transfer had
+  already completed, so a caller streaming a download (like `cj_launcher`'s firmware update) could
+  never show "downloaded / total" progress — only a running byte count with no end in sight. Fixed
+  by refreshing `content_length` on every `HTTP_EVENT_ON_DATA` call instead: headers are already
+  fully parsed by the time the first data chunk arrives, so the real total is available immediately.
+
 ## [1.5.0] - 2026-08-16
 
 ### Added
