@@ -21,6 +21,16 @@ Entries from here on are the source of truth going forward.
 
 ## [Unreleased]
 
+### Added
+- **BadgeLink over native USB, off by default** (`feature/badgelink-usb-port` branch) — a new
+  `badgevms/drivers/usb_device.c` brings up TinyUSB device mode + the WHY2025 carrier's GPIO2 USB
+  mux (discovered 2026-08-16 via Senna-chan's `tanmatsu-launcher` port; the earlier 2026-08-07
+  BadgeLink removal's "native USB is physically impossible here" verdict was wrong), and
+  `badgevms/drivers/badgelink/` vendors `badgeteam/esp32-component-badgelink` with its `badgelink_fs.c`
+  reused against this repo's own `/SD0` FATFS mount. Gated behind `CJ_BADGEVMS_ENABLE_BADGELINK_USB`
+  (0) pending hardware verification — not build-tested or flashed yet. See
+  `docs/design/badgelink-usb-port.md`.
+
 ## [1.4.1] - 2026-08-14
 
 ### Fixed

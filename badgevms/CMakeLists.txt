@@ -12,6 +12,17 @@ idf_component_register(
      "deploy_protocol.c"
      "device.c"
      "display_bridge.c"
+     "drivers/badgelink/badgelink.c"
+     "drivers/badgelink/badgelink.pb.c"
+     "drivers/badgelink/badgelink_appfs.c"
+     "drivers/badgelink/badgelink_fs.c"
+     "drivers/badgelink/badgelink_nvs.c"
+     "drivers/badgelink/badgelink_setusbmode.c"
+     "drivers/badgelink/badgelink_startapp.c"
+     "drivers/badgelink/cobs.c"
+     "drivers/badgelink/nanopb/pb_common.c"
+     "drivers/badgelink/nanopb/pb_decode.c"
+     "drivers/badgelink/nanopb/pb_encode.c"
      "drivers/badgevms_i2c_bus.c"
      "drivers/ble_gatt_server.c"
      "drivers/board_bringup.c"
@@ -29,6 +40,7 @@ idf_component_register(
      "drivers/status_led_ws2812.c"
      "drivers/tca8418.c"
      "drivers/tty.c"
+     "drivers/usb_device.c"
      "drivers/wifi.c"
      "init.c"
      "led_matrix_bridge.c"
@@ -52,6 +64,8 @@ idf_component_register(
     INCLUDE_DIRS
      ${CMAKE_CURRENT_SOURCE_DIR}/
      ${CMAKE_CURRENT_SOURCE_DIR}/include
+     ${CMAKE_CURRENT_SOURCE_DIR}/drivers/badgelink
+     ${CMAKE_CURRENT_SOURCE_DIR}/drivers/badgelink/nanopb
     PRIV_REQUIRES
      "app_update"
      "bmi270"
@@ -70,6 +84,7 @@ idf_component_register(
      "esp_psram"
      "esp_tca8418"
      "esp_timer"
+     "esp_tinyusb"
      "esp_wifi"
      "esp_wifi_remote"
      "fatfs"

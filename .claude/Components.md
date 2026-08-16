@@ -35,6 +35,8 @@ talk to each other at runtime.
 | `led_matrix_pca9698.c` / `led_matrix_internal.h` | The 12×20 PCA9698 LED-matrix driver (bit-bang + HW-i2c refresh backends). App-facing surface: `include/badgevms/led_matrix.h` + `led_matrix_bridge.c`. |
 | `status_led_ws2812.c` / `status_led_internal.h` | The 4× RGBW status LEDs (WS2812/RMT). App-facing surface: `include/badgevms/status_led.h` + `status_led_bridge.c`. |
 | `esp-serial-flasher/slave_c6_flasher.c` | Flashes the C6 over UART1 from SD-staged binaries (`flash_slave_c6_if_needed()`) — the proven "install from SD, MD5-gated" pattern other update mechanisms should mirror. |
+| `usb_device.c` | **Unverified, off by default** (`CJ_BADGEVMS_ENABLE_BADGELINK_USB`). TinyUSB device stack + the WHY2025 carrier's GPIO2 USB-mux toggle, bringing up native USB on the bottom USB-C port for `badgelink/`. See `docs/design/badgelink-usb-port.md`. |
+| `badgelink/` | Vendored `badgeteam/esp32-component-badgelink` (protocol/COBS/nanopb, MIT) with `badgelink_fs.c`/`badgelink_nvs.c` reused as-is (plain libc `fopen()` et al. — deliberate, see the design doc — retargeted to this repo's `/SD0` mount) and `badgelink_appfs.c`/`badgelink_startapp.c` stubbed `StatusNotSupported` (no AppFS/slug-addressed app store here). Depends on `usb_device.c` for transport. |
 
 ## `connectivity_esp_hosted/slave/` — the C6 co-processor firmware
 
@@ -48,27 +50,25 @@ should be left alone; the first-party addition is:
 | `main/tanmatsu/infrared/` | IR protocol server (separate peripheral, same pattern as LoRa: a protocol server exposed to the P4 over esp-hosted custom events). |
 | `main/slave_control.c` | The esp-hosted custom-RPC dispatch this fork's LoRa/IR servers hook into (`handle_custom_rpc_request()`) — its own comment documents the "runs on the Rx thread, do not block" contract that the LoRa async-TX rework exists to respect. |
 
-## Reconsidered: BadgeLink (native badge.team UART/USB deploy protocol)
+## BadgeLink (native badge.team UART/USB deploy protocol) — history
 
-Tried and removed over UART (2026-08-07), for a still-valid reason: BadgeLink's
-COBS framing isn't resilient against the console logs (ESP_LOG/printf) that
-keep flowing on the shared CH340 UART0, so every log line desyncs the frame
-parser. `deploy_protocol.c`'s own magic-sentinel scan exists specifically
-because it doesn't have that problem — don't re-propose BadgeLink over UART0
-without solving that first.
+Tried over UART (2026-07-10), removed (2026-08-07): BadgeLink's COBS framing
+isn't resilient against the console logs (ESP_LOG/printf) that keep flowing
+on the shared CH340 UART0, so every log line desyncs the frame parser.
+`deploy_protocol.c`'s own magic-sentinel scan exists specifically because it
+doesn't have that problem — **still true, don't re-propose BadgeLink over
+UART0** without solving that first.
 
-**Correction (2026-08-16):** the removal's *other* stated blocker — "the P4's
-native-USB pins are not routed to any external connector on this carrier
-board" — was wrong. The bottom USB-C port carries a physical mux (GPIO2-
-selected) between the C6's native USB and the P4's own native High-Speed OTG
-PHY; hardware-confirmed working via Senna-chan's `tanmatsu-launcher` WHY2025
-port (`16d0:0f9a "MCS WHY2025"` enumerated, `badgelink.py appfs list`
-succeeded). Native-USB BadgeLink also sidesteps the UART blocker above
-entirely — it's a separate physical bus from `deploy_protocol.c`. This is no
-longer a dead end; see
+The removal's *other* stated blocker — "the P4's native-USB pins are not
+routed to any external connector on this carrier board" — turned out to be
+wrong: 2026-08-16 hardware testing found a physical GPIO2 mux between the
+C6's native USB and the P4's own HS-OTG PHY on the bottom USB-C port
+(`16d0:0f9a "MCS WHY2025"` enumerated, `badgelink.py appfs list` succeeded
+via Senna-chan's `tanmatsu-launcher`). BadgeLink now lives at `usb_device.c`
++ `drivers/badgelink/` in the table above, over that native-USB path instead
+— unverified on this firmware specifically, see
 [`docs/design/badgelink-usb-port.md`](../docs/design/badgelink-usb-port.md)
-for the full porting analysis and what's still missing before it's real code
-here.
+for status and what's still open.
 
 ## Where the real apps live (not this repo)
 

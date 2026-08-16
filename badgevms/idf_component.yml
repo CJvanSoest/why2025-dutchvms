@@ -1,5 +1,13 @@
 dependencies:
   idf: '>=5.5.0'
+  # BadgeLink-over-USB (docs/design/badgelink-usb-port.md, not yet
+  # hardware-verified on BadgeVMS) -- badgevms/drivers/usb_device.c uses its
+  # tinyusb_driver_install()/tinyusb_config_t wrapper API. Version picked to
+  # match what Senna-chan's WHY2025 tanmatsu-launcher port and
+  # Senna-chan/tanmatsu-usb-msc both build against; unconfirmed whether it
+  # resolves cleanly on this repo's pinned IDF 5.5.1 (her port uses IDF
+  # 6.0.2) -- check this first if the badgelink build fails to fetch.
+  espressif/esp_tinyusb: '^2.2.1'
   espressif/esp_wifi_remote: '^1.3.1'
   # CJ-DEBUG-BLE (task #23 follow-up): local override_path instead of the
   # registry version. Upstream transport_drv_reconfigure() arms a 5s

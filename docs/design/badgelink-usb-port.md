@@ -2,8 +2,15 @@
 
 Design document, 2026-08-16. Supersedes the "physically impossible" verdict
 in [`.claude/Components.md`](../../.claude/Components.md)'s former "Rejected:
-BadgeLink" note — see the correction below. Status: **plan, no code yet**,
-same convention as [SD-and-OTA-Updates.md](SD-and-OTA-Updates.md) §1.
+BadgeLink" note — see the correction below.
+
+**Status (2026-08-16, `feature/badgelink-usb-port` branch): items 1-3 below
+are implemented — build-untested, not yet flashed to real hardware.** See
+"Implementation status" after item 5 for exactly what landed and what's
+still open (item 4, the mode-switch trigger, and all of the `tanmatsu-usb-msc`
+section are still just plan/no-code). Same "code exists, hardware not yet
+confirmed" convention as [SD-and-OTA-Updates.md](SD-and-OTA-Updates.md) §2/§3
+before their hardware verification passes.
 
 ## Corrected hardware fact: there is a USB mux
 
@@ -60,29 +67,25 @@ shared via Discord, 2026-08-16.*
 
 ## What BadgeLink in DutchVMS would need
 
-1. **A TinyUSB device-mode stack.** DutchVMS currently has none — the only
-   USB components in the tree are *host*-mode (`espressif__usb_host_cdc_acm`,
-   `usb_host_ch34x_vcp`, `usb_host_cp210x_vcp`). The PHY/mux bring-up in
-   `usb_device.c` above (`usb_new_phy()` + `gpio_set_level(2, ...)`) is
-   reusable as a direct reference for a new `badgevms/drivers/usb_device.c`.
-2. **The `badgeteam__badgelink` managed component.** Already present in this
-   workspace as a reference (vendored copy at
-   `_build-flash-test/tanmatsu_radio_why2025/managed_components/
-   badgeteam__badgelink/`) — nanopb protobuf + COBS framing, transport-agnostic
-   (`badgelink_rxdata_cb()` in, a byte-send callback out). No changes needed
-   to this layer itself.
-3. **DutchVMS-specific protocol-handler glue — the actual new work.**
-   Upstream's handlers (`badgelink_fs.c`, `badgelink_appfs.c`,
-   `badgelink_nvs.c`, `badgelink_startapp.c`) are written against Tanmatsu's
-   AppFS + app-launcher model, which DutchVMS doesn't have (BadgeVMS has its
-   own kernel VFS — `why_fopen()` and friends in `wrapped_funcs.c` — and its
-   own PIE-ELF process model in `task.c`). This needs a from-scratch mapping
-   from BadgeLink's fs/nvs/start-app commands onto BadgeVMS's own APIs. The
-   previously-removed `badgelink_transport_uart.c` (still readable at
-   `_build-flash-test/firmware/badgevms/badgelink_transport_uart.c`) already
-   solved part of this — avoiding `why_open()` in favor of lower-level calls —
-   and is a usable starting point even though its UART transport itself is
-   being replaced.
+1. **A TinyUSB device-mode stack.** DutchVMS had none before this branch —
+   the only USB components previously in the tree were *host*-mode
+   (`espressif__usb_host_cdc_acm`, `usb_host_ch34x_vcp`, `usb_host_cp210x_vcp`).
+   **Now implemented**: `badgevms/drivers/usb_device.c`, ported from the
+   PHY/mux bring-up above (`usb_new_phy()` + `gpio_set_level(2, ...)`) — see
+   "Implementation status" below.
+2. **The `badgeteam__badgelink` managed component.** Nanopb protobuf + COBS
+   framing, transport-agnostic (`badgelink_rxdata_cb()` in, a byte-send
+   callback out) — no changes needed to this layer itself. **Now vendored**
+   into `badgevms/drivers/badgelink/`.
+3. **DutchVMS-specific protocol-handler glue.** Upstream's handlers
+   (`badgelink_fs.c`, `badgelink_appfs.c`, `badgelink_nvs.c`,
+   `badgelink_startapp.c`) are written against Tanmatsu's AppFS + app-launcher
+   model, which DutchVMS doesn't have (BadgeVMS has its own kernel VFS —
+   `why_fopen()` and friends in `wrapped_funcs.c` — and its own PIE-ELF
+   process model in `task.c`). **Now implemented** — see "Implementation
+   status" below for exactly how (short version: `badgelink_fs.c` needed no
+   BadgeVMS-specific rewrite at all, just a path-prefix fix; `appfs`/
+   `startapp` are explicit `StatusNotSupported` stubs).
 4. **A mode-switch trigger, hardware-verified.** GPIO2 defaults to the C6
    side, so something has to flip it to reach the P4's BadgeLink identity.
    Senna's launcher wires this through
@@ -99,6 +102,57 @@ shared via Discord, 2026-08-16.*
    files. BadgeLink-over-USB wouldn't fix either bug, but could be a more
    reliable escape hatch for exactly the case `#13` currently warns
    against (`cj_launcher.elf` over UART).
+
+### Implementation status (2026-08-16)
+
+Items 1-3 now have real code on `feature/badgelink-usb-port`, not yet
+build-verified (no NAS docker / physical badge available in this session)
+or flashed:
+
+- **Item 1 (TinyUSB + mux)**: `badgevms/drivers/usb_device.c` +
+  `usb_device.h`, ported from Senna's reference almost line-for-line (PHY
+  config, GPIO2 toggle, vendor-class descriptors). Added `espressif/esp_tinyusb`
+  as a new managed dependency in `badgevms/idf_component.yml` (pinned
+  `^2.2.1` to match what her port and `tanmatsu-usb-msc` both use — **not
+  confirmed to resolve cleanly against this repo's IDF 5.5.1 pin**, her port
+  is on IDF 6.0.2; check this first if the component-manager fetch fails).
+- **Item 2 (badgelink component)**: vendored into
+  `badgevms/drivers/badgelink/` — same location the 2026-07-10 UART attempt
+  used (`git show 418ae4c` in this repo's own history), source files
+  extracted from that exact commit rather than re-copied from the Tanmatsu
+  reference tree, since they were already adapted and reviewed once. Wired
+  into `badgevms/CMakeLists.txt`'s `SRCS`/`INCLUDE_DIRS`.
+- **Item 3 (protocol-handler glue)**: also reused verbatim from `418ae4c`'s
+  `badgelink_fs.c` (plain libc `fopen`/`opendir`/etc., **not** `why_fopen()`
+  — deliberately, since BadgeLink's own thread and the raw-USB-callback path
+  are plain FreeRTOS tasks with no BadgeVMS per-task `thread` struct, and
+  `why_*` calls need one; `deploy_protocol.c` and the old
+  `badgelink_transport_uart.c` hit the same constraint for the same reason).
+  Already retargeted from upstream's `/sd` prefix to this repo's actual
+  `/SD0` FATFS mount point (`fatfs.c`'s `fatfs_create_sd("SD0", ...)`,
+  confirmed by reading that file, not assumed). `badgelink_appfs.c` stays a
+  `StatusNotSupported` stub (no AppFS equivalent in BadgeVMS) and
+  `badgelink_startapp.c` stays a `StatusNotSupported` stub too (no
+  slug-addressed app store to map "start app" onto) — both are the same
+  considered decision `418ae4c` already made, not something this session
+  changed.
+- Wired into boot via `usb_device_badgelink_init()` in `why2025_firmware.c`,
+  right after `deploy_protocol_init()` — non-fatal on failure, same pattern.
+  **Gated off at compile time** by `CJ_BADGEVMS_ENABLE_BADGELINK_USB` (0) in
+  `usb_device.c` itself: TinyUSB comes up and BadgeLink starts, but the mux
+  stays pointed at the C6 by default until that flag is flipped for a
+  dedicated test build, since this hasn't touched a real badge yet.
+- **Item 4 (mode-switch trigger) is still not implemented.** The callback
+  wiring exists (`badgelink_set_usb_mode_callback()`, so a connected client
+  can flip the mux back to debug via `SetUsbMode`), but nothing in DutchVMS
+  yet exposes a way to flip *into* device mode from the badge side (menu
+  item, key combo) — right now the only way in is the compile-time flag
+  above. Needs real hardware to iterate on.
+- `tanmatsu-usb-msc` (next section) is untouched — still plan only.
+
+**Before flashing:** confirm `esp_tinyusb` actually resolves against IDF
+5.5.1 (see item 1 above), then flip `CJ_BADGEVMS_ENABLE_BADGELINK_USB` to 1
+for the test build, per the "Recommended next step" below.
 
 ## What `tanmatsu-usb-msc` would additionally need
 
@@ -125,12 +179,14 @@ Porting it into DutchVMS means:
 
 ## Recommended next step
 
-A small, low-risk hardware-verification spike: port *only* item 1 (TinyUSB
-init + GPIO2 mux toggle, no protocol glue) into a DutchVMS test build and
-confirm the P4's HS-OTG PHY enumerates over the bottom port the same way it
-does under Senna's launcher. That validates the hardware path independently
-of BadgeVMS's own kernel integration, before committing to the larger
-glue-layer work in item 3.
+Items 1-3 are now code, not just plan, but nothing here has touched a real
+badge yet. Next: build via the NAS docker toolchain (see
+`.claude/Build-And-CI.md`), fix whatever the `esp_tinyusb` dependency
+resolution or first compile turns up, flip
+`CJ_BADGEVMS_ENABLE_BADGELINK_USB` to 1, flash, and confirm the bottom USB-C
+port enumerates as `16d0:0f9a` and `badgelink.py fs list /SD0` works — the
+same hardware-verification spike originally planned here, just against
+actual new code instead of a hypothetical port.
 
 ## Today's Senna-launcher bug fixes — relevance to DutchVMS
 
