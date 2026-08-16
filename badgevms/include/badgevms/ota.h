@@ -12,3 +12,7 @@ bool         ota_session_abort(ota_handle_t session);
 
 bool ota_get_running_version(char **version);
 bool ota_get_invalid_version(char **version);
+
+// Reboot into whatever partition is currently set as the boot target (e.g.
+// after ota_session_commit() succeeded) -- does not return.
+void ota_restart(void);

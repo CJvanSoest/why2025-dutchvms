@@ -18,6 +18,7 @@
 
 #include "esp_log.h"
 #include "esp_ota_ops.h"
+#include "esp_system.h"
 #include "task.h"
 
 #include <stdatomic.h>
@@ -207,4 +208,8 @@ bool validate_ota_partition() {
 
 void invalidate_ota_partition() {
     esp_ota_mark_app_invalid_rollback_and_reboot();
+}
+
+void ota_restart() {
+    esp_restart();
 }
