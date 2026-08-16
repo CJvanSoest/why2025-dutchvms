@@ -33,11 +33,12 @@
  * + the GPIO2 toggle) is ported directly from her code, which is the only
  * hardware-confirmed reference for this sequence that exists right now.
  *
- * What is NOT yet confirmed: that this exact sequence, run from BadgeVMS's
- * own boot path instead of her launcher, actually enumerates on real
- * hardware. This is the "bouwsteen 1 hardware-verification spike" from
- * docs/design/badgelink-usb-port.md, not a finished, hardware-tested
- * feature -- hence CJ_BADGEVMS_ENABLE_BADGELINK_USB defaulting off below.
+ * Hardware-boot-verified 2026-08-16: flashed to a real badge with the mux
+ * forced to the P4 at boot, booted clean (no crash/panic around the
+ * TinyUSB/mux init). Not yet independently confirmed from a second machine
+ * that the bottom port actually enumerates as 16d0:0f9a -- see
+ * docs/design/badgelink-usb-port.md.
+ *
  * Also unresolved: whether GPIO2 collides with the TCA8418 keyboard
  * interrupt line badge-bsp calls BSP_KBD_INT (same pin number, see
  * docs/tanmatsu-launcher-port-analysis.md); BadgeVMS's own TCA8418 driver
@@ -47,8 +48,13 @@
  *
  * Unlike the UART transport, this one shares no bus with deploy_protocol.c
  * (which stays on UART0/CH340), so both can run at the same time -- no
- * CJ_BADGEVMS_ENABLE_BADGELINK-style mutual-exclusion gate is needed between
- * them, only the "not hardware-verified yet" gate below. */
+ * mutual-exclusion gate is needed between them.
+ *
+ * The mux personality is app-controlled (usb_device_switch_to(), reached via
+ * badgevms/usb_device_bridge.c's bv_usb_device_set_mode() -- see
+ * cj_launcher's diamond-key handling in the separate why2025-apps repo),
+ * not forced at boot: TinyUSB comes up here, but the mux stays on its C6
+ * default until something actually asks for BadgeLink or MSC mode. */
 
 #include "usb_device.h"
 
@@ -60,6 +66,7 @@
 #include "freertos/task.h"
 #include "tinyusb.h"
 #include "tinyusb_default_config.h"
+#include "usb_msc.h"
 
 #include <stdio.h>
 
@@ -67,14 +74,7 @@
 
 static char const *TAG = "usb_device";
 
-/* Set to 1 to actually switch the USB mux to the P4 (GPIO2 low) and start
- * BadgeLink at boot, instead of only bringing up TinyUSB internally while
- * leaving the mux on its default C6 setting. Off by default: not yet
- * hardware-verified on BadgeVMS (see the file header), and flipping the mux
- * takes the C6's own native-USB debug interface off the bottom port for as
- * long as BadgeLink device mode is active. Flip this on for a dedicated test
- * build to try badgelink.py against the bottom USB-C port. */
-#define CJ_BADGEVMS_ENABLE_BADGELINK_USB 0
+static usb_device_mode_t current_mode = USB_DEVICE_MODE_DEBUG;
 
 /* GPIO2 on the P4: WHY2025 carrier's USB mux select. Low = P4 HS-OTG PHY
  * (BadgeLink device mode), high = C6 native USB (default/debug). Same pin
@@ -174,28 +174,70 @@ void tud_vendor_rx_cb(uint8_t itf, uint8_t const *buffer, uint16_t bufsize) {
     }
 }
 
-/* Switch the WHY2025 USB mux between the C6 (debug, default) and the P4
- * (BadgeLink device mode). Registered as badgelink's set-usb-mode callback,
- * so a connected BadgeLink client can also request the switch back to
- * debug mode via badgelink.py's SetUsbMode request. */
-static void usb_device_set_mode(badgelink_usb_mode_t mode) {
-    switch (mode) {
-        case BADGELINK_USB_MODE_DEVICE:
-            tud_disconnect();
-            gpio_set_level(WHY2025_USB_MUX_GPIO, 0); // mux -> P4
-            vTaskDelay(pdMS_TO_TICKS(500));
-            tud_connect();
-            ESP_LOGI(TAG, "USB mux -> P4 (BadgeLink device mode)");
-            break;
-        case BADGELINK_USB_MODE_DEBUG:
-            tud_disconnect();
-            gpio_set_level(WHY2025_USB_MUX_GPIO, 1); // mux -> C6
-            ESP_LOGI(TAG, "USB mux -> C6 (debug/default)");
-            break;
+/* Flip the physical GPIO2 mux + TinyUSB connect state. Only handles the
+ * mux/bus side -- doesn't know about MSC or badgelink specifically, both
+ * usb_device_switch_to() and the badgelink-callback wrapper below call
+ * this. */
+static void usb_device_mux_set(bool to_p4) {
+    tud_disconnect();
+    gpio_set_level(WHY2025_USB_MUX_GPIO, to_p4 ? 0 : 1);
+    if (to_p4) {
+        vTaskDelay(pdMS_TO_TICKS(500));
+        tud_connect();
+        ESP_LOGI(TAG, "USB mux -> P4");
+    } else {
+        ESP_LOGI(TAG, "USB mux -> C6 (debug/default)");
     }
 }
 
-bool usb_device_badgelink_init(void) {
+bool usb_device_switch_to(usb_device_mode_t mode) {
+    if (mode == current_mode) {
+        return true;
+    }
+
+    // Leaving MSC (or entering it): usb_msc_activate()/deactivate() handle
+    // the SD-card mount handoff. Currently both always fail -- see
+    // usb_msc.c -- so USB_DEVICE_MODE_MSC never actually becomes current.
+    if (current_mode == USB_DEVICE_MODE_MSC) {
+        if (!usb_msc_deactivate()) {
+            ESP_LOGE(TAG, "usb_msc_deactivate failed, refusing to switch away from MSC");
+            return false;
+        }
+    }
+
+    switch (mode) {
+        case USB_DEVICE_MODE_DEBUG: usb_device_mux_set(false); break;
+        case USB_DEVICE_MODE_BADGELINK: usb_device_mux_set(true); break;
+        case USB_DEVICE_MODE_MSC:
+            if (!usb_msc_activate()) {
+                ESP_LOGE(TAG, "usb_msc_activate failed, not switching to MSC mode");
+                return false;
+            }
+            usb_device_mux_set(true);
+            break;
+        default: return false;
+    }
+
+    current_mode = mode;
+    return true;
+}
+
+usb_device_mode_t usb_device_get_current_mode(void) {
+    return current_mode;
+}
+
+/* badgelink's own SetUsbMode request only knows DEBUG/DEVICE -- map that
+ * onto our DEBUG/BADGELINK. Registered as badgelink's set-usb-mode
+ * callback, so a connected BadgeLink client can also request the switch
+ * back to debug mode via badgelink.py's SetUsbMode request. */
+static void usb_device_badgelink_mode_cb(badgelink_usb_mode_t mode) {
+    switch (mode) {
+        case BADGELINK_USB_MODE_DEVICE: usb_device_switch_to(USB_DEVICE_MODE_BADGELINK); break;
+        case BADGELINK_USB_MODE_DEBUG: usb_device_switch_to(USB_DEVICE_MODE_DEBUG); break;
+    }
+}
+
+bool usb_device_init(void) {
     // No bsp_device_get_manufacturer()/get_name() on BadgeVMS (that's a
     // badge-bsp API) -- usb_vendor/usb_product above are static instead.
     uint8_t mac[6] = {0};
@@ -244,12 +286,8 @@ bool usb_device_badgelink_init(void) {
     ESP_LOGI(TAG, "TinyUSB device stack up (mux defaulting to C6)");
 
     badgelink_init();
-    badgelink_set_usb_mode_callback(usb_device_set_mode);
+    badgelink_set_usb_mode_callback(usb_device_badgelink_mode_cb);
     badgelink_start(usb_device_send_data);
-
-#if CJ_BADGEVMS_ENABLE_BADGELINK_USB
-    usb_device_set_mode(BADGELINK_USB_MODE_DEVICE);
-#endif
 
     return true;
 }

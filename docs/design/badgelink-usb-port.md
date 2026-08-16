@@ -4,18 +4,19 @@ Design document, 2026-08-16. Supersedes the "physically impossible" verdict
 in [`.claude/Components.md`](../../.claude/Components.md)'s former "Rejected:
 BadgeLink" note — see the correction below.
 
-**Status (2026-08-16, `feature/badgelink-usb-port` branch): items 1-3 below
-are implemented and build-verified — both `badgevms.bin` (P4) and
-`network_adapter.bin` (C6) build clean via the NAS `espressif/idf:v5.5.1`
-docker image, zero warnings/errors in the new code, stack-usage gate passes
-(`fs_copy_file`'s 4128-byte frame, from the vendored `badgelink_fs.c` copy
-buffer, is the largest new one and still well under the 5120 threshold).
-Not yet flashed to real hardware.** See "Implementation status" after item 5
-for exactly what landed, the two build fixes that were needed, and what's
-still open (item 4, the mode-switch trigger, and all of the `tanmatsu-usb-msc`
-section are still just plan/no-code). Same "code exists, hardware not yet
-confirmed" convention as [SD-and-OTA-Updates.md](SD-and-OTA-Updates.md) §2/§3
-before their hardware verification passes.
+**Status (2026-08-16, `feature/badgelink-usb-port` branch): items 1-4 are
+implemented and build-verified** — `badgevms.bin`/`network_adapter.bin`
+build clean (NAS `espressif/idf:v5.5.1`), stack-usage gate passes, and a
+boot-time-forced spike of item 1-3 has booted clean on a real badge (not yet
+independently confirmed the bottom port enumerates, see below). Item 4 (the
+diamond-key mode-switch trigger, in `cj_launcher`) is now real and
+build-verified in the separate `why2025-apps` repo too. `tanmatsu-usb-msc`
+has a build-verified kernel skeleton + launcher tile,
+**but the actual SD-card storage handoff is a deliberate stub** — see
+"Implementation status" below for exactly what landed and why MSC storage
+itself isn't live yet. Same "code exists, hardware not fully confirmed"
+convention as [SD-and-OTA-Updates.md](SD-and-OTA-Updates.md) §2/§3 before
+their hardware verification passes.
 
 ## Corrected hardware fact: there is a USB mux
 
@@ -141,19 +142,40 @@ or flashed:
   slug-addressed app store to map "start app" onto) — both are the same
   considered decision `418ae4c` already made, not something this session
   changed.
-- Wired into boot via `usb_device_badgelink_init()` in `why2025_firmware.c`,
-  right after `deploy_protocol_init()` — non-fatal on failure, same pattern.
-  **Gated off at compile time** by `CJ_BADGEVMS_ENABLE_BADGELINK_USB` (0) in
-  `usb_device.c` itself: TinyUSB comes up and BadgeLink starts, but the mux
-  stays pointed at the C6 by default until that flag is flipped for a
-  dedicated test build, since this hasn't touched a real badge yet.
-- **Item 4 (mode-switch trigger) is still not implemented.** The callback
-  wiring exists (`badgelink_set_usb_mode_callback()`, so a connected client
-  can flip the mux back to debug via `SetUsbMode`), but nothing in DutchVMS
-  yet exposes a way to flip *into* device mode from the badge side (menu
-  item, key combo) — right now the only way in is the compile-time flag
-  above. Needs real hardware to iterate on.
-- `tanmatsu-usb-msc` (next section) is untouched — still plan only.
+- Wired into boot via `usb_device_init()` in `why2025_firmware.c`, right
+  after `deploy_protocol_init()` — non-fatal on failure, same pattern.
+  TinyUSB comes up but the mux stays pointed at the C6 by default; nothing
+  auto-enables BadgeLink at boot any more (see item 4).
+- **Item 4 (mode-switch trigger) — implemented 2026-08-16, launcher-only
+  (not global/system-wide).** `usb_device.c` now tracks a 3-state
+  `usb_device_mode_t` (DEBUG/BADGELINK/MSC) with a single entry point,
+  `usb_device_switch_to()`. App-facing surface:
+  `badgevms/include/badgevms/usb_device.h`'s `bv_usb_device_set_mode()`/
+  `bv_usb_device_get_mode()`, wired through a new
+  `badgevms/usb_device_bridge.c` (same thin-wrapper shape as
+  `status_led_bridge.c`). `apps/cj_launcher/main.c` (why2025-apps repo)
+  binds the physical diamond key to it **on the HOME screen only** —
+  toggles BadgeLink, shows a status toast, and a persistent "BadgeLink
+  active" indicator top-right whenever it's on. Worth knowing: the diamond
+  key already meant something else on the VIEW_APPS screen before this
+  ("update all installed SD apps from the repo", `KEY_SCANCODE_DIAMOND` in
+  that view's own switch-case) — no code conflict since the two are
+  different `switch (ctx->current_view)` arms, but the same physical key
+  now does two different things depending which screen is showing.
+  Build-verified (firmware + `cj_launcher`, NAS docker + `idf.py sdk` +
+  `apps/build.sh`), not yet flashed/tried on real hardware.
+- **`tanmatsu-usb-msc` — kernel skeleton + launcher tile exist, storage
+  itself still deliberately stubbed.** `badgevms/drivers/usb_msc.c`'s
+  `usb_msc_activate()`/`usb_msc_deactivate()` always return `false` — see
+  that file's own comment for why (esp_tinyusb's `tinyusb_msc.h` wants to
+  own the SD card's FAT mount itself; BadgeVMS's own `fatfs.c` already
+  mounts it at boot; getting that handoff wrong risks corrupting the card,
+  not just crashing, and that's not something to guess at without a spare
+  SD card to test against). `BV_USB_MODE_MSC` exists end-to-end in the app
+  API and a small launcher-style tile app,
+  `apps/cj_usb_msc` (why2025-apps repo, same shape as `cj_i2c_scan`),
+  calls the real API and honestly shows "not implemented yet" rather than
+  faking it. Build-verified, not wired to real storage.
 
 **Build verification (2026-08-16, NAS `espressif/idf:v5.5.1` docker), two
 fixes needed beyond the initial port:**
@@ -176,9 +198,13 @@ fixes needed beyond the initial port:**
    so no further tuning was needed there.
 
 After both fixes: clean build, both `badgevms.bin` and `network_adapter.bin`
-produced, stack-usage gate green. Still needed before this is real
-end-to-end: flip `CJ_BADGEVMS_ENABLE_BADGELINK_USB` to 1 and flash to a
-physical badge, per the "Recommended next step" below.
+produced, stack-usage gate green. **2026-08-16, later the same day: flashed
+to a physical badge with BadgeLink forced on at boot (an early, since-removed
+version of this code used a compile-time flag for that spike) — booted
+clean, no crash around the mux/TinyUSB init.** Boot-verified, not yet
+independently confirmed the bottom port enumerates as `16d0:0f9a` from a
+second machine. The mode-switch is now app-driven (item 4, below) rather
+than a boot-time flag.
 
 ## What `tanmatsu-usb-msc` would additionally need
 
@@ -205,13 +231,20 @@ Porting it into DutchVMS means:
 
 ## Recommended next step
 
-Items 1-3 are now code and build-verified (see above), but nothing here has
-touched a real badge yet. Next: flip `CJ_BADGEVMS_ENABLE_BADGELINK_USB` to 1
-in `badgevms/drivers/usb_device.c`, flash both `badgevms.bin` and
-`network_adapter.bin` to a physical badge, and confirm the bottom USB-C port
-enumerates as `16d0:0f9a` and `badgelink.py fs list /SD0` works — the
-hardware-verification spike this document originally recommended, now with
-a build in hand to actually flash.
+Items 1-4 are code and build-verified; the boot-time BadgeLink-forced-on
+spike is hardware-boot-verified (see above). Still open:
+- Confirm the bottom USB-C port actually enumerates as `16d0:0f9a` from a
+  second machine and `badgelink.py fs list /SD0` works, ideally triggered
+  the real way now (diamond key on the launcher's HOME screen) rather than
+  the removed boot-time flag.
+- Flash the updated `cj_launcher`/new `cj_usb_msc` to a real badge and try
+  the diamond key + the tile. **Don't deploy `cj_launcher.elf` over UART**
+  for this (`docs/KNOWN_ISSUES.md` `#13` — known overrun risk for exactly
+  this file) — use the app-repository publish flow or an SD-card copy
+  instead, per `docs/guides/Flashing.md`.
+- MSC: find/borrow a spare SD card, then design and verify the actual
+  mount-ownership handoff between `fatfs.c` and `tinyusb_msc.h` before
+  `usb_msc.c` stops being a stub.
 
 ## Today's Senna-launcher bug fixes — relevance to DutchVMS
 

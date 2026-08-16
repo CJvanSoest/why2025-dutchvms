@@ -208,15 +208,15 @@ int app_main(void) {
         ESP_LOGW(TAG, "deploy_protocol_init failed (non-fatal)");
     }
 
-    /* BadgeLink over native USB (docs/design/badgelink-usb-port.md) — a
-     * different physical bus from deploy_protocol_init()'s UART0, so unlike
-     * the 2026-08-07 UART attempt this doesn't race with it and needs no
-     * mutual-exclusion gate between the two. Still gated off by default
-     * inside usb_device_badgelink_init() itself
-     * (CJ_BADGEVMS_ENABLE_BADGELINK_USB) pending hardware verification —
-     * see that file for why. Allowed to fail — non-critical for boot. */
-    if (!usb_device_badgelink_init()) {
-        ESP_LOGW(TAG, "usb_device_badgelink_init failed (non-fatal)");
+    /* USB (BadgeLink/MSC) over native USB (docs/design/badgelink-usb-port.md)
+     * — a different physical bus from deploy_protocol_init()'s UART0, so
+     * unlike the 2026-08-07 UART attempt this doesn't race with it and needs
+     * no mutual-exclusion gate between the two. Brings TinyUSB up but leaves
+     * the mux on its C6 default — actually switching personalities is
+     * app-driven, see usb_device.h's usb_device_switch_to(). Allowed to
+     * fail — non-critical for boot. */
+    if (!usb_device_init()) {
+        ESP_LOGW(TAG, "usb_device_init failed (non-fatal)");
     }
 
     /* CJ-DEBUG task #115: the ESP_LOGE/printf lines that used to sit here

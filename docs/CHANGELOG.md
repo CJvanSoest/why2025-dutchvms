@@ -22,17 +22,26 @@ Entries from here on are the source of truth going forward.
 ## [Unreleased]
 
 ### Added
-- **BadgeLink over native USB, off by default** (`feature/badgelink-usb-port` branch) — a new
+- **BadgeLink over native USB, app-controlled** (`feature/badgelink-usb-port` branch) — a new
   `badgevms/drivers/usb_device.c` brings up TinyUSB device mode + the WHY2025 carrier's GPIO2 USB
   mux (discovered 2026-08-16 via Senna-chan's `tanmatsu-launcher` port; the earlier 2026-08-07
   BadgeLink removal's "native USB is physically impossible here" verdict was wrong), and
   `badgevms/drivers/badgelink/` vendors `badgeteam/esp32-component-badgelink` with its `badgelink_fs.c`
-  reused against this repo's own `/SD0` FATFS mount. Gated behind `CJ_BADGEVMS_ENABLE_BADGELINK_USB`
-  (0) pending hardware verification. Build-verified via the NAS `espressif/idf:v5.5.1` docker image
-  (both `badgevms.bin` and `network_adapter.bin`, stack-usage gate green) after two fixes: `"usb"`
-  added to `badgevms/CMakeLists.txt`'s `PRIV_REQUIRES` (for `esp_private/usb_phy.h`) and
-  `CONFIG_TINYUSB_VENDOR_COUNT=1` added to `sdkconfig.defaults` (TinyUSB's vendor class is compiled
-  out otherwise). Not flashed yet. See `docs/design/badgelink-usb-port.md`.
+  reused against this repo's own `/SD0` FATFS mount. Build-verified via the NAS `espressif/idf:v5.5.1`
+  docker image (both `badgevms.bin` and `network_adapter.bin`, stack-usage gate green) after two
+  fixes: `"usb"` added to `badgevms/CMakeLists.txt`'s `PRIV_REQUIRES` (for `esp_private/usb_phy.h`)
+  and `CONFIG_TINYUSB_VENDOR_COUNT=1` added to `sdkconfig.defaults` (TinyUSB's vendor class is
+  compiled out otherwise). Boot-verified on a physical badge with the mux forced on (no crash). A
+  new app-facing `bv_usb_device_set_mode()`/`bv_usb_device_get_mode()` (`badgevms/usb_device_bridge.c`
+  + `include/badgevms/usb_device.h`) replaces the earlier boot-time-only flag — bound to the diamond
+  key on `cj_launcher`'s HOME screen (why2025-apps repo, build-verified there too), with a status
+  toast + persistent "BadgeLink active" indicator. `badgevms/drivers/usb_msc.c` adds the
+  `tanmatsu-usb-msc`-equivalent USB mass-storage mode end-to-end in the API and a small
+  `cj_usb_msc` launcher tile, but is a deliberate stub (`usb_msc_activate()` always fails) — the
+  SD-card FAT-mount handoff between BadgeVMS's own `fatfs.c` and `esp_tinyusb`'s storage helper
+  needs verifying against a spare SD card before it's real. Not flashed with the new
+  diamond-key/MSC-tile code yet — only the earlier boot-forced BadgeLink spike has touched real
+  hardware. See `docs/design/badgelink-usb-port.md`.
 
 ## [1.4.1] - 2026-08-14
 
