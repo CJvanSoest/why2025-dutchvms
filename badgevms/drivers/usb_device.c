@@ -63,7 +63,10 @@
 #include "esp_mac.h"
 #include "esp_private/usb_phy.h"
 #include "freertos/FreeRTOS.h"
+#include "freertos/queue.h"
+#include "freertos/semphr.h"
 #include "freertos/task.h"
+#include "task.h"
 #include "tinyusb.h"
 #include "tinyusb_default_config.h"
 #include "usb_msc.h"
@@ -81,23 +84,36 @@ static usb_device_mode_t current_mode = USB_DEVICE_MODE_DEBUG;
  * number as badge-bsp's BSP_KBD_INT -- see the file header. */
 #define WHY2025_USB_MUX_GPIO 2
 
-enum usb_device_interface { ITF_NUM_VENDOR = 0, ITF_COUNT };
-enum usb_device_endpoint { EP_EMPTY = 0, EPNUM_VENDOR };
+// MSC's own interface -- alongside BadgeLink's vendor interface in the same
+// composite device, not a separate USB identity. All the tud_msc_*
+// callbacks TinyUSB calls into for this interface are implemented by
+// espressif/esp_tinyusb's tinyusb_msc.c, not here -- see usb_msc.c, which
+// only calls that component's high-level storage-instance/mount-point API.
+enum usb_device_interface { ITF_NUM_VENDOR = 0, ITF_NUM_MSC, ITF_COUNT };
+enum usb_device_endpoint { EP_EMPTY = 0, EPNUM_VENDOR, EPNUM_MSC };
 
 #define USB_STRING_LENGTH 32
 static char usb_vendor[USB_STRING_LENGTH]  = "DutchVMS";
 static char usb_product[USB_STRING_LENGTH] = "WHY2025 badge";
 static char usb_serial[USB_STRING_LENGTH];
 
-static char const *s_str_desc[5] = {
+static char const *s_str_desc[6] = {
     (char[]){0x09, 0x04}, // 0: English (0x0409)
     usb_vendor,           // 1: Manufacturer
     usb_product,          // 2: Product
     "BadgeLink",          // 3: Control interface
     usb_serial,           // 4: Serial, chip ID
+    "Mass Storage",       // 5: MSC interface
 };
 
-enum { STRING_DESC = 0, STRING_DESC_MANUFACTURER, STRING_DESC_PRODUCT, STRING_DESC_VENDOR, STRING_DESC_SERIAL };
+enum {
+    STRING_DESC = 0,
+    STRING_DESC_MANUFACTURER,
+    STRING_DESC_PRODUCT,
+    STRING_DESC_VENDOR,
+    STRING_DESC_SERIAL,
+    STRING_DESC_MSC,
+};
 
 /* Same VID:PID as every other badge.team BadgeLink device (MCH2022's
  * original allocation, reused as the protocol's own identifier) --
@@ -119,7 +135,8 @@ static tusb_desc_device_t const desc_device = {
     .bNumConfigurations = 0x01,
 };
 
-#define USB_DEVICE_DESC_TOTAL_LEN (TUD_CONFIG_DESC_LEN + CFG_TUD_VENDOR * TUD_VENDOR_DESC_LEN)
+#define USB_DEVICE_DESC_TOTAL_LEN                                                                                      \
+    (TUD_CONFIG_DESC_LEN + CFG_TUD_VENDOR * TUD_VENDOR_DESC_LEN + CFG_TUD_MSC * TUD_MSC_DESC_LEN)
 
 // Full-speed fallback config (required by the USB spec even though this
 // port is enumerated through the P4's high-speed OTG PHY) -- endpoint size
@@ -127,10 +144,12 @@ static tusb_desc_device_t const desc_device = {
 static uint8_t const s_cfg_desc[] = {
     TUD_CONFIG_DESCRIPTOR(1, ITF_COUNT, 0, USB_DEVICE_DESC_TOTAL_LEN, 0, 100),
     TUD_VENDOR_DESCRIPTOR(ITF_NUM_VENDOR, STRING_DESC_VENDOR, EPNUM_VENDOR, (0x80 | EPNUM_VENDOR), 32),
+    TUD_MSC_DESCRIPTOR(ITF_NUM_MSC, STRING_DESC_MSC, EPNUM_MSC, (0x80 | EPNUM_MSC), 64),
 };
 static uint8_t const s_cfg_desc_hs[] = {
     TUD_CONFIG_DESCRIPTOR(1, ITF_COUNT, 0, USB_DEVICE_DESC_TOTAL_LEN, 0, 100),
     TUD_VENDOR_DESCRIPTOR(ITF_NUM_VENDOR, STRING_DESC_VENDOR, EPNUM_VENDOR, (0x80 | EPNUM_VENDOR), 512),
+    TUD_MSC_DESCRIPTOR(ITF_NUM_MSC, STRING_DESC_MSC, EPNUM_MSC, (0x80 | EPNUM_MSC), 512),
 };
 
 /* BadgeLink's usb_callback_t: send raw bytes out over the vendor endpoint. */
@@ -190,14 +209,36 @@ static void usb_device_mux_set(bool to_p4) {
     }
 }
 
-bool usb_device_switch_to(usb_device_mode_t mode) {
+/* usb_msc_activate()/deactivate() unmount/remount FLASH0's FAT partition via
+ * esp_tinyusb, which frees structures that usb_msc_init() originally
+ * allocated at boot, in kernel task context. BadgeVMS gives every app task
+ * its own private dlmalloc arena (badgevms/memory_get_malloc_info.h's
+ * get_malloc_state() resolves dlmalloc's "global" state per calling task),
+ * so calling this straight from an app task -- as this function used to --
+ * frees kernel-arena memory from the app's arena. dlmalloc's own
+ * USAGE_ERROR_ACTION catches the arena mismatch and aborts (that's the
+ * "Task N caused an unhandled exception" / dlfree() abort seen activating
+ * MSC from cj_usb_msc, root-caused 2026-08-16). Fix: do the actual mode
+ * switch on a dedicated kernel task (same untagged-task trick as
+ * Zeus/Hades, see create_kernel_task()) so it always runs in the kernel
+ * arena, matching where usb_msc_init() allocated everything. The calling
+ * app task just posts a request and blocks on its own semaphore. */
+typedef struct {
+    usb_device_mode_t mode;
+    SemaphoreHandle_t done;
+    bool              result;
+} usb_device_switch_request_t;
+
+static QueueHandle_t usb_device_switch_queue;
+
+static bool usb_device_switch_to_impl(usb_device_mode_t mode) {
     if (mode == current_mode) {
         return true;
     }
 
-    // Leaving MSC (or entering it): usb_msc_activate()/deactivate() handle
-    // the SD-card mount handoff. Currently both always fail -- see
-    // usb_msc.c -- so USB_DEVICE_MODE_MSC never actually becomes current.
+    // Leaving MSC (or entering it): usb_msc_activate()/deactivate() hand
+    // FLASH0's FAT mount back and forth between BadgeVMS's own kernel VFS
+    // and the USB host -- see usb_msc.c. SD0 isn't wired up yet.
     if (current_mode == USB_DEVICE_MODE_MSC) {
         if (!usb_msc_deactivate()) {
             ESP_LOGE(TAG, "usb_msc_deactivate failed, refusing to switch away from MSC");
@@ -220,6 +261,30 @@ bool usb_device_switch_to(usb_device_mode_t mode) {
 
     current_mode = mode;
     return true;
+}
+
+static void usb_device_worker_task(void *arg) {
+    (void)arg;
+    usb_device_switch_request_t *req;
+    for (;;) {
+        if (xQueueReceive(usb_device_switch_queue, &req, portMAX_DELAY) == pdTRUE) {
+            req->result = usb_device_switch_to_impl(req->mode);
+            xSemaphoreGive(req->done);
+        }
+    }
+}
+
+bool usb_device_switch_to(usb_device_mode_t mode) {
+    usb_device_switch_request_t  req     = {.mode = mode, .done = xSemaphoreCreateBinary()};
+    usb_device_switch_request_t *req_ptr = &req;
+    if (!req.done) {
+        ESP_LOGE(TAG, "Failed to allocate semaphore for USB mode switch");
+        return false;
+    }
+    xQueueSend(usb_device_switch_queue, &req_ptr, portMAX_DELAY);
+    xSemaphoreTake(req.done, portMAX_DELAY);
+    vSemaphoreDelete(req.done);
+    return req.result;
 }
 
 usb_device_mode_t usb_device_get_current_mode(void) {
@@ -302,6 +367,17 @@ bool usb_device_init(void) {
     badgelink_init();
     badgelink_set_usb_mode_callback(usb_device_badgelink_mode_cb);
     badgelink_start(usb_device_send_data);
+
+    usb_device_switch_queue = xQueueCreate(1, sizeof(usb_device_switch_request_t *));
+    if (!usb_device_switch_queue) {
+        ESP_LOGE(TAG, "Failed to create USB mode-switch queue");
+        return false;
+    }
+    TaskHandle_t worker_handle;
+    if (create_kernel_task(usb_device_worker_task, "usb_device", 4096, NULL, 6, &worker_handle, 1) != pdTRUE) {
+        ESP_LOGE(TAG, "Failed to create USB mode-switch worker task");
+        return false;
+    }
 
     return true;
 }

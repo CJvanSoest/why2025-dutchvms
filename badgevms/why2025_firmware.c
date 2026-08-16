@@ -39,6 +39,7 @@
 #include "drivers/tca8418.h"
 #include "drivers/tty.h"
 #include "drivers/usb_device.h"
+#include "drivers/usb_msc.h"
 #include "drivers/wifi.h"
 #include "esp_debug_helpers.h"
 #include "esp_event.h"
@@ -118,7 +119,21 @@ int app_main(void) {
         ret = nvs_flash_init();
     }
 
-    if (!device_register("FLASH0", fatfs_create_spi("FLASH0", "storage", true))) {
+    /* FLASH0 is mounted through usb_msc.c's esp_tinyusb-managed path, not
+     * fatfs_create_spi() directly, so USB mass-storage mode can later hand
+     * this same mount off to a USB host without a second, competing FAT
+     * registration on the same partition -- see usb_msc.h. Falls back to
+     * the plain mount if that setup fails, so a USB-MSC problem can't also
+     * take FLASH0 (and therefore APPS:/init.toml) down with it. */
+    wl_handle_t flash0_wl_handle = WL_INVALID_HANDLE;
+    device_t   *flash0_dev;
+    if (usb_msc_init("FLASH0", &flash0_wl_handle)) {
+        flash0_dev = fatfs_wrap_mounted_spi("FLASH0");
+    } else {
+        ESP_LOGW(TAG, "usb_msc_init failed, falling back to a plain FLASH0 mount (no USB mass-storage this boot)");
+        flash0_dev = fatfs_create_spi("FLASH0", "storage", true);
+    }
+    if (!device_register("FLASH0", flash0_dev)) {
         ESP_LOGE(TAG, "Failed to initialize FLASH0 driver");
         invalidate_ota_partition();
     }

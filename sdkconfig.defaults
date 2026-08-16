@@ -148,3 +148,9 @@ CONFIG_ESP_HOSTED_NIMBLE_HCI_VHCI=y
 # TINYUSB_VENDOR_{RX,TX}_BUFSIZE and _EPSIZE default to 512 on ESP32P4
 # already, matching the high-speed endpoint size used in usb_device.c.
 CONFIG_TINYUSB_VENDOR_COUNT=1
+
+# USB mass storage (badgevms/drivers/usb_msc.c) -- same composite USB
+# device as BadgeLink above, second interface. CFG_TUD_MSC compiles out
+# entirely without this, same reasoning as TINYUSB_VENDOR_COUNT. Buffer
+# size (CONFIG_TINYUSB_MSC_BUFSIZE) defaults to 8192 on ESP32P4 already.
+CONFIG_TINYUSB_MSC_ENABLED=y

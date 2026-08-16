@@ -37,9 +37,11 @@ Entries from here on are the source of truth going forward.
   key on `cj_launcher`'s HOME screen (why2025-apps repo, build-verified there too), with a status
   toast + persistent "BadgeLink active" indicator. `badgevms/drivers/usb_msc.c` adds the
   `tanmatsu-usb-msc`-equivalent USB mass-storage mode end-to-end in the API and a small
-  `cj_usb_msc` launcher tile, but is a deliberate stub (`usb_msc_activate()` always fails) — the
-  SD-card FAT-mount handoff between BadgeVMS's own `fatfs.c` and `esp_tinyusb`'s storage helper
-  needs verifying against a spare SD card before it's real.
+  `cj_usb_msc` launcher tile. Wired to `FLASH0` first (not `SD0`) — no spare SD card was available
+  to safely iterate mount-ownership bugs against, and a bad mount on `FLASH0` is a firmware bug
+  fixed by reflashing, not a data-loss risk. `esp_tinyusb`'s own `tinyusb_msc_new_storage_spiflash()`
+  owns the FAT mount; `badgevms/drivers/fatfs.c` gets a `fatfs_wrap_mounted_spi()` so BadgeVMS's own
+  kernel VFS can share that same mount instead of registering a second, competing one.
 
   **2026-08-16, hardware-confirmed end-to-end**: the diamond-key toggle initially showed no effect
   on real hardware (`bv_usb_device_set_mode()` returned `true`, state tracked correctly, but the
@@ -52,7 +54,22 @@ Entries from here on are the source of truth going forward.
   enumerates, and `badgelink.py fs list`/`fs download` both succeed against the badge's real `/SD0`
   with byte-correct file content. See `docs/design/badgelink-usb-port.md`.
 
-## [1.4.1] - 2026-08-14
+  **2026-08-16, MSC activation crash root-caused and fixed**: switching to MSC mode from the
+  `cj_usb_msc` launcher tile crashed the calling app task every time (`Task N caused an unhandled
+  exception`), then wedged the compositor's input-event queue so the badge never recovered without
+  a power cycle. A `mcause`/`mepc`/`g_panic_abort_details` dump added to `__wrap_xt_unhandled_exception`
+  (`badgevms/task.c`) traced it to `abort()` inside `dlfree()` (`badgevms/thirdparty/dlmalloc.c`) —
+  not memory corruption, but a heap-arena mismatch: BadgeVMS gives every app task its own private
+  dlmalloc arena (`badgevms/memory_get_malloc_info.h`'s `get_malloc_state()` resolves dlmalloc's
+  "global" state per calling task), and `usb_msc_init()` allocates `esp_tinyusb`'s storage/FAT
+  structures once at boot in the *kernel's* arena. `usb_msc_activate()`/`deactivate()`'s unmount
+  path frees those same structures — but it used to run straight on the calling app's own task,
+  so it freed kernel-arena memory from the app's arena, which `dlfree()`'s own `USAGE_ERROR_ACTION`
+  correctly caught and aborted on. Fixed by giving `usb_device.c` its own dedicated kernel-side
+  worker task (`create_kernel_task()`, same untagged-task pattern as Zeus/Hades) that the actual
+  mode switch always runs on now — `usb_device_switch_to()` just posts a request to it and blocks
+  on a semaphore, so the free() always happens in the kernel arena that allocated the memory in the
+  first place. Hardware-confirmed: MSC now activates without crashing.
 
 ### Fixed
 - **C6 LoRa never started, showing as the LoRa status LED stuck red** — `CONFIG_ESP_HOSTED_MAX_CUSTOM_MSG_HANDLERS`

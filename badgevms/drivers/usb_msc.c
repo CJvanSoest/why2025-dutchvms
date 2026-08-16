@@ -15,40 +15,136 @@
  */
 
 /* USB mass-storage (matching Senna-chan's tanmatsu-usb-msc, see
- * docs/design/badgelink-usb-port.md) -- deliberately NOT implemented yet.
+ * docs/design/badgelink-usb-port.md) -- currently wired to FLASH0 (the
+ * "storage" SPI-flash partition), not SD0. All of the SCSI/block-level
+ * TinyUSB callbacks (tud_msc_read10_cb() etc.) are implemented by
+ * espressif/esp_tinyusb's own tinyusb_msc.c -- this file only drives its
+ * high-level storage-instance API, never touches TinyUSB's MSC callbacks
+ * directly.
  *
- * espressif/esp_tinyusb ships a high-level tinyusb_msc.h that can expose an
- * sdmmc_card_t as a USB drive and (via tinyusb_msc_set_storage_mount_point())
- * hand FAT ownership back and forth between "the app/kernel" and "the USB
- * host". That's the right building block, but it wants to own the SD card's
- * FAT mount itself, and badgevms/drivers/fatfs.c already mounts SD0 for
- * BadgeVMS's own use at boot. Getting that handoff wrong -- both sides
- * thinking they own the mount, or a remount racing an in-flight kernel
- * write -- risks corrupting the card, not just a crash. That needs
- * verifying against a real SD card (a spare one, not one with real data on
- * it) before this is real, not something to guess at from here.
- *
- * There's a second open question this doesn't even get to yet: whether
- * esp_tinyusb's own tinyusb_msc_install_driver() can add an MSC interface
- * to the same composite TinyUSB device usb_device.c already brings up for
- * BadgeLink's vendor class, or wants to own tinyusb_driver_install() itself.
- * usb_device.c's own vendor-only descriptor is hardware-verified as-is
- * (see docs/design/badgelink-usb-port.md) and deliberately left alone here
- * rather than risking that to add an untested second interface.
- *
- * Until both are sorted out, both functions below are honest stubs. */
+ * Deliberately scoped to FLASH0 first, not SD0: this needed a from-scratch
+ * mount-ownership design (see usb_msc_init()'s comment in usb_msc.h) that
+ * hadn't been verified on this firmware before, and getting SD-card mount
+ * handling wrong risks corrupting whatever's on the card -- there was no
+ * spare card available to safely iterate against. FLASH0 carries no
+ * irreplaceable data right now (a bad mount here is a firmware bug fixed by
+ * reflashing, not a data-loss risk), so it's the safer place to prove the
+ * esp_tinyusb integration actually works before considering SD0. */
 
 #include "usb_msc.h"
 
 #include "esp_log.h"
+#include "esp_partition.h"
+#include "tinyusb_msc.h"
+
+#include <stdio.h>
 
 static char const *TAG = "usb_msc";
 
+static tinyusb_msc_storage_handle_t msc_handle = NULL;
+static char                         msc_base_path[16];
+
+bool usb_msc_init(char const *devname, wl_handle_t *out_wl_handle) {
+    esp_partition_t const *partition =
+        esp_partition_find_first(ESP_PARTITION_TYPE_DATA, ESP_PARTITION_SUBTYPE_DATA_FAT, "storage");
+    if (!partition) {
+        ESP_LOGE(TAG, "No 'storage' partition found");
+        return false;
+    }
+
+    // The only wl_mount() call for this partition, for the whole session --
+    // esp_tinyusb's own mount-point switching (usb_msc_activate/deactivate)
+    // only ever registers/unregisters the FATFS-on-top-of-this-handle
+    // layer, never remounts wear-levelling itself. See storage_spiflash.c's
+    // mount()/unmount() (just ff_diskio_register_wl_partition()/
+    // ff_diskio_clear_pdrv_wl(), no wl_mount()/wl_unmount() calls) --
+    // confirmed by reading esp_tinyusb's own source before relying on this.
+    wl_handle_t wl_handle = WL_INVALID_HANDLE;
+    esp_err_t   err       = wl_mount(partition, &wl_handle);
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "wl_mount failed: %s", esp_err_to_name(err));
+        return false;
+    }
+
+    tinyusb_msc_driver_config_t driver_cfg = {0};
+    err                                    = tinyusb_msc_install_driver(&driver_cfg);
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "tinyusb_msc_install_driver failed: %s", esp_err_to_name(err));
+        wl_unmount(wl_handle);
+        return false;
+    }
+
+    snprintf(msc_base_path, sizeof(msc_base_path), "/%s", devname);
+
+    tinyusb_msc_storage_config_t storage_cfg = {
+        .medium.wl_handle = wl_handle,
+        .fat_fs =
+            {
+                .base_path = msc_base_path,
+                .config =
+                    {
+                        .max_files              = 256,
+                        .format_if_mount_failed = false,
+                        .allocation_unit_size   = CONFIG_WL_SECTOR_SIZE,
+                        .use_one_fat            = false,
+                    },
+                .do_not_format = true, // never auto-format FLASH0 out from under BadgeVMS
+            },
+        .mount_point = TINYUSB_MSC_STORAGE_MOUNT_APP, // mounted for BadgeVMS's own use until activated
+    };
+
+    err = tinyusb_msc_new_storage_spiflash(&storage_cfg, &msc_handle);
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "tinyusb_msc_new_storage_spiflash failed: %s", esp_err_to_name(err));
+        msc_handle = NULL;
+        wl_unmount(wl_handle);
+        return false;
+    }
+
+    ESP_LOGI(TAG, "%s mounted via esp_tinyusb (app-owned)", msc_base_path);
+    *out_wl_handle = wl_handle;
+    return true;
+}
+
+// tinyusb_msc_set_storage_mount_point() "does not propagate failures from
+// the internal mount/unmount helpers" (its own doc comment) -- it can
+// return ESP_OK even when the actual mount/unmount underneath failed. Read
+// the mount point back afterward and only report success if it actually
+// matches what was requested, rather than trusting the return code alone.
+static bool switch_mount_point(tinyusb_msc_mount_point_t target) {
+    if (!msc_handle) {
+        return false;
+    }
+
+    esp_err_t err = tinyusb_msc_set_storage_mount_point(msc_handle, target);
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "tinyusb_msc_set_storage_mount_point failed: %s", esp_err_to_name(err));
+        return false;
+    }
+
+    tinyusb_msc_mount_point_t actual;
+    err = tinyusb_msc_get_storage_mount_point(msc_handle, &actual);
+    if (err != ESP_OK || actual != target) {
+        ESP_LOGE(
+            TAG,
+            "Mount point switch did not take effect (wanted %d, got %d, err=%s)",
+            target,
+            actual,
+            esp_err_to_name(err)
+        );
+        return false;
+    }
+
+    return true;
+}
+
 bool usb_msc_activate(void) {
-    ESP_LOGW(TAG, "USB mass-storage isn't implemented yet -- see this file's own comment");
-    return false;
+    return switch_mount_point(TINYUSB_MSC_STORAGE_MOUNT_USB);
 }
 
 bool usb_msc_deactivate(void) {
-    return false;
+    if (!msc_handle) {
+        return true; // usb_msc_init() never ran/succeeded -- nothing to undo
+    }
+    return switch_mount_point(TINYUSB_MSC_STORAGE_MOUNT_APP);
 }

@@ -217,6 +217,21 @@ independently confirmed the bottom port enumerates as `16d0:0f9a` from a
 second machine. The mode-switch is now app-driven (item 4, below) rather
 than a boot-time flag.
 
+**2026-08-16, MSC wired to `FLASH0` and hardware-confirmed working** — the
+"deliberately stubbed" status above is now stale. `usb_msc_init()`/
+`usb_msc_activate()`/`usb_msc_deactivate()` are real (`badgevms/drivers/
+usb_msc.c`), backed by `esp_tinyusb`'s `tinyusb_msc_new_storage_spiflash()`
+against `FLASH0`'s `storage` partition, not `SD0` (see that file's own
+comment for why FLASH0 first). Activating MSC crashed the calling app task
+every time at first — root-caused to a heap-arena mismatch (`usb_msc_init()`
+allocates in the kernel's dlmalloc arena at boot, but the unmount path used
+to free that memory from the calling app's own private arena) and fixed by
+routing the actual mode switch through a dedicated kernel task instead of
+running it on the app's task — full root-cause writeup in
+`docs/CHANGELOG.md`'s `[Unreleased]` entry. `cj_usb_msc`'s launcher tile
+still shows a stale "not implemented yet" message that predates this fix —
+cosmetic, not yet updated.
+
 ## What `tanmatsu-usb-msc` would additionally need
 
 [`tanmatsu-usb-msc`](https://github.com/Senna-chan/tanmatsu-usb-msc) (also
