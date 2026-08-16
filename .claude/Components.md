@@ -48,18 +48,27 @@ should be left alone; the first-party addition is:
 | `main/tanmatsu/infrared/` | IR protocol server (separate peripheral, same pattern as LoRa: a protocol server exposed to the P4 over esp-hosted custom events). |
 | `main/slave_control.c` | The esp-hosted custom-RPC dispatch this fork's LoRa/IR servers hook into (`handle_custom_rpc_request()`) — its own comment documents the "runs on the Rx thread, do not block" contract that the LoRa async-TX rework exists to respect. |
 
-## Rejected: BadgeLink (native badge.team UART/USB deploy protocol)
+## Reconsidered: BadgeLink (native badge.team UART/USB deploy protocol)
 
-Tried and removed (2026-08-07). Two independent blockers, both confirmed by
-hardware analysis rather than guessed: (1) native-USB variant — the P4's
+Tried and removed over UART (2026-08-07), for a still-valid reason: BadgeLink's
+COBS framing isn't resilient against the console logs (ESP_LOG/printf) that
+keep flowing on the shared CH340 UART0, so every log line desyncs the frame
+parser. `deploy_protocol.c`'s own magic-sentinel scan exists specifically
+because it doesn't have that problem — don't re-propose BadgeLink over UART0
+without solving that first.
+
+**Correction (2026-08-16):** the removal's *other* stated blocker — "the P4's
 native-USB pins are not routed to any external connector on this carrier
-board (the bottom USB-C port only reaches the C6), so native USB/MSC is
-physically impossible here; (2) UART-workaround variant — BadgeLink's COBS
-framing isn't resilient against the console logs (ESP_LOG/printf) that keep
-flowing on the same CH340 UART, so every log line desyncs the frame parser.
-`deploy_protocol.c`'s own magic-sentinel scan exists specifically because it
-doesn't have that problem. Don't re-propose BadgeLink for this hardware
-without a different physical UART/USB path.
+board" — was wrong. The bottom USB-C port carries a physical mux (GPIO2-
+selected) between the C6's native USB and the P4's own native High-Speed OTG
+PHY; hardware-confirmed working via Senna-chan's `tanmatsu-launcher` WHY2025
+port (`16d0:0f9a "MCS WHY2025"` enumerated, `badgelink.py appfs list`
+succeeded). Native-USB BadgeLink also sidesteps the UART blocker above
+entirely — it's a separate physical bus from `deploy_protocol.c`. This is no
+longer a dead end; see
+[`docs/design/badgelink-usb-port.md`](../docs/design/badgelink-usb-port.md)
+for the full porting analysis and what's still missing before it's real code
+here.
 
 ## Where the real apps live (not this repo)
 
