@@ -21,6 +21,15 @@ Entries from here on are the source of truth going forward.
 
 ## [Unreleased]
 
+## [1.5.4] - 2026-08-17
+
+### Changed
+- **SDIO drop-scratch buffer (added in v1.5.3) bumped 2KB → 16KB** (PR #88) — hardware-tested that
+  2KB meant draining a ~1MB dropped transfer took ~500 separate synchronous CMD53 transactions,
+  slow enough to hit an `ESP_ERR_TIMEOUT` partway through. Not a crash — the transport layer's own
+  "Init event not received" self-reset recovered cleanly both times this was hardware-tested — but
+  still a visible reboot blip that needing far fewer round trips should reduce.
+
 ## [1.5.3] - 2026-08-17
 
 ### Fixed
