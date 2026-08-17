@@ -875,6 +875,22 @@ static esp_err_t sdio_push_data_to_queue(uint8_t * buf, uint32_t buf_len)
 }
 #else // H_SDIO_HOST_STREAMING_MODE
 // SDIO streaming mode
+
+// CJ-PATCH (why2025-dutchvms): each double_buf slot only ever grew, never
+// shrank -- one oversized burst (e.g. a multi-MB OTA firmware download over
+// WiFi, which routes through this exact SDIO path) permanently pinned its
+// peak size in MALLOC_CAP_INTERNAL|MALLOC_CAP_DMA memory, a small pool the
+// whole system shares (this is what a later _h_malloc_align() call in this
+// same function crashed on, hard, via assert()). Track how many
+// consecutive reads asked for far less than what's currently held per
+// slot; once that's stayed true for a while (not just one small packet
+// right after a burst -- real traffic sizes vary read to read), shrink the
+// buffer back down. Never shrinks while traffic still needs the larger
+// size, so this shouldn't affect steady-state throughput.
+#define SDIO_RX_SHRINK_STREAK_THRESHOLD 16 // consecutive small reads before shrinking
+#define SDIO_RX_SHRINK_FACTOR 4            // "small" means <= buf_size / this
+static uint8_t small_read_streak[2];
+
 // return a buffer big enough to contain the data
 static uint8_t * sdio_rx_get_buffer(uint32_t len)
 {
@@ -886,8 +902,9 @@ static uint8_t * sdio_rx_get_buffer(uint32_t len)
 	// (re)allocate a write buffer big enough to contain the data stream
 	int index = double_buf.write_index;
 	uint8_t ** buf = &double_buf.buffer[index].buf;
+	uint32_t cur_size = double_buf.buffer[index].buf_size;
 
-	if (len > double_buf.buffer[index].buf_size) {
+	if (len > cur_size) {
 		if (*buf) {
 			// free already allocated memory
 			g_h.funcs->_h_free_align(*buf);
@@ -895,7 +912,24 @@ static uint8_t * sdio_rx_get_buffer(uint32_t len)
 		*buf = (uint8_t *)g_h.funcs->_h_malloc_align(len, HOSTED_MEM_ALIGNMENT_64);
 		assert(*buf);
 		double_buf.buffer[index].buf_size = len;
+		small_read_streak[index] = 0;
 		ESP_LOGD(TAG, "buf %d size: %ld", index, double_buf.buffer[index].buf_size);
+	} else if (*buf && cur_size > 0 && len <= cur_size / SDIO_RX_SHRINK_FACTOR) {
+		if (++small_read_streak[index] >= SDIO_RX_SHRINK_STREAK_THRESHOLD) {
+			uint8_t * smaller = (uint8_t *)g_h.funcs->_h_malloc_align(len, HOSTED_MEM_ALIGNMENT_64);
+			if (smaller) {
+				g_h.funcs->_h_free_align(*buf);
+				*buf = smaller;
+				double_buf.buffer[index].buf_size = len;
+				ESP_LOGD(TAG, "buf %d shrunk to size: %ld", index, len);
+			}
+			// If the shrink allocation itself fails, just keep the
+			// existing (larger, already-working) buffer -- no worse
+			// off than before this patch.
+			small_read_streak[index] = 0;
+		}
+	} else {
+		small_read_streak[index] = 0;
 	}
 	return *buf;
 }
