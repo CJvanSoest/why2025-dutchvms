@@ -21,6 +21,20 @@ Entries from here on are the source of truth going forward.
 
 ## [Unreleased]
 
+## [1.5.2] - 2026-08-17
+
+### Fixed
+- **A large WiFi download over the P4↔C6 SDIO link could crash the whole badge** (PR #86) — the
+  SDIO RX double-buffer only ever grew to fit the largest transfer it had seen and never shrank
+  back down, so a one-off large burst (an OTA firmware update, or a standalone C6 radio bundle
+  sync, both routing multi-MB WiFi downloads through this exact path) permanently pinned its peak
+  size in the small internal-SRAM/DMA-capable memory pool the whole system shares. Once that pool
+  ran out, the next allocation in `sdio_rx_get_buffer()` hit its own `assert()` and took down the
+  entire badge (not just the OTA app — this runs in kernel context, so BadgeVMS's own per-app
+  crash isolation never got a chance to catch it). Hardware-reproduced during a v1.5.1 OTA update
+  and again re-syncing the C6 bundle standalone. Fixed by shrinking the buffer back down after a
+  sustained streak of much-smaller reads, so a one-off burst no longer pins its peak size forever.
+
 ## [1.5.1] - 2026-08-17
 
 ### Added
