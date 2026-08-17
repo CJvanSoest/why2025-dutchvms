@@ -21,6 +21,22 @@ Entries from here on are the source of truth going forward.
 
 ## [Unreleased]
 
+## [1.5.3] - 2026-08-17
+
+### Fixed
+- **v1.5.2's SDIO fix reduced but didn't eliminate the crash** (PR #87) — the shrink-back-down fix
+  cut how often the internal/DMA-capable SRAM pool ran dry, but a genuine allocation failure in
+  `sdio_rx_get_buffer()` still hit a bare `assert()` and took the whole badge down. Hardware-
+  reproduced twice more after v1.5.2 shipped: once mid-download of a large P4 OTA image, once
+  during a freshly-booted image's own C6 MD5-check/reset traffic right after a successful OTA. The
+  SDIO slave still expects the host to drain the announced transfer length off the bus regardless
+  of whether a destination buffer exists, so skipping the read isn't safe — on an allocation
+  failure, the driver now drains the transfer into a small static (BSS, not heap, so it's always
+  available) scratch buffer and drops the data, instead of crashing. Also fixes a related bug the
+  v1.5.2 patch left in place: on allocation failure, the buffer's recorded size was still updated
+  to the failed length despite the pointer being NULL, which would have handed out a NULL pointer
+  as "already big enough" on the very next call.
+
 ## [1.5.2] - 2026-08-17
 
 ### Fixed
