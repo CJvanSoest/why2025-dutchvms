@@ -899,7 +899,17 @@ static uint8_t small_read_streak[2];
 // condition that caused the allocation failure in the first place. Sized
 // to a whole multiple of ESP_BLOCK_SIZE so H_SDIO_RX_BLOCK_ONLY_XFER's
 // block-padding never has to be clamped against it.
-static uint8_t sdio_rx_drop_scratch[2048] __attribute__((aligned(HOSTED_MEM_ALIGNMENT_64)));
+//
+// Hardware-tested at 2048 bytes first: draining a ~1MB dropped transfer in
+// 2048-byte chunks meant ~500 separate synchronous CMD53 transactions,
+// which was slow enough to hit an ESP_ERR_TIMEOUT partway through --
+// harmless on its own (the transport layer's own "Init event not received"
+// self-reset recovered cleanly), but still a visible reboot blip that a
+// bigger scratch buffer avoids by needing far fewer round trips. 16KB is a
+// small, fixed, permanent cost against the scarce internal/DMA SRAM pool
+// this is all about protecting -- unlike the unbounded growth this whole
+// patch series replaces, that's an acceptable, bounded trade.
+static uint8_t sdio_rx_drop_scratch[16384] __attribute__((aligned(HOSTED_MEM_ALIGNMENT_64)));
 
 // return a buffer big enough to contain the data
 static uint8_t * sdio_rx_get_buffer(uint32_t len)
