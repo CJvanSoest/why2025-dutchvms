@@ -891,6 +891,16 @@ static esp_err_t sdio_push_data_to_queue(uint8_t * buf, uint32_t buf_len)
 #define SDIO_RX_SHRINK_FACTOR 4            // "small" means <= buf_size / this
 static uint8_t small_read_streak[2];
 
+// CJ-PATCH (why2025-dutchvms): fixed, statically-allocated (BSS, not heap)
+// destination for sdio_read_task() to drain an announced transfer into and
+// drop, when sdio_rx_get_buffer() can't allocate a real destination for it
+// (see the two CJ-PATCH comments below). Never depends on runtime
+// heap/pool state, so it's available even in the exact low-memory
+// condition that caused the allocation failure in the first place. Sized
+// to a whole multiple of ESP_BLOCK_SIZE so H_SDIO_RX_BLOCK_ONLY_XFER's
+// block-padding never has to be clamped against it.
+static uint8_t sdio_rx_drop_scratch[2048] __attribute__((aligned(HOSTED_MEM_ALIGNMENT_64)));
+
 // return a buffer big enough to contain the data
 static uint8_t * sdio_rx_get_buffer(uint32_t len)
 {
@@ -910,7 +920,22 @@ static uint8_t * sdio_rx_get_buffer(uint32_t len)
 			g_h.funcs->_h_free_align(*buf);
 		}
 		*buf = (uint8_t *)g_h.funcs->_h_malloc_align(len, HOSTED_MEM_ALIGNMENT_64);
-		assert(*buf);
+		if (!*buf) {
+			// CJ-PATCH (why2025-dutchvms): this used to be assert(*buf) --
+			// a failed allocation here (internal/DMA SRAM is a small pool
+			// the whole system shares, and a sustained large WiFi transfer,
+			// e.g. an OTA download, can exhaust it) took down the entire
+			// badge, not just the caller. double_buf.buffer[index].buf_size
+			// must NOT be updated to `len` here -- *buf is NULL, so a later
+			// call that thinks this slot already holds `len` bytes would
+			// skip reallocating and hand out a NULL pointer instead. Leave
+			// buf_size at 0 (matches the free_align() above) and let the
+			// caller (sdio_read_task()) drain and drop this one transfer
+			// instead of crashing.
+			double_buf.buffer[index].buf_size = 0;
+			ESP_LOGE(TAG, "buf %d: alloc of %ld bytes failed, dropping this transfer", index, len);
+			return NULL;
+		}
 		double_buf.buffer[index].buf_size = len;
 		small_read_streak[index] = 0;
 		ESP_LOGD(TAG, "buf %d size: %ld", index, double_buf.buffer[index].buf_size);
@@ -1193,7 +1218,46 @@ static void sdio_read_task(void const* pvParameters)
 
 		/* Allocate rx buffer */
 		rxbuff = sdio_rx_get_buffer(len_from_slave);
-		assert(rxbuff);
+		if (!rxbuff) {
+			// CJ-PATCH (why2025-dutchvms): sdio_rx_get_buffer() couldn't
+			// allocate (internal/DMA SRAM exhausted, e.g. during a large
+			// sustained WiFi download). The slave still expects the host
+			// to drain exactly len_from_slave bytes off the bus for this
+			// announced transfer -- skipping the read entirely would
+			// desync the SDIO transport. Drain into a small, always-
+			// available static scratch buffer and drop the data instead
+			// of crashing the whole badge; whatever protocol layer this
+			// packet belonged to (WiFi RX, most likely) just sees it as a
+			// dropped packet, same as any other lossy-link retransmit
+			// case, rather than a full system panic.
+			data_left = len_from_slave;
+			while (data_left) {
+				// sdio_rx_drop_scratch is sized to a whole multiple of
+				// ESP_BLOCK_SIZE (see its definition), so a block-padded
+				// transfer of `chunk` always fits it without a second
+				// clamp. `data_left` tracks the LOGICAL bytes still owed
+				// to the bus (matches the non-drop path below) -- padding
+				// is destination-buffer bookkeeping only.
+				uint32_t chunk = data_left < sizeof(sdio_rx_drop_scratch) ? data_left : sizeof(sdio_rx_drop_scratch);
+#if H_SDIO_RX_BLOCK_ONLY_XFER
+				uint32_t block_chunk = ((chunk + ESP_BLOCK_SIZE - 1) / ESP_BLOCK_SIZE) * ESP_BLOCK_SIZE;
+				ret = g_h.funcs->_h_sdio_read_block(sdio_handle,
+						ESP_SLAVE_CMD53_END_ADDR - data_left,
+						sdio_rx_drop_scratch, block_chunk, ACQUIRE_LOCK);
+#else
+				ret = g_h.funcs->_h_sdio_read_block(sdio_handle,
+						ESP_SLAVE_CMD53_END_ADDR - data_left,
+						sdio_rx_drop_scratch, chunk, ACQUIRE_LOCK);
+#endif
+				if (ret) {
+					ESP_LOGE(TAG, "%s: failed to drain dropped transfer - %d", __func__, ret);
+					break;
+				}
+				data_left -= chunk;
+			}
+			SDIO_DRV_UNLOCK();
+			continue;
+		}
 
 		data_left = len_from_slave;
 		pos = rxbuff;
