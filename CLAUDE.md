@@ -47,7 +47,7 @@ Before changing code, read the handbook in [`.claude/`](.claude):
   LoRa RPC, and the app install/launch flow, with real function names.
 - [`.claude/Build-And-CI.md`](.claude/Build-And-CI.md) — build invocation,
   the NAS-docker pattern (most work here happens without a local IDF
-  toolchain), and what the 5 CI jobs actually check.
+  toolchain), and what the 4 CI jobs actually check.
 - [`.claude/Workflow.md`](.claude/Workflow.md) — first read to a green,
   physically-verified commit.
 - [`.claude/Pitfalls.md`](.claude/Pitfalls.md) — traps that already cost
@@ -83,6 +83,11 @@ binary onto a physical badge.
 
 1. **Do not modify vendored code.** `badgevms/thirdparty/` (cJSON, dlmalloc,
    tomlc17, khash) is a third-party drop. Leave it alone.
+   **Exception:** `components/` holds 15+ locally-forked ESP-IDF components
+   (freertos, esp_psram, esp_lcd, elf_loader, …) that this fork *does*
+   intentionally patch — every change is logged in `components/CHANGES`.
+   That log is the override surface: check it before assuming a `components/`
+   file is untouchable, and add an entry there for any new patch.
 2. **`badgevms/` and `connectivity_esp_hosted/slave/` use different code
    styles, and only `badgevms/` is CI-format-checked.** Running
    `clang-format -i` across the whole tree will reformat

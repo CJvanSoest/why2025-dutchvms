@@ -16,7 +16,7 @@
 
 /* See badgevms/led_matrix.h. Thin wrapper around the internal
  * led_matrix_clear/pixel/row/fill/brightness primitives already implemented
- * in drivers/badgevms_i2c_bus.c (same pattern as nvs_bridge.c wrapping
+ * in drivers/led_matrix_pca9698.c (same pattern as nvs_bridge.c wrapping
  * nvs_get_blob/nvs_set_blob), plus the take()/release() arbitration flag so
  * an app can own the shared matrix framebuffer without the firmware's own
  * boot-demo animation fighting over it. */
