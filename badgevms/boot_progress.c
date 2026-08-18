@@ -43,11 +43,17 @@ static char const *TAG = "boot_progress";
 /* Real boot work between stages can take well under a second (e.g. when
  * WIFI0 skips the C6 reflash because it's already current) -- without a
  * floor, a message can be overwritten by the next one before it's even
- * readable, especially once motion blur on a phone-video capture is
- * involved. This blocks boot by up to this much per call (5 calls,
- * worst case +2s total) -- a deliberate legibility/speed tradeoff for a
- * UX feature, not something perf-sensitive code should ever do. */
-#define BOOT_PROGRESS_MIN_VISIBLE_MS 400
+ * readable. Hardware-tested at 400ms (issue #96): the one message that
+ * happened to stay up several real seconds (WIFI0 doing an actual C6
+ * reflash that run) photographed perfectly readable once the camera
+ * settled, while the four ~400ms ones looked "garbled" -- that was motion
+ * blur from the transition, not a rendering bug, confirming 400ms just
+ * isn't enough dwell time for a camera (or an eye scanning the screen) to
+ * resolve it. Bumped to 700ms. This blocks boot by up to this much per
+ * call (5 calls, worst case +3.5s total) -- a deliberate legibility/speed
+ * tradeoff for a UX feature, not something perf-sensitive code should ever
+ * do. */
+#define BOOT_PROGRESS_MIN_VISIBLE_MS 700
 
 /* font_data only covers A-Z/0-9/space (see font.h) -- anything else
  * (lowercase is remapped by char_to_font_index(), but '.', '+', etc are
