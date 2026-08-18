@@ -13,6 +13,7 @@
 * single buffered windows could be better
 * we should never allow tasks to hold FreeRTOS synchtonization primitives, if the task gets killed FreeRTOS will just randomly kill a different task in retaliation after a timeout
 * what `WINDOW_FLAG_FLIP_HORIZONTAL` means is currently hardcoded for the why2025 badge
+* the ~10s black screen before the launcher's boot splash appears has no progress feedback at all -- Nicolai-Electronics/tanmatsu-launcher shows a startup_dialog() at every boot stage instead of a silent blank screen; see GitHub issue #96
 
 # Notes
 
