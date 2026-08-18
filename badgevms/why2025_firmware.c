@@ -123,13 +123,9 @@ int app_main(void) {
     /* PANEL0 moved up here, before FLASH0/SD0/WIFI0 -- see GitHub issue #96
      * and Nicolai-Electronics/tanmatsu-launcher's own app_main() for the
      * pattern this follows: bring the display up as close to the start of
-     * boot as its dependencies allow, so every later step (mounting
-     * storage, the C6 flash+WiFi bring-up, which can run for several
-     * seconds) has a real screen to show progress on via boot_progress()
-     * below, instead of leaving the panel in whatever undefined state the
-     * bootloader left it in for that whole window. Checked before moving:
-     * st7703_create() doesn't look up another device or touch NVS/the
-     * default event loop, so this is a pure reorder, not a behavior change.
+     * boot as its dependencies allow. Checked before moving: st7703_create()
+     * doesn't look up another device or touch NVS/the default event loop,
+     * so this is a pure reorder, not a behavior change.
      *
      * KEYBOARD0/compositor_init() deliberately NOT moved up with it --
      * hardware-tested moving both together and it hard-crashed every boot
@@ -142,17 +138,25 @@ int app_main(void) {
      * moving KEYBOARD0 that early removed it. Left KEYBOARD0/
      * compositor_init() at their original position (after WIFI0/SOCKET0)
      * so TCA8418 gets the exact same elapsed time it always has; only
-     * PANEL0's own position changed. boot_progress() (below) only needs
-     * PANEL0 -- it writes straight to the panel's framebuffer via
-     * lcd_device_t, bypassing the window/compositor pipeline entirely (see
-     * boot_progress.c), so it works fine before compositor_init() has even
-     * run. */
+     * PANEL0's own position changed. (Since fixed properly at the source --
+     * see esp_tca8418.c -- so this ordering is no longer load-bearing for
+     * TCA8418 either, just left as-is.)
+     *
+     * boot_progress() (badgevms/boot_progress.c) drew kernel boot-stage
+     * text straight onto PANEL0's framebuffer during this window -- pulled
+     * from the call sites below for now (TODO.md, issue #96): hardware
+     * testing found the display backlight is driven by the C6
+     * co-processor, which gets a mandatory hard reset partway through
+     * WIFI0 bring-up (slave_c6_flasher.c's C6_POST_RESET_SETTLE_MS), so
+     * anything drawn in the ~3s around that reset was effectively
+     * undrawable regardless of framebuffer content -- a real hardware
+     * constraint, not fixed by any of this file's boot-order changes. The
+     * infrastructure (boot_progress.c/.h, still built) and the display's
+     * early position are both kept; only the call sites were removed. */
     if (!device_register("PANEL0", st7703_create())) {
         ESP_LOGE(TAG, "Failed to initialize PANEL0 driver");
         invalidate_ota_partition();
     }
-
-    boot_progress("MOUNTING STORAGE");
 
     /* FLASH0 is mounted through usb_msc.c's esp_tinyusb-managed path, not
      * fatfs_create_spi() directly, so USB mass-storage mode can later hand
@@ -189,8 +193,6 @@ int app_main(void) {
     }
     device_register("SD0", sd0_dev);
 
-    boot_progress("SCANNING APPS");
-
     if (device_get("SD0")) {
         logical_name_set("STORAGE:", "SD0:, FLASH0:", false);
         logical_name_set("APPS:", "SD0:[BADGEVMS.APPS], FLASH0:[BADGEVMS.APPS]", false);
@@ -201,8 +203,6 @@ int app_main(void) {
         application_init("APPS:", NULL, "FLASH0:[BADGEVMS.APPS]");
     }
 
-    boot_progress("STARTING WIFI AND C6");
-
     if (!device_register("WIFI0", wifi_create())) {
         ESP_LOGE(TAG, "Failed to initialize WIFI0 driver");
         invalidate_ota_partition();
@@ -212,8 +212,6 @@ int app_main(void) {
         ESP_LOGE(TAG, "Failed to initialize SOCKET0 driver");
         invalidate_ota_partition();
     }
-
-    boot_progress("STARTING INPUT AND SENSORS");
 
     /* KEYBOARD0 stays here, at its original position (after WIFI0/SOCKET0).
      * The TCA8418 I2C-NACK abort seen when this hard-crashed on hardware
@@ -291,8 +289,6 @@ int app_main(void) {
     if (!usb_device_init()) {
         ESP_LOGW(TAG, "usb_device_init failed (non-fatal)");
     }
-
-    boot_progress("STARTING DUTCHVMS");
 
     free_ram = heap_caps_get_free_size(MALLOC_CAP_DEFAULT);
     ESP_LOGI(

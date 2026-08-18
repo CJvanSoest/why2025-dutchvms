@@ -13,7 +13,7 @@
 * single buffered windows could be better
 * we should never allow tasks to hold FreeRTOS synchtonization primitives, if the task gets killed FreeRTOS will just randomly kill a different task in retaliation after a timeout
 * what `WINDOW_FLAG_FLIP_HORIZONTAL` means is currently hardcoded for the why2025 badge
-* the ~10s black screen before the launcher's boot splash appears has no progress feedback at all -- Nicolai-Electronics/tanmatsu-launcher shows a startup_dialog() at every boot stage instead of a silent blank screen; see GitHub issue #96
+* the ~10s black screen before the launcher's boot splash appears has no progress feedback at all -- Nicolai-Electronics/tanmatsu-launcher shows a startup_dialog() at every boot stage instead of a silent blank screen; see GitHub issue #96. Infrastructure exists (badgevms/boot_progress.c/.h, still built) and PANEL0 is already registered early enough to use it -- pulled from why2025_firmware.c's call sites for now, not deleted. Blocker found on hardware: the display backlight is driven by the C6 co-processor, which gets a mandatory hard reset partway through WIFI0 bring-up (slave_c6_flasher.c's C6_POST_RESET_SETTLE_MS, ~3s) -- anything drawn in that window is undrawable regardless of framebuffer content, no matter how the text itself is rendered/positioned/held. Whoever picks this back up should design around that window (e.g. only draw before it starts and after it's confirmed settled) rather than trying to paper over it again.
 
 # Notes
 
