@@ -586,7 +586,23 @@ out:
 }
 
 logical_name_result_t logical_name_resolve_const(char const *logical_name, size_t idx) {
-    char                 *tmp    = strdup(logical_name);
+    /* Not a plain strdup(): resolve_device_string() (see above) may grow a
+     * string's working length by 1 past the end of the original cstr while
+     * probing whether a component is a device -- writing/reading at
+     * [len+1] on a buffer only guaranteed through [len] is a one-byte
+     * out-of-bounds access. Match the +2 slack this file already uses for
+     * every other string that can reach that path (see the target[]
+     * allocation above). */
+    size_t len = strlen(logical_name);
+    char  *tmp = malloc(len + 2);
+    if (!tmp) {
+        logical_name_result_t result = {.result_count = 0, .result = NULL};
+        return result;
+    }
+    memcpy(tmp, logical_name, len);
+    tmp[len]     = '\0';
+    tmp[len + 1] = '\0';
+
     logical_name_result_t result = logical_name_resolve(tmp, idx);
     free(tmp);
     return result;

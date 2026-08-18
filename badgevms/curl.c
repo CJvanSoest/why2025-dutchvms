@@ -112,7 +112,74 @@ static void free_all_cookies(cookie_entry_t *cookies) {
     }
 }
 
-static cookie_entry_t *parse_set_cookie(char const *set_cookie_header) {
+/* host/path/scheme extraction + cookie-scope matching, used so cookies for
+ * one host don't get sent to another (see build_cookie_header() and the
+ * "no Domain= attribute" default in parse_set_cookie() below). */
+
+static void extract_host_from_url(char const *url, char *host_buf, size_t host_buf_size) {
+    if (!host_buf_size)
+        return;
+    host_buf[0] = '\0';
+    if (!url)
+        return;
+    char const *p = strstr(url, "://");
+    p             = p ? p + 3 : url;
+    size_t i      = 0;
+    while (p[i] && p[i] != '/' && p[i] != ':' && p[i] != '?' && i < host_buf_size - 1) {
+        host_buf[i] = p[i];
+        i++;
+    }
+    host_buf[i] = '\0';
+}
+
+static char const *extract_path_from_url(char const *url) {
+    if (!url)
+        return "/";
+    char const *p     = strstr(url, "://");
+    p                 = p ? p + 3 : url;
+    char const *slash = strchr(p, '/');
+    return slash ? slash : "/";
+}
+
+static bool url_is_https(char const *url) {
+    return url && strncasecmp(url, "https://", 8) == 0;
+}
+
+/* Exact host match, or `host` is a subdomain of `cookie_domain` (host ends
+ * with "." + cookie_domain) -- the same relationship RFC 6265 allows for a
+ * cookie whose Domain attribute was explicitly set. */
+static bool cookie_domain_matches(char const *cookie_domain, char const *host) {
+    if (!cookie_domain || !host || !*cookie_domain || !*host)
+        return false;
+    if (strcasecmp(cookie_domain, host) == 0)
+        return true;
+    size_t dlen = strlen(cookie_domain);
+    size_t hlen = strlen(host);
+    if (hlen > dlen + 1) {
+        char const *suffix = host + (hlen - dlen);
+        if (host[hlen - dlen - 1] == '.' && strcasecmp(suffix, cookie_domain) == 0)
+            return true;
+    }
+    return false;
+}
+
+/* RFC 6265 5.1.4-style path match: cookie_path is a prefix of req_path, and
+ * either that's an exact match, cookie_path ends in '/', or the next char
+ * in req_path is '/'. */
+static bool cookie_path_matches(char const *cookie_path, char const *req_path) {
+    if (!cookie_path || !req_path)
+        return false;
+    size_t plen = strlen(cookie_path);
+    if (plen == 0)
+        return true;
+    if (strncmp(req_path, cookie_path, plen) != 0)
+        return false;
+    if (cookie_path[plen - 1] == '/')
+        return true;
+    return req_path[plen] == '\0' || req_path[plen] == '/';
+}
+
+static cookie_entry_t *parse_set_cookie(char const *set_cookie_header, char const *request_host) {
     if (!set_cookie_header) {
         ESP_LOGW(TAG, "No cookie header");
         return NULL;
@@ -177,7 +244,7 @@ static cookie_entry_t *parse_set_cookie(char const *set_cookie_header) {
         return NULL;
     }
 
-    cookie->domain    = why_strdup("example.com");
+    cookie->domain    = why_strdup((request_host && *request_host) ? request_host : "");
     cookie->path      = why_strdup("/");
     cookie->expires   = 0;
     cookie->secure    = false;
@@ -324,9 +391,31 @@ static void add_cookie(curl_handle_t *curl, cookie_entry_t *new_cookie) {
     curl->cookies    = new_cookie;
 }
 
+/* Whether `cookie` should be sent on this request: matching domain/subdomain,
+ * matching path prefix, not secure-only on a plain http:// request, and not
+ * expired. Without this every stored cookie went to every host regardless
+ * of scope -- a cross-site session-cookie leak for any app using this shim
+ * against multiple hosts. */
+static bool cookie_in_scope(cookie_entry_t const *cookie, char const *host, char const *path, bool is_https) {
+    if (!cookie_domain_matches(cookie->domain, host))
+        return false;
+    if (!cookie_path_matches(cookie->path, path))
+        return false;
+    if (cookie->secure && !is_https)
+        return false;
+    if (cookie->expires != 0 && cookie->expires < time(NULL))
+        return false;
+    return true;
+}
+
 static char *build_cookie_header(curl_handle_t *curl) {
     if (!curl->cookies && !curl->manual_cookies)
         return NULL;
+
+    char host_buf[128];
+    extract_host_from_url(curl->config.url, host_buf, sizeof(host_buf));
+    char const *req_path = extract_path_from_url(curl->config.url);
+    bool        is_https = url_is_https(curl->config.url);
 
     size_t total_len = 0;
     char  *result    = NULL;
@@ -337,10 +426,12 @@ static char *build_cookie_header(curl_handle_t *curl) {
 
     cookie_entry_t *cookie = curl->cookies;
     while (cookie) {
-        if (total_len > 0)
-            total_len += 2;                                            // "; "
-        total_len += strlen(cookie->name) + 1 + strlen(cookie->value); // name=value
-        cookie     = cookie->next;
+        if (cookie_in_scope(cookie, host_buf, req_path, is_https)) {
+            if (total_len > 0)
+                total_len += 2;                                            // "; "
+            total_len += strlen(cookie->name) + 1 + strlen(cookie->value); // name=value
+        }
+        cookie = cookie->next;
     }
 
     if (total_len == 0)
@@ -358,11 +449,13 @@ static char *build_cookie_header(curl_handle_t *curl) {
 
     cookie = curl->cookies;
     while (cookie) {
-        if (strlen(result) > 0)
-            strcat(result, "; ");
-        strcat(result, cookie->name);
-        strcat(result, "=");
-        strcat(result, cookie->value);
+        if (cookie_in_scope(cookie, host_buf, req_path, is_https)) {
+            if (strlen(result) > 0)
+                strcat(result, "; ");
+            strcat(result, cookie->name);
+            strcat(result, "=");
+            strcat(result, cookie->value);
+        }
         cookie = cookie->next;
     }
 
@@ -511,7 +604,9 @@ static esp_err_t http_event_handler(esp_http_client_event_t *evt) {
             if (evt->header_key) {
                 if (strncasecmp(evt->header_key, "Set-Cookie", 10) == 0) {
                     if (evt->header_value) {
-                        cookie_entry_t *cookie = parse_set_cookie(evt->header_value);
+                        char host_buf[128];
+                        extract_host_from_url(curl->config.url, host_buf, sizeof(host_buf));
+                        cookie_entry_t *cookie = parse_set_cookie(evt->header_value, host_buf);
                         if (cookie) {
                             add_cookie(curl, cookie);
                         }
