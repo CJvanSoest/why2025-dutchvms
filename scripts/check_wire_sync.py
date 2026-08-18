@@ -1,9 +1,11 @@
 #!/usr/bin/env python3
-"""Check that the P4's hand-copied LoRa wire structs still match the C6's.
+"""Check that the P4's hand-copied LoRa wire structs and custom-data event IDs
+still match the C6's.
 
 There is no shared header between badgevms/ and connectivity_esp_hosted/ (the
-C6 tree has to stay diffable against upstream esp-hosted), so the wire structs
-are duplicated by hand and drift silently. That already happened twice: once on
+C6 tree has to stay diffable against upstream esp-hosted), so both the wire
+structs and the TANMATSU_EVENT_* custom-data event IDs are duplicated by hand
+and drift silently. The struct drift already happened twice: once on
 lora_protocol_mode_params_t::mode, and once on lora_protocol_status_params_t::
 chip_type, where a uint8_t against the slave's 4-byte enum put version_string
 three bytes early and it always read back empty.
@@ -11,10 +13,12 @@ three bytes early and it always read back empty.
 Comparing the text does not work: the two sides legitimately spell the same
 wire field differently (`lora_protocol_chip_t` vs `uint32_t`). So compare what
 actually goes on the wire. Both definitions are compiled into one host program
-with static asserts on sizeof and every field offset.
+with static asserts on sizeof and every field offset. Event IDs are simple
+integer #defines, so those are just compared by value.
 
     scripts/check_wire_sync.py            # exit 1 on drift
 """
+import glob
 import os
 import re
 import subprocess
@@ -22,6 +26,7 @@ import sys
 import tempfile
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+PRIV_EVENTS = os.path.join(ROOT, "connectivity_esp_hosted/slave/main/tanmatsu/priv_events.h")
 P4 = os.path.join(ROOT, "badgevms/drivers/lora_proto_client.c")
 C6 = os.path.join(ROOT, "connectivity_esp_hosted/slave/main/tanmatsu/lora/lora_protocol.h")
 
@@ -67,6 +72,34 @@ def enum_deps(text, needed):
     return out
 
 
+def check_event_ids():
+    """TANMATSU_EVENT_* custom-data event IDs (priv_events.h on the C6 side)
+    are mirrored by hand into whichever P4-side client sends that event --
+    the same silent-skew risk the LoRa struct check above guards against,
+    just for a single-byte constant instead of a struct layout. Returns
+    True if every P4-side mirror matches its canonical C6 value.
+    """
+    canonical = dict(re.findall(r"#define\s+(TANMATSU_EVENT_\w+)\s+(0x[0-9a-fA-F]+)", read(PRIV_EVENTS)))
+    if not canonical:
+        print(f"wire-sync: cannot find any TANMATSU_EVENT_* defines in {os.path.relpath(PRIV_EVENTS, ROOT)}")
+        return False
+
+    ok = True
+    for path in sorted(glob.glob(os.path.join(ROOT, "badgevms", "**", "*.c"), recursive=True)):
+        for name, value in re.findall(r"#define\s+(TANMATSU_EVENT_\w+)\s+(0x[0-9a-fA-F]+)", read(path)):
+            rel = os.path.relpath(path, ROOT)
+            if name not in canonical:
+                print(f"wire-sync: {rel} defines {name}, not present in {os.path.relpath(PRIV_EVENTS, ROOT)}")
+                ok = False
+            elif int(value, 16) != int(canonical[name], 16):
+                print(
+                    f"wire-sync: {name} = {value} in {rel}, but {canonical[name]} in "
+                    f"{os.path.relpath(PRIV_EVENTS, ROOT)}"
+                )
+                ok = False
+    return ok
+
+
 def main():
     p4_text, c6_text = read(P4), read(C6)
     p4 = grab(p4_text, set(STRUCTS))
@@ -105,16 +138,22 @@ def main():
         open(c, "w").write("\n".join(src) + "\n")
         r = subprocess.run(["cc", "-std=c11", "-o", os.path.join(d, "wire"), c],
                            capture_output=True, text=True)
+    structs_ok = True
     if r.returncode != 0:
+        structs_ok = False
         print("wire-sync: VIOLATION — the P4 copy no longer matches the C6 wire layout\n")
         for line in r.stderr.split("\n"):
             if "static assertion failed" in line or "_Static_assert" in line:
                 print("  " + line.strip())
         print(f"\n  P4: {os.path.relpath(P4, ROOT)}")
         print(f"  C6: {os.path.relpath(C6, ROOT)}")
+
+    events_ok = check_event_ids()
+
+    if not structs_ok or not events_ok:
         return 1
 
-    print(f"wire-sync: OK ({len(STRUCTS)} structs match in size and field offsets)")
+    print(f"wire-sync: OK ({len(STRUCTS)} structs match in size and field offsets, event IDs match)")
     return 0
 
 
