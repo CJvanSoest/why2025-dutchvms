@@ -37,7 +37,8 @@ typedef enum {
     PATH_PARSE_INVALID_DEVICE_CHAR = -4,
     PATH_PARSE_INVALID_DIR_CHAR    = -5,
     PATH_PARSE_INVALID_FILE_CHAR   = -6,
-    PATH_PARSE_EMPTY_PATH          = -7
+    PATH_PARSE_EMPTY_PATH          = -7,
+    PATH_PARSE_TRAVERSAL           = -8
 } path_parse_result_t;
 
 path_parse_result_t parse_path(char const *path, path_t *result);

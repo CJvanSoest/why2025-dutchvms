@@ -116,6 +116,30 @@ static void rx_blocking(uint8_t *buf, size_t n) {
     }
 }
 
+/* Same as rx_blocking(), but gives up after `timeout_ms` of no forward
+ * progress instead of blocking forever. Used for payload bodies whose
+ * length (data_len) is attacker/sender-declared: a short or malformed PUT
+ * that declares more than it actually sends would otherwise wedge the
+ * single global deploy listener task permanently, since portMAX_DELAY
+ * never times out. Returns true once `n` bytes are read, false on
+ * timeout (partial data, if any, is left in `buf` -- caller must treat
+ * the frame as failed either way). */
+static bool rx_blocking_timeout(uint8_t *buf, size_t n, uint32_t timeout_ms) {
+    size_t          got      = 0;
+    TickType_t      deadline = xTaskGetTickCount() + pdMS_TO_TICKS(timeout_ms);
+    while (got < n) {
+        TickType_t now = xTaskGetTickCount();
+        if (now >= deadline)
+            return false;
+        int r = uart_read_bytes(UART_NUM_0, buf + got, n - got, deadline - now);
+        if (r > 0) {
+            got      += (size_t)r;
+            deadline  = xTaskGetTickCount() + pdMS_TO_TICKS(timeout_ms); /* progress -> reset the window */
+        }
+    }
+    return true;
+}
+
 static void tx_bytes(uint8_t const *buf, size_t n) {
     uart_write_bytes(UART_NUM_0, (char const *)buf, n);
 }
@@ -322,13 +346,15 @@ static void handle_put_streamed(uint8_t const hdr[5], uint32_t len) {
 
     /* Preallocate the full file size up front: FATFS otherwise grows the
      * cluster chain incrementally on each write(), and that allocation
-     * work is what was stretching individual per-chunk writes long enough
-     * to overflow the UART's tiny hardware RX FIFO (uart_rx_one_char() is
-     * raw ROM polling with no interrupt-driven buffer -- see rx_blocking()
-     * above -- so nothing drains the FIFO while we're blocked in write()).
-     * ftruncate() does all the cluster-chain bookkeeping in one shot before
-     * the timing-sensitive receive loop starts; the writes below then just
-     * fill already-allocated clusters. */
+     * work was what stretched individual per-chunk writes long enough to
+     * overflow the UART's tiny hardware RX FIFO back when rx_blocking()
+     * was raw ROM uart_rx_one_char() polling with nothing draining the
+     * FIFO while we were blocked in write(). rx_blocking() is now backed
+     * by the interrupt-driven UART0 driver (see the comment above it),
+     * which fixed the FIFO-overflow class of bug on its own -- this
+     * ftruncate() stays anyway since it still does the cluster-chain
+     * bookkeeping in one shot before the receive loop, so the writes below
+     * just fill already-allocated clusters. */
     if (ftruncate(fd, (off_t)data_len) != 0) {
         close(fd);
         unlink(posix_path);
@@ -346,9 +372,17 @@ static void handle_put_streamed(uint8_t const hdr[5], uint32_t len) {
     static uint8_t chunk[PUT_CHUNK_BYTES];
     uint32_t       remain   = data_len;
     bool           write_ok = true;
+    /* 5s per chunk, reset on every partial read that makes progress: a full
+     * PUT_CHUNK_BYTES chunk takes ~356ms at 115200 baud, so 5s is a large
+     * margin over legitimate wire jitter while still bounding a sender that
+     * declared more than it actually sends (see rx_blocking_timeout()). */
+    bool rx_ok = true;
     while (remain > 0) {
         uint32_t n = remain < sizeof(chunk) ? remain : sizeof(chunk);
-        rx_blocking(chunk, n);
+        if (!rx_blocking_timeout(chunk, n, 5000)) {
+            rx_ok = false;
+            break;
+        }
         crc = esp_rom_crc16_le(crc, chunk, n);
         if (write_ok) {
             size_t written = 0;
@@ -364,6 +398,13 @@ static void handle_put_streamed(uint8_t const hdr[5], uint32_t len) {
         remain -= n;
     }
     close(fd);
+
+    if (!rx_ok) {
+        unlink(posix_path);
+        send_status(ST_ERR_BAD_FRAME);
+        esp_rom_printf("[deploy] PUT timed out waiting for declared payload bytes for '%s'\n", posix_path);
+        return;
+    }
 
     uint8_t crc_bytes[2];
     rx_blocking(crc_bytes, 2);

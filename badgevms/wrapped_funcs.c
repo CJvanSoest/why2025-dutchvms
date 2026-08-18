@@ -364,6 +364,12 @@ ssize_t why_read(int fd, void *buf, size_t count) {
 off_t why_lseek(int fd, off_t offset, int whence) {
     task_info_t *task_info = get_task_info();
     ESP_LOGI("why_lseek", "Calling lseek from task %p", task_info->handle);
+
+    if (fd < 0 || fd >= MAXFD || !task_info->thread->file_handles[fd].is_open) {
+        task_info->_errno = EBADF;
+        return -1;
+    }
+
     if (task_info->thread->file_handles[fd].device->_lseek) {
         return task_info->thread->file_handles[fd].device->_lseek(
             task_info->thread->file_handles[fd].device,
@@ -600,7 +606,7 @@ int why_close(int fd) {
     task_info_t *task_info = get_task_info();
     ESP_LOGI("why_close", "Calling close from task %p", task_info->handle);
 
-    if (fd > MAXFD)
+    if (fd < 0 || fd >= MAXFD || !task_info->thread->file_handles[fd].is_open)
         goto out;
 
     if (task_info->thread->file_handles[fd].device->_close) {

@@ -34,6 +34,42 @@ static inline bool is_valid_path_char(char c) {
     return is_valid_device_char(c) || c == '.';
 }
 
+/* path_to_unix() converts every '.' in `directory` into a '/' one-for-one
+ * (VMS-style DIR.SUBDIR -> /DIR/SUBDIR), so a "component" here is whatever
+ * sits between two dots (or a dot and a bracket). An empty component (two
+ * adjacent dots, or a leading/trailing dot) or a component that's just "."
+ * would land in the resulting unix path as an empty or "." segment; reject
+ * both here rather than downstream. This does NOT catch ".." this way --
+ * see below, ".." can only survive as a literal token via the filename
+ * field, which path_to_unix copies verbatim (dots are not translated
+ * there). */
+static bool directory_has_bad_component(char const *dir, size_t len) {
+    size_t comp_start = 0;
+    for (size_t i = 0; i <= len; i++) {
+        if (i == len || dir[i] == '.') {
+            size_t comp_len = i - comp_start;
+            if (comp_len == 0 || (comp_len == 1 && dir[comp_start] == '.')) {
+                return true;
+            }
+            comp_start = i + 1;
+        }
+    }
+    return false;
+}
+
+/* The filename field is copied verbatim into the unix path (no dot
+ * translation, unlike directory) -- so a filename of exactly "." or ".."
+ * (or any all-dot string) reaches open()/etc as a literal traversal
+ * token. Reject it. */
+static bool is_all_dots(char const *s, size_t len) {
+    for (size_t i = 0; i < len; i++) {
+        if (s[i] != '.') {
+            return false;
+        }
+    }
+    return len > 0;
+}
+
 // Parse a path in the form of DEVICE:[DIR.SUBDIR]FILENAME.EXT
 path_parse_result_t parse_path(char const *path, path_t *result) {
     if (!path || !*path) {
@@ -105,6 +141,12 @@ path_parse_result_t parse_path(char const *path, path_t *result) {
         if (p > start) {
             *p                = '\0';
             result->directory = start;
+
+            if (directory_has_bad_component(result->directory, strlen(result->directory))) {
+                why_free(result->buffer);
+                result->buffer = NULL;
+                return PATH_PARSE_TRAVERSAL;
+            }
         }
 
         p++; // Skip ']'
@@ -121,6 +163,12 @@ path_parse_result_t parse_path(char const *path, path_t *result) {
             p++;
         }
         result->filename = start;
+
+        if (is_all_dots(result->filename, (size_t)(p - start))) {
+            why_free(result->buffer);
+            result->buffer = NULL;
+            return PATH_PARSE_TRAVERSAL;
+        }
     }
 
     return PATH_PARSE_OK;

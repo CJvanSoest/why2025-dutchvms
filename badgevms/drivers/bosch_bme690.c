@@ -76,14 +76,16 @@ static struct bme69x_data get_environment(void *dev) {
     int8_t                   rslt;
     struct bme69x_conf       conf;
     struct bme69x_heatr_conf heatr_conf;
-    struct bme69x_data       data;
+    struct bme69x_data       data = {0};
     uint32_t                 del_period;
     uint8_t                  n_fields;
 
     bosch_bme690_device_t *device = dev;
 
+    /* Reentrancy guard -- we never acquired the flag on this path, so we
+     * must not clear it below; just report the last-known-good reading. */
     if (atomic_flag_test_and_set(&device->open)) {
-        return data;
+        return device->environment;
     }
 
     conf.filter  = BME69X_FILTER_OFF;
@@ -94,7 +96,7 @@ static struct bme69x_data get_environment(void *dev) {
     rslt         = bme69x_set_conf(&conf, device->sensor);
     why_bme69x_error_codes_print_result(rslt);
     if (rslt != BME69X_OK) {
-        return device->environment;
+        goto cleanup;
     }
 
     heatr_conf.enable     = BME69X_ENABLE;
@@ -103,13 +105,13 @@ static struct bme69x_data get_environment(void *dev) {
     rslt                  = bme69x_set_heatr_conf(BME69X_FORCED_MODE, &heatr_conf, device->sensor);
     why_bme69x_error_codes_print_result(rslt);
     if (rslt != BME69X_OK) {
-        return device->environment;
+        goto cleanup;
     }
 
     rslt = bme69x_set_op_mode(BME69X_FORCED_MODE, device->sensor);
     why_bme69x_error_codes_print_result(rslt);
     if (rslt != BME69X_OK) {
-        return device->environment;
+        goto cleanup;
     }
 
     del_period = bme69x_get_meas_dur(BME69X_FORCED_MODE, &conf, device->sensor) + (heatr_conf.heatr_dur * 1000);
@@ -118,11 +120,16 @@ static struct bme69x_data get_environment(void *dev) {
     rslt = bme69x_get_data(BME69X_FORCED_MODE, &data, &n_fields, device->sensor);
     why_bme69x_error_codes_print_result(rslt);
     if (rslt != BME69X_OK) {
-        return device->environment;
+        goto cleanup;
     }
 
     device->environment = data;
 
+cleanup:
+    /* Always clear -- every early-return above used to leave this set,
+     * which permanently locked the sensor into "return cached" mode
+     * (get_environment() would forever take the reentrancy-guard branch
+     * above) after a single failed measurement. */
     atomic_flag_clear(&device->open);
 
     return device->environment;
