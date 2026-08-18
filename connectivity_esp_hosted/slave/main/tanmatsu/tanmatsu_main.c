@@ -186,8 +186,16 @@ void app_main(void) {
 
     gpio_install_isr_service(0);
 
-    // WHY backlight comes up immediately so user sees the screen during boot
-    esp_err_t bl_res = why_pwm_init_channel(BSP_DISPLAY_BL_GPIO, LEDC_CHANNEL_0, 10);
+    // WHY backlight comes up immediately so user sees the screen during boot.
+    // Was 10 (~just above why_pwm_set_duty_percent()'s visibility floor) --
+    // fine when this window only ever showed a plain black/undefined
+    // screen, too dim to actually read the kernel boot-progress log
+    // (badgevms/boot_progress.c, WHY2025-dutchvms issue #96) now that
+    // something is genuinely worth reading during it. Real brightness
+    // still switches to whatever the user's own saved preference is once
+    // the launcher starts and calls bv_display_backlight_send() itself --
+    // this only changes the floor before that happens.
+    esp_err_t bl_res = why_pwm_init_channel(BSP_DISPLAY_BL_GPIO, LEDC_CHANNEL_0, 60);
     if (bl_res != ESP_OK) {
         ESP_LOGE(TAG, "Failed to init display backlight PWM: %s", esp_err_to_name(bl_res));
     }

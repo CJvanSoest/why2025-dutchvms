@@ -12,6 +12,8 @@
 #include "i2c_bus.h"
 #include "esp_idf_version.h"
 #include "esp_log.h"
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
 // #include <algorithm>
 #include "esp_tca8418.h"
 
@@ -214,6 +216,24 @@ void tca8418_flush(tca8418_dev_t *tca8418_dev)
     writeRegister(tca8418_dev, REG_INTERRUPT_STATUS, 0x03);
 }
 
+// Root cause (WHY2025 badge, issue #96): TCA8418's I2C bus can NACK for a
+// short, variable window right after boot -- how long depends on whatever
+// happened before this driver's first register access, not a fixed delay.
+// tca8418_create() used to hit this as a hard ESP_ERROR_CHECK abort on the
+// very first writeRegister() call whenever boot-order changes shortened
+// that window (hardware-tested: moving PANEL0's registration earlier in
+// app_main() was enough to trigger it, even with nothing else about the
+// keyboard's own init changed). A fixed startup delay elsewhere in the
+// kernel papered over the symptom without fixing it here, and only
+// protected the first few calls made from tca8418_create() -- any transient
+// bus glitch during normal operation later would still hard-abort. Retrying
+// here instead fixes it at the actual point of failure, self-adapts to
+// however much settle time is really needed on a given boot (no latency at
+// all once the chip is ready, which is the common case), and protects every
+// I2C access this driver ever makes, not just the first few.
+#define TCA8418_I2C_RETRY_COUNT     10
+#define TCA8418_I2C_RETRY_DELAY_MS  20
+
 /// Reads a single register from the TCA8418 IC.
 ///
 /// @param reg Register to read the value of.
@@ -223,7 +243,20 @@ static uint8_t readRegister(tca8418_dev_t *tca8418_dev, uint8_t reg)
 {
     uint8_t receive_buf[1] = {0};
     ESP_LOGV(TAG, "Reading register %02x from dev %02x", reg, tca8418_dev->i2c_address);
-    ESP_ERROR_CHECK(i2c_bus_read_byte(tca8418_dev->dev_handle, reg, receive_buf));
+    esp_err_t err = ESP_FAIL;
+    for (int attempt = 0; attempt < TCA8418_I2C_RETRY_COUNT; attempt++)
+    {
+        err = i2c_bus_read_byte(tca8418_dev->dev_handle, reg, receive_buf);
+        if (err == ESP_OK)
+        {
+            return receive_buf[0];
+        }
+        ESP_LOGD(TAG, "readRegister(%02x) attempt %d failed: %s, retrying", reg, attempt, esp_err_to_name(err));
+        vTaskDelay(pdMS_TO_TICKS(TCA8418_I2C_RETRY_DELAY_MS));
+    }
+    // Still failing after retries -- a real fault (wiring, dead chip),
+    // not a startup-timing quirk. Same hard-abort behaviour as before.
+    ESP_ERROR_CHECK(err);
     return receive_buf[0];
 }
 
@@ -234,5 +267,16 @@ static uint8_t readRegister(tca8418_dev_t *tca8418_dev, uint8_t reg)
 static void writeRegister(tca8418_dev_t *tca8418_dev, uint8_t reg, uint8_t value)
 {
     ESP_LOGV(TAG, "Writing %02x to register %02x on dev %02x", value, reg, tca8418_dev->i2c_address);
-    ESP_ERROR_CHECK(i2c_bus_write_byte(tca8418_dev->dev_handle, reg, value));
+    esp_err_t err = ESP_FAIL;
+    for (int attempt = 0; attempt < TCA8418_I2C_RETRY_COUNT; attempt++)
+    {
+        err = i2c_bus_write_byte(tca8418_dev->dev_handle, reg, value);
+        if (err == ESP_OK)
+        {
+            return;
+        }
+        ESP_LOGD(TAG, "writeRegister(%02x) attempt %d failed: %s, retrying", reg, attempt, esp_err_to_name(err));
+        vTaskDelay(pdMS_TO_TICKS(TCA8418_I2C_RETRY_DELAY_MS));
+    }
+    ESP_ERROR_CHECK(err);
 }

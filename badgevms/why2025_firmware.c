@@ -26,6 +26,7 @@
 #include "badgevms/ota.h"
 #include "badgevms/process.h"
 #include "badgevms_config.h"
+#include "boot_progress.h"
 #include "compositor/compositor_private.h"
 #include "deploy_protocol.h"
 #include "device_private.h"
@@ -119,6 +120,44 @@ int app_main(void) {
         ret = nvs_flash_init();
     }
 
+    /* PANEL0 moved up here, before FLASH0/SD0/WIFI0 -- see GitHub issue #96
+     * and Nicolai-Electronics/tanmatsu-launcher's own app_main() for the
+     * pattern this follows: bring the display up as close to the start of
+     * boot as its dependencies allow. Checked before moving: st7703_create()
+     * doesn't look up another device or touch NVS/the default event loop,
+     * so this is a pure reorder, not a behavior change.
+     *
+     * KEYBOARD0/compositor_init() deliberately NOT moved up with it --
+     * hardware-tested moving both together and it hard-crashed every boot
+     * (ESP_ERROR_CHECK abort inside components/esp_tca8418's writeRegister,
+     * ESP_ERR_INVALID_STATE, an I2C NACK that its own driver comment
+     * documents as normally "cosmetic"/tolerated). TCA8418 apparently needs
+     * real wall-clock settle time after power-on before I2C to it is
+     * reliable, and in the original/working order that time came for free
+     * from FLASH0/SD0/WIFI0's several seconds of work happening first --
+     * moving KEYBOARD0 that early removed it. Left KEYBOARD0/
+     * compositor_init() at their original position (after WIFI0/SOCKET0)
+     * so TCA8418 gets the exact same elapsed time it always has; only
+     * PANEL0's own position changed. (Since fixed properly at the source --
+     * see esp_tca8418.c -- so this ordering is no longer load-bearing for
+     * TCA8418 either, just left as-is.)
+     *
+     * boot_progress() (badgevms/boot_progress.c) drew kernel boot-stage
+     * text straight onto PANEL0's framebuffer during this window -- pulled
+     * from the call sites below for now (TODO.md, issue #96): hardware
+     * testing found the display backlight is driven by the C6
+     * co-processor, which gets a mandatory hard reset partway through
+     * WIFI0 bring-up (slave_c6_flasher.c's C6_POST_RESET_SETTLE_MS), so
+     * anything drawn in the ~3s around that reset was effectively
+     * undrawable regardless of framebuffer content -- a real hardware
+     * constraint, not fixed by any of this file's boot-order changes. The
+     * infrastructure (boot_progress.c/.h, still built) and the display's
+     * early position are both kept; only the call sites were removed. */
+    if (!device_register("PANEL0", st7703_create())) {
+        ESP_LOGE(TAG, "Failed to initialize PANEL0 driver");
+        invalidate_ota_partition();
+    }
+
     /* FLASH0 is mounted through usb_msc.c's esp_tinyusb-managed path, not
      * fatfs_create_spi() directly, so USB mass-storage mode can later hand
      * this same mount off to a USB host without a second, competing FAT
@@ -138,8 +177,21 @@ int app_main(void) {
         invalidate_ota_partition();
     }
 
-    // Allowed to fail
-    device_register("SD0", fatfs_create_sd("SD0", true));
+    /* Same usb_msc.c-mounted-first, fatfs-wraps-it pattern as FLASH0 above,
+     * so USB mass-storage mode can later hand SD0 to a USB host too (see
+     * usb_msc_init_sd()'s comment for why this is safe to add without
+     * risking the existing, proven fatfs_create_sd() path: on ANY failure
+     * -- no card, MSC setup failure, whatever -- this falls straight back
+     * to the exact same fatfs_create_sd() call this replaced). Allowed to
+     * fail either way. */
+    sdmmc_card_t *sd0_card = NULL;
+    device_t     *sd0_dev;
+    if (usb_msc_init_sd("SD0", &sd0_card)) {
+        sd0_dev = fatfs_wrap_mounted_sd("SD0");
+    } else {
+        sd0_dev = fatfs_create_sd("SD0", true);
+    }
+    device_register("SD0", sd0_dev);
 
     if (device_get("SD0")) {
         logical_name_set("STORAGE:", "SD0:, FLASH0:", false);
@@ -161,13 +213,22 @@ int app_main(void) {
         invalidate_ota_partition();
     }
 
-    if (!device_register("PANEL0", st7703_create())) {
-        ESP_LOGE(TAG, "Failed to initialize PANEL0 driver");
+    /* KEYBOARD0 stays here, at its original position (after WIFI0/SOCKET0).
+     * The TCA8418 I2C-NACK abort seen when this hard-crashed on hardware
+     * (issue #96) turned out not to be a boot-ordering/settle-time problem
+     * at all -- a fixed vTaskDelay() here masked the symptom without
+     * addressing it (still hard-aborted on any transient NACK later, not
+     * just at startup). Root-caused and fixed properly at the point of
+     * failure instead: esp_tca8418.c's readRegister()/writeRegister() now
+     * retry on a NACK rather than hard-aborting on the very first one, see
+     * that file's comment. */
+    if (!device_register("KEYBOARD0", tca8418_keyboard_create())) {
+        ESP_LOGE(TAG, "Failed to initialize KEYBOARD0 driver");
         invalidate_ota_partition();
     }
 
-    if (!device_register("KEYBOARD0", tca8418_keyboard_create())) {
-        ESP_LOGE(TAG, "Failed to initialize KEYBOARD0 driver");
+    if (!compositor_init("PANEL0", "KEYBOARD0")) {
+        ESP_LOGE(TAG, "Failed to initialize compositor");
         invalidate_ota_partition();
     }
 
@@ -210,11 +271,6 @@ int app_main(void) {
         // invalidate_ota_partition();
     }
 
-    if (!compositor_init("PANEL0", "KEYBOARD0")) {
-        ESP_LOGE(TAG, "Failed to initialize compositor");
-        invalidate_ota_partition();
-    }
-
     logical_name_set("SEARCH", "FLASH0:[SUBDIR], FLASH0:[SUBDIR.ANOTHER]", false);
 
     /* CJ-PATCH: start UART deploy protocol listener (Phase A: echo stub).
@@ -234,27 +290,17 @@ int app_main(void) {
         ESP_LOGW(TAG, "usb_device_init failed (non-fatal)");
     }
 
-    /* CJ-DEBUG task #115: the ESP_LOGE/printf lines that used to sit here
-     * (and throughout run_init()) NEVER reached the serial capture on
-     * hardware, despite run_init()'s observable effects (apps launching)
-     * clearly happening -- while esp_rom_printf() elsewhere in this codebase
-     * (task.c's exception handler) reliably does. Switching to
-     * esp_rom_printf() here is a differential test: a direct ROM-level UART
-     * write, bypassing the ESP-IDF log/stdio buffering layers entirely, to
-     * see whether THAT shows up where the normal calls didn't. */
-    esp_rom_printf("CJ-DEBUG115: DutchVMS is ready\n");
     free_ram = heap_caps_get_free_size(MALLOC_CAP_DEFAULT);
-    esp_rom_printf(
-        "CJ-DEBUG115: Free main memory: %d, free PSRAM pages: %d/%d, running processes %u\n",
+    ESP_LOGI(
+        TAG,
+        "DutchVMS is ready. Free main memory: %d, free PSRAM pages: %d/%d, running processes %u",
         (int)free_ram,
         (int)get_free_psram_pages(),
         (int)get_total_psram_pages(),
         get_num_tasks()
     );
 
-    esp_rom_printf("CJ-DEBUG115: about to call run_init()\n");
     run_init();
-    esp_rom_printf("CJ-DEBUG115: run_init() returned (should never happen in normal operation)\n");
 
     ESP_LOGE(TAG, "Killed init, rebooting");
     esp_restart();
