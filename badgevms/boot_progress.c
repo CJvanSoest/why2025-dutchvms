@@ -117,6 +117,25 @@ void boot_progress(char const *msg) {
         return;
     }
 
+    if (boot_log_next_line == 0) {
+        /* First call ever: PANEL0 was just registered moments ago (see
+         * why2025_firmware.c) and has never had a real frame pushed to it.
+         * Every other _draw() call in this codebase -- compositor.c's own,
+         * every one of them -- pushes the FULL 720x720 frame; this file is
+         * the only caller that ever pushes a narrow strip, and doing that
+         * as the panel's very first-ever draw left the rest of the
+         * framebuffer's memory (never written, whatever the allocator or a
+         * previous boot left there) on screen alongside the text, and the
+         * panel's own internal state with no full-frame refresh to settle
+         * against -- hardware feedback described this as looking like
+         * "the screen/rendering hasn't fully started yet". A one-time
+         * full-frame black clear+push here, before the first line, is
+         * cheap (runs once) and gives the panel exactly the same kind of
+         * first draw every other caller already relies on. */
+        memset(fb, 0, (size_t)FRAMEBUFFER_MAX_W * FRAMEBUFFER_MAX_H * sizeof(uint16_t));
+        lcd->_draw((void *)lcd, 0, 0, FRAMEBUFFER_MAX_W, FRAMEBUFFER_MAX_H, fb);
+    }
+
     int line_y = BOOT_LOG_TOP_Y + boot_log_next_line * BOOT_LOG_LINE_H;
     boot_log_next_line++;
 
