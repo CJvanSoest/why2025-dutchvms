@@ -45,13 +45,6 @@
 
 #define TAG "compositor"
 
-#define SWAP(x, y)                                                                                                     \
-    do {                                                                                                               \
-        typeof(x) SWAP = x;                                                                                            \
-        x              = y;                                                                                            \
-        y              = SWAP;                                                                                         \
-    } while (0)
-
 static TaskHandle_t  compositor_handle;
 static lcd_device_t *lcd_device;
 static device_t     *keyboard_device;
@@ -1197,42 +1190,6 @@ pixel_format_t window_framebuffer_format_get(window_handle_t window) {
 
     return window->framebuffers[0]->format;
 }
-
-#if 0
-static inline void copy_framebuffer_rect(managed_framebuffer_t *dst, managed_framebuffer_t *src, window_rect_t rect) {
-    if (rect.x == 0 && rect.y == 0 && rect.w == dst->w && rect.h == dst->h) {
-        // Full rect damage
-        memcpy(dst->framebuffer.pixels, src->framebuffer.pixels, dst->num_pages * SOC_MMU_PAGE_SIZE);
-        return;
-    }
-
-    int max_x = MIN(dst->w, src->w);
-    int max_y = MIN(dst->h, src->h);
-
-    rect.x = MAX(0, MIN(rect.x, max_x));
-    rect.y = MAX(0, MIN(rect.y, max_y));
-    rect.w = MIN(rect.w, max_x - rect.x);
-    rect.h = MIN(rect.h, max_y - rect.y);
-
-    if (rect.w <= 0 || rect.h <= 0) {
-        return;
-    }
-
-    int      bytes_per_pixel = BADGEVMS_BYTESPERPIXEL(dst->format);
-    uint8_t *dst_pixels      = (uint8_t *)dst->framebuffer.pixels;
-    uint8_t *src_pixels      = (uint8_t *)src->framebuffer.pixels;
-
-    int dst_stride = dst->w * bytes_per_pixel;
-    int src_stride = src->w * bytes_per_pixel;
-    int copy_width = rect.w * bytes_per_pixel;
-
-    for (int y = 0; y < rect.h; y++) {
-        uint8_t *dst_row = dst_pixels + ((rect.y + y) * dst_stride) + (rect.x * bytes_per_pixel);
-        uint8_t *src_row = src_pixels + ((rect.y + y) * src_stride) + (rect.x * bytes_per_pixel);
-        memcpy(dst_row, src_row, copy_width);
-    }
-}
-#endif
 
 void window_present(window_t *window, bool block, window_rect_t *rects, int num_rects) {
     if (!window || !window->framebuffers[0]) {

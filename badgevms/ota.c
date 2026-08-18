@@ -169,15 +169,19 @@ bool ota_get_invalid_version(char **version) {
 bool validate_ota_partition() {
     esp_err_t err;
 
-    // CJ-DEBUG: unconditional ESP_LOGE (not ESP_LOGW) at every branch so a
-    // hardware test can tell exactly which path was taken, instead of the
-    // previous silent-false-on-failure branches this replaces.
-    ESP_LOGE(TAG, "CJ-DEBUG: validate_ota_partition() entered");
+    // KNOWN_ISSUES.md #11 is still open (root cause of an earlier boot where
+    // this path silently never ran hasn't been found; rollback is disabled
+    // via CONFIG_BOOTLOADER_APP_ROLLBACK_ENABLE as the production
+    // workaround). These were ESP_LOGE during that hunt so they'd survive
+    // LOG_MAXIMUM_LEVEL=WARN; downgraded to ESP_LOGD now that they're not
+    // needed on every boot -- bump the runtime log level for this tag to
+    // pick the trail back up without editing code.
+    ESP_LOGD(TAG, "validate_ota_partition() entered");
 
     esp_partition_t const *running = esp_ota_get_running_partition();
-    ESP_LOGE(
+    ESP_LOGD(
         TAG,
-        "CJ-DEBUG: Running partition type %d subtype %d (offset 0x%08" PRIx32 ")",
+        "Running partition type %d subtype %d (offset 0x%08" PRIx32 ")",
         running->type,
         running->subtype,
         running->address
@@ -185,24 +189,23 @@ bool validate_ota_partition() {
 
     esp_ota_img_states_t ota_state;
     err = esp_ota_get_state_partition(running, &ota_state);
-    ESP_LOGE(TAG, "CJ-DEBUG: esp_ota_get_state_partition() -> err=%d state=%d", err, (int)ota_state);
+    ESP_LOGD(TAG, "esp_ota_get_state_partition() -> err=%d state=%d", err, (int)ota_state);
     if (err != ESP_OK) {
-        ESP_LOGE(TAG, "CJ-DEBUG: bailing, esp_ota_get_state_partition() failed");
+        ESP_LOGW(TAG, "validate_ota_partition: esp_ota_get_state_partition() failed");
         return false;
     }
 
     if (ota_state == ESP_OTA_IMG_PENDING_VERIFY) {
-        ESP_LOGE(TAG, "CJ-DEBUG: state is PENDING_VERIFY, marking valid and cancelling rollback");
+        ESP_LOGD(TAG, "state is PENDING_VERIFY, marking valid and cancelling rollback");
         err = esp_ota_mark_app_valid_cancel_rollback();
-        ESP_LOGE(TAG, "CJ-DEBUG: esp_ota_mark_app_valid_cancel_rollback() -> err=%d", err);
+        ESP_LOGD(TAG, "esp_ota_mark_app_valid_cancel_rollback() -> err=%d", err);
         if (err != ESP_OK) {
-            ESP_LOGE(TAG, "CJ-DEBUG: bailing, esp_ota_mark_app_valid_cancel_rollback() failed");
+            ESP_LOGW(TAG, "validate_ota_partition: esp_ota_mark_app_valid_cancel_rollback() failed");
             return false;
         }
     } else {
-        ESP_LOGE(TAG, "CJ-DEBUG: state is NOT pending-verify, nothing to confirm");
+        ESP_LOGD(TAG, "state is NOT pending-verify, nothing to confirm");
     }
-    ESP_LOGE(TAG, "CJ-DEBUG: validate_ota_partition() succeeding");
     return true;
 }
 
