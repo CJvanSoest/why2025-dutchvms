@@ -21,6 +21,8 @@
 #include "compositor/font.h"
 #include "compositor/pixel_functions.h"
 #include "esp_log.h"
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
 
 #include <string.h>
 
@@ -28,24 +30,41 @@ static char const *TAG = "boot_progress";
 
 /* pixel_functions.h's draw_text_rotated() draws the 5x7 font at 1x --
  * fine at app/window scale, unreadably small full-frame on a 720x720
- * panel (confirmed on hardware, issue #96). draw_text_2x() below
- * reimplements it locally at 2x, reusing font_data/FONT_WIDTH/FONT_HEIGHT
+ * panel (confirmed on hardware, issue #96). draw_text_3x() below
+ * reimplements it locally at 3x, reusing font_data/FONT_WIDTH/FONT_HEIGHT
  * (font.h) and draw_filled_rect_rotated() (pixel_functions.h) instead of
  * touching the shared, kernel-wide draw_text_rotated() other callers
  * still use at 1x. */
-#define BOOT_PROGRESS_SCALE 2
-#define BOOT_PROGRESS_BAR_H (FONT_HEIGHT * BOOT_PROGRESS_SCALE + 14)
-#define BOOT_PROGRESS_MARGIN_BOTTOM 12
-#define BOOT_PROGRESS_TEXT_X 10
+#define BOOT_PROGRESS_SCALE 3
+#define BOOT_PROGRESS_BAR_H (FONT_HEIGHT * BOOT_PROGRESS_SCALE + 20)
 #define BOOT_PROGRESS_COLOR_BG   0x0000 /* black */
 #define BOOT_PROGRESS_COLOR_TEXT 0xFFFF /* white */
+
+/* Real boot work between stages can take well under a second (e.g. when
+ * WIFI0 skips the C6 reflash because it's already current) -- without a
+ * floor, a message can be overwritten by the next one before it's even
+ * readable, especially once motion blur on a phone-video capture is
+ * involved. This blocks boot by up to this much per call (5 calls,
+ * worst case +2s total) -- a deliberate legibility/speed tradeoff for a
+ * UX feature, not something perf-sensitive code should ever do. */
+#define BOOT_PROGRESS_MIN_VISIBLE_MS 400
 
 /* font_data only covers A-Z/0-9/space (see font.h) -- anything else
  * (lowercase is remapped by char_to_font_index(), but '.', '+', etc are
  * not) silently draws as a blank space. Callers should stick to
  * A-Z/0-9/space in boot_progress() messages; this only guards against a
  * garbage character index, not against those gaps. */
-static void draw_text_2x(uint16_t *fb, char const *text, int x, int y, uint16_t color) {
+static int text_width(char const *text) {
+    int len = (int)strlen(text);
+    if (len == 0) {
+        return 0;
+    }
+    /* Each glyph is FONT_WIDTH wide plus a 1px gap, except the trailing
+     * gap after the last glyph, which is never drawn. */
+    return len * (FONT_WIDTH + 1) * BOOT_PROGRESS_SCALE - BOOT_PROGRESS_SCALE;
+}
+
+static void draw_text_3x(uint16_t *fb, char const *text, int x, int y, uint16_t color) {
     for (int i = 0; text[i]; i++) {
         int font_idx = char_to_font_index(text[i]);
         for (int row = 0; row < FONT_HEIGHT; row++) {
@@ -81,13 +100,17 @@ void boot_progress(char const *msg) {
         return;
     }
 
-    int bar_y  = FRAMEBUFFER_MAX_H - BOOT_PROGRESS_BAR_H - BOOT_PROGRESS_MARGIN_BOTTOM;
+    /* Vertically centered, not a bottom strip -- the bottom strip was hard
+     * to read even at 2x (cramped against the panel edge). Horizontally
+     * centered on this message's own width, since messages vary in length. */
+    int bar_y  = (FRAMEBUFFER_MAX_H - BOOT_PROGRESS_BAR_H) / 2;
     int text_y = bar_y + (BOOT_PROGRESS_BAR_H - FONT_HEIGHT * BOOT_PROGRESS_SCALE) / 2;
+    int text_x = (FRAMEBUFFER_MAX_W - text_width(msg)) / 2;
 
     /* Clear the whole strip first -- msg lengths vary between calls, and
      * we're not tracking the previous line's width to do a narrower clear. */
     draw_filled_rect_rotated(fb, 0, bar_y, FRAMEBUFFER_MAX_W, BOOT_PROGRESS_BAR_H, BOOT_PROGRESS_COLOR_BG);
-    draw_text_2x(fb, msg, BOOT_PROGRESS_TEXT_X, text_y, BOOT_PROGRESS_COLOR_TEXT);
+    draw_text_3x(fb, msg, text_x, text_y, BOOT_PROGRESS_COLOR_TEXT);
 
     /* Push just the strip we touched, not the whole 720x720 frame -- this
      * is called several times during boot and each call already blocks on
@@ -115,4 +138,6 @@ void boot_progress(char const *msg) {
         bar_y + BOOT_PROGRESS_BAR_H,
         fb + (size_t)bar_y * FRAMEBUFFER_MAX_W
     );
+
+    vTaskDelay(pdMS_TO_TICKS(BOOT_PROGRESS_MIN_VISIBLE_MS));
 }
