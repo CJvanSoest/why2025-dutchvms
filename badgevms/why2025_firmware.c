@@ -120,37 +120,35 @@ int app_main(void) {
         ret = nvs_flash_init();
     }
 
-    /* PANEL0/KEYBOARD0/compositor_init() moved up here, before FLASH0/SD0/
-     * WIFI0 -- see GitHub issue #96 and Nicolai-Electronics/tanmatsu-
-     * launcher's own app_main() for the pattern this follows: bring the
-     * display up as close to the start of boot as its own dependencies
-     * allow, so every later step (mounting storage, the C6 flash+WiFi
-     * bring-up, which can run for several seconds) has a real screen to
-     * show progress on via boot_progress() below, instead of leaving the
-     * panel in whatever undefined state the bootloader left it in for that
-     * whole window. Checked before moving: neither st7703_create() nor
-     * tca8418_keyboard_create() looks up another device or touches NVS/the
-     * default event loop, so this is a pure reorder, not a behavior change
-     * for either driver. compositor_init() only needs PANEL0/KEYBOARD0
-     * (both registered immediately above it), and its own render path
-     * can't touch the panel until a window exists -- gated on a non-empty
-     * window_stack in compositor.c -- which won't happen until run_init()
-     * (the last thing app_main() calls) spawns the launcher app. That's
-     * also why calling boot_progress() below (a direct, compositor-
-     * bypassing panel write -- see boot_progress.c) is safe: nothing else
-     * is touching the panel during this whole window. */
+    /* PANEL0 moved up here, before FLASH0/SD0/WIFI0 -- see GitHub issue #96
+     * and Nicolai-Electronics/tanmatsu-launcher's own app_main() for the
+     * pattern this follows: bring the display up as close to the start of
+     * boot as its dependencies allow, so every later step (mounting
+     * storage, the C6 flash+WiFi bring-up, which can run for several
+     * seconds) has a real screen to show progress on via boot_progress()
+     * below, instead of leaving the panel in whatever undefined state the
+     * bootloader left it in for that whole window. Checked before moving:
+     * st7703_create() doesn't look up another device or touch NVS/the
+     * default event loop, so this is a pure reorder, not a behavior change.
+     *
+     * KEYBOARD0/compositor_init() deliberately NOT moved up with it --
+     * hardware-tested moving both together and it hard-crashed every boot
+     * (ESP_ERROR_CHECK abort inside components/esp_tca8418's writeRegister,
+     * ESP_ERR_INVALID_STATE, an I2C NACK that its own driver comment
+     * documents as normally "cosmetic"/tolerated). TCA8418 apparently needs
+     * real wall-clock settle time after power-on before I2C to it is
+     * reliable, and in the original/working order that time came for free
+     * from FLASH0/SD0/WIFI0's several seconds of work happening first --
+     * moving KEYBOARD0 that early removed it. Left KEYBOARD0/
+     * compositor_init() at their original position (after WIFI0/SOCKET0)
+     * so TCA8418 gets the exact same elapsed time it always has; only
+     * PANEL0's own position changed. boot_progress() (below) only needs
+     * PANEL0 -- it writes straight to the panel's framebuffer via
+     * lcd_device_t, bypassing the window/compositor pipeline entirely (see
+     * boot_progress.c), so it works fine before compositor_init() has even
+     * run. */
     if (!device_register("PANEL0", st7703_create())) {
         ESP_LOGE(TAG, "Failed to initialize PANEL0 driver");
-        invalidate_ota_partition();
-    }
-
-    if (!device_register("KEYBOARD0", tca8418_keyboard_create())) {
-        ESP_LOGE(TAG, "Failed to initialize KEYBOARD0 driver");
-        invalidate_ota_partition();
-    }
-
-    if (!compositor_init("PANEL0", "KEYBOARD0")) {
-        ESP_LOGE(TAG, "Failed to initialize compositor");
         invalidate_ota_partition();
     }
 
@@ -203,6 +201,35 @@ int app_main(void) {
     }
 
     boot_progress("Starting input + sensors...");
+
+    /* Experiment (issue #96): keeping KEYBOARD0 at its original position
+     * (after WIFI0/SOCKET0) still hard-crashed on hardware with the same
+     * TCA8418 I2C-NACK abort as moving it up with PANEL0 -- so "position in
+     * this sequence" was never the real variable. FLASH0+SD0+WIFI0+SOCKET0
+     * (plus PANEL0, wherever it sits) is the same set of blocking calls
+     * either way, so the *total* elapsed time reaching this point is
+     * order-independent -- yet only the reordered build crashed. That
+     * points at adjacency, not elapsed time: in the original code PANEL0
+     * sat immediately before this call with nothing in between, and moving
+     * PANEL0 away put FLASH0/SD0/WIFI0/SOCKET0 between them. This fixed
+     * delay is a deliberate test of the other hypothesis (TCA8418/I2C0
+     * genuinely needs more wall-clock settle time than any ordering here
+     * provides) -- expected to make no difference if adjacency is the real
+     * cause; if it doesn't help, treat that as confirmation and look at the
+     * adjacency/shared-bus theory instead (see esp_tca8418.c's
+     * i2c_bus_create(I2C_NUM_0, ...) and check what else touches I2C0/its
+     * pins between PANEL0 and here). */
+    vTaskDelay(pdMS_TO_TICKS(500));
+
+    if (!device_register("KEYBOARD0", tca8418_keyboard_create())) {
+        ESP_LOGE(TAG, "Failed to initialize KEYBOARD0 driver");
+        invalidate_ota_partition();
+    }
+
+    if (!compositor_init("PANEL0", "KEYBOARD0")) {
+        ESP_LOGE(TAG, "Failed to initialize compositor");
+        invalidate_ota_partition();
+    }
 
     if (!device_register("TT01", tty_create(true, true))) {
         ESP_LOGE(TAG, "Failed to initialize TT01 driver");

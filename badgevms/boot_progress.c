@@ -18,6 +18,7 @@
 
 #include "badgevms/device.h"
 #include "badgevms_config.h"
+#include "compositor/font.h"
 #include "compositor/pixel_functions.h"
 #include "esp_log.h"
 
