@@ -152,7 +152,7 @@ int app_main(void) {
         invalidate_ota_partition();
     }
 
-    boot_progress("Mounting storage...");
+    boot_progress("MOUNTING STORAGE");
 
     /* FLASH0 is mounted through usb_msc.c's esp_tinyusb-managed path, not
      * fatfs_create_spi() directly, so USB mass-storage mode can later hand
@@ -176,7 +176,7 @@ int app_main(void) {
     // Allowed to fail
     device_register("SD0", fatfs_create_sd("SD0", true));
 
-    boot_progress("Scanning apps...");
+    boot_progress("SCANNING APPS");
 
     if (device_get("SD0")) {
         logical_name_set("STORAGE:", "SD0:, FLASH0:", false);
@@ -188,7 +188,7 @@ int app_main(void) {
         application_init("APPS:", NULL, "FLASH0:[BADGEVMS.APPS]");
     }
 
-    boot_progress("Starting WiFi + C6 co-processor...");
+    boot_progress("STARTING WIFI AND C6");
 
     if (!device_register("WIFI0", wifi_create())) {
         ESP_LOGE(TAG, "Failed to initialize WIFI0 driver");
@@ -200,7 +200,7 @@ int app_main(void) {
         invalidate_ota_partition();
     }
 
-    boot_progress("Starting input + sensors...");
+    boot_progress("STARTING INPUT AND SENSORS");
 
     /* Experiment (issue #96): keeping KEYBOARD0 at its original position
      * (after WIFI0/SOCKET0) still hard-crashed on hardware with the same
@@ -289,7 +289,7 @@ int app_main(void) {
         ESP_LOGW(TAG, "usb_device_init failed (non-fatal)");
     }
 
-    boot_progress("Starting DutchVMS...");
+    boot_progress("STARTING DUTCHVMS");
 
     free_ram = heap_caps_get_free_size(MALLOC_CAP_DEFAULT);
     ESP_LOGI(

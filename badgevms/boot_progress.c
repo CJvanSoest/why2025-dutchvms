@@ -26,14 +26,46 @@
 
 static char const *TAG = "boot_progress";
 
-/* A thin strip along the bottom edge -- FONT_HEIGHT (7px) plus padding.
- * Deliberately tiny: pixel_functions.h's font is a fixed 5x7 bitmap font
- * with no scaling primitive at this level (that's a PAX/app-side thing,
- * not available yet this early in boot). */
-#define BOOT_PROGRESS_BAR_H 20
+/* pixel_functions.h's draw_text_rotated() draws the 5x7 font at 1x --
+ * fine at app/window scale, unreadably small full-frame on a 720x720
+ * panel (confirmed on hardware, issue #96). draw_text_2x() below
+ * reimplements it locally at 2x, reusing font_data/FONT_WIDTH/FONT_HEIGHT
+ * (font.h) and draw_filled_rect_rotated() (pixel_functions.h) instead of
+ * touching the shared, kernel-wide draw_text_rotated() other callers
+ * still use at 1x. */
+#define BOOT_PROGRESS_SCALE 2
+#define BOOT_PROGRESS_BAR_H (FONT_HEIGHT * BOOT_PROGRESS_SCALE + 14)
+#define BOOT_PROGRESS_MARGIN_BOTTOM 12
 #define BOOT_PROGRESS_TEXT_X 10
 #define BOOT_PROGRESS_COLOR_BG   0x0000 /* black */
 #define BOOT_PROGRESS_COLOR_TEXT 0xFFFF /* white */
+
+/* font_data only covers A-Z/0-9/space (see font.h) -- anything else
+ * (lowercase is remapped by char_to_font_index(), but '.', '+', etc are
+ * not) silently draws as a blank space. Callers should stick to
+ * A-Z/0-9/space in boot_progress() messages; this only guards against a
+ * garbage character index, not against those gaps. */
+static void draw_text_2x(uint16_t *fb, char const *text, int x, int y, uint16_t color) {
+    for (int i = 0; text[i]; i++) {
+        int font_idx = char_to_font_index(text[i]);
+        for (int row = 0; row < FONT_HEIGHT; row++) {
+            unsigned char line = font_data[font_idx][row];
+            for (int col = 0; col < FONT_WIDTH; col++) {
+                if (line & (0x80 >> col)) {
+                    draw_filled_rect_rotated(
+                        fb,
+                        x + col * BOOT_PROGRESS_SCALE,
+                        y + row * BOOT_PROGRESS_SCALE,
+                        BOOT_PROGRESS_SCALE,
+                        BOOT_PROGRESS_SCALE,
+                        color
+                    );
+                }
+            }
+        }
+        x += (FONT_WIDTH + 1) * BOOT_PROGRESS_SCALE;
+    }
+}
 
 void boot_progress(char const *msg) {
     lcd_device_t *lcd = (lcd_device_t *)device_get("PANEL0");
@@ -49,13 +81,13 @@ void boot_progress(char const *msg) {
         return;
     }
 
-    int bar_y = FRAMEBUFFER_MAX_H - BOOT_PROGRESS_BAR_H;
-    int text_y = bar_y + (BOOT_PROGRESS_BAR_H - FONT_HEIGHT) / 2;
+    int bar_y  = FRAMEBUFFER_MAX_H - BOOT_PROGRESS_BAR_H - BOOT_PROGRESS_MARGIN_BOTTOM;
+    int text_y = bar_y + (BOOT_PROGRESS_BAR_H - FONT_HEIGHT * BOOT_PROGRESS_SCALE) / 2;
 
     /* Clear the whole strip first -- msg lengths vary between calls, and
      * we're not tracking the previous line's width to do a narrower clear. */
     draw_filled_rect_rotated(fb, 0, bar_y, FRAMEBUFFER_MAX_W, BOOT_PROGRESS_BAR_H, BOOT_PROGRESS_COLOR_BG);
-    draw_text_rotated(fb, msg, BOOT_PROGRESS_TEXT_X, text_y, BOOT_PROGRESS_COLOR_TEXT);
+    draw_text_2x(fb, msg, BOOT_PROGRESS_TEXT_X, text_y, BOOT_PROGRESS_COLOR_TEXT);
 
     /* Push just the strip we touched, not the whole 720x720 frame -- this
      * is called several times during boot and each call already blocks on
