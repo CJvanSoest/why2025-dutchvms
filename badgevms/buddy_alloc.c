@@ -559,4 +559,3 @@ void buddy_deallocate(allocator_t *allocator, void *ptr) {
     block->type       = BLOCK_TYPE_FREE;
     free_block(allocator, pool, block);
 }
-
