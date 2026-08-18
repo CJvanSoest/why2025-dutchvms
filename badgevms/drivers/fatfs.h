@@ -27,3 +27,7 @@ device_t *fatfs_create_sd(char const *devname, bool rw);
  * fatfs_create_spi(), just without mounting anything itself. See
  * usb_msc.h for why FLASH0 needs this instead of fatfs_create_spi(). */
 device_t *fatfs_wrap_mounted_spi(char const *devname);
+
+/* Same as fatfs_wrap_mounted_spi(), for SD0/MSC (usb_msc.c's
+ * usb_msc_init_sd()) instead of FLASH0/MSC. */
+device_t *fatfs_wrap_mounted_sd(char const *devname);

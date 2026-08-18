@@ -173,8 +173,21 @@ int app_main(void) {
         invalidate_ota_partition();
     }
 
-    // Allowed to fail
-    device_register("SD0", fatfs_create_sd("SD0", true));
+    /* Same usb_msc.c-mounted-first, fatfs-wraps-it pattern as FLASH0 above,
+     * so USB mass-storage mode can later hand SD0 to a USB host too (see
+     * usb_msc_init_sd()'s comment for why this is safe to add without
+     * risking the existing, proven fatfs_create_sd() path: on ANY failure
+     * -- no card, MSC setup failure, whatever -- this falls straight back
+     * to the exact same fatfs_create_sd() call this replaced). Allowed to
+     * fail either way. */
+    sdmmc_card_t *sd0_card = NULL;
+    device_t     *sd0_dev;
+    if (usb_msc_init_sd("SD0", &sd0_card)) {
+        sd0_dev = fatfs_wrap_mounted_sd("SD0");
+    } else {
+        sd0_dev = fatfs_create_sd("SD0", true);
+    }
+    device_register("SD0", sd0_dev);
 
     boot_progress("SCANNING APPS");
 

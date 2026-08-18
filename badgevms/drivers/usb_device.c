@@ -237,8 +237,8 @@ static bool usb_device_switch_to_impl(usb_device_mode_t mode) {
     }
 
     // Leaving MSC (or entering it): usb_msc_activate()/deactivate() hand
-    // FLASH0's FAT mount back and forth between BadgeVMS's own kernel VFS
-    // and the USB host -- see usb_msc.c. SD0 isn't wired up yet.
+    // FLASH0's (and SD0's, if present) FAT mount back and forth between
+    // BadgeVMS's own kernel VFS and the USB host -- see usb_msc.c.
     if (current_mode == USB_DEVICE_MODE_MSC) {
         if (!usb_msc_deactivate()) {
             ESP_LOGE(TAG, "usb_msc_deactivate failed, refusing to switch away from MSC");
