@@ -121,8 +121,8 @@ bool usb_msc_init(char const *devname, wl_handle_t *out_wl_handle) {
  * a bug in it must not be able to regress that path. why2025_firmware.c
  * only calls fatfs_create_sd() as a fallback when this fails, so the two
  * never run against the same live mount at once. Keep these constants in
- * sync with fatfs.c's SD_*/SDCARD_* defines if the board's SD wiring ever
- * changes -- see fatfs.c's own copy of this comment. */
+ * sync with fatfs.c's SD_ and SDCARD_ defines if the board's SD wiring
+ * ever changes -- see fatfs.c's own copy of this comment. */
 #define SD_MSC_DATA0_GPIO 39
 #define SD_MSC_DATA1_GPIO 40
 #define SD_MSC_DATA2_GPIO 41
