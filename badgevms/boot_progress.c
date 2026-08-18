@@ -134,25 +134,6 @@ void boot_progress(char const *msg) {
          * first draw every other caller already relies on. */
         memset(fb, 0, (size_t)FRAMEBUFFER_MAX_W * FRAMEBUFFER_MAX_H * sizeof(uint16_t));
         lcd->_draw((void *)lcd, 0, 0, FRAMEBUFFER_MAX_W, FRAMEBUFFER_MAX_H, fb);
-
-        /* Hardware feedback: even with the full-frame clear above, the
-         * first ~1-3s after PANEL0 comes up still looked washed-out/
-         * low-contrast on camera (a video capture at t=0.3s showed a
-         * grayish wash over the whole panel with barely-visible text; by
-         * t=3s the background was genuinely black but the text itself
-         * wasn't resolvable; both text and background looked normal by
-         * ~t=4.8s). That progression looks like a physical panel/backlight
-         * settle characteristic, not a framebuffer-content bug -- nothing
-         * in this driver ever explicitly turns the backlight on during
-         * boot (bv_display_backlight_send() is only called reactively when
-         * an app sets brightness, see st7703.c), so whatever state it's in
-         * this early is whatever the C6 was already holding, not something
-         * this code controls. This is a blind, heuristic delay (like the
-         * original TCA8418 attempt), not a root-caused fix -- if it
-         * doesn't hold up on retest, that itself is useful signal that the
-         * settle time needed is longer, shorter, or that the real cause is
-         * something other than the panel/backlight. */
-        vTaskDelay(pdMS_TO_TICKS(500));
     }
 
     int line_y = BOOT_LOG_TOP_Y + boot_log_next_line * BOOT_LOG_LINE_H;
