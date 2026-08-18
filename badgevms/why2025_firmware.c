@@ -234,27 +234,17 @@ int app_main(void) {
         ESP_LOGW(TAG, "usb_device_init failed (non-fatal)");
     }
 
-    /* CJ-DEBUG task #115: the ESP_LOGE/printf lines that used to sit here
-     * (and throughout run_init()) NEVER reached the serial capture on
-     * hardware, despite run_init()'s observable effects (apps launching)
-     * clearly happening -- while esp_rom_printf() elsewhere in this codebase
-     * (task.c's exception handler) reliably does. Switching to
-     * esp_rom_printf() here is a differential test: a direct ROM-level UART
-     * write, bypassing the ESP-IDF log/stdio buffering layers entirely, to
-     * see whether THAT shows up where the normal calls didn't. */
-    esp_rom_printf("CJ-DEBUG115: DutchVMS is ready\n");
     free_ram = heap_caps_get_free_size(MALLOC_CAP_DEFAULT);
-    esp_rom_printf(
-        "CJ-DEBUG115: Free main memory: %d, free PSRAM pages: %d/%d, running processes %u\n",
+    ESP_LOGI(
+        TAG,
+        "DutchVMS is ready. Free main memory: %d, free PSRAM pages: %d/%d, running processes %u",
         (int)free_ram,
         (int)get_free_psram_pages(),
         (int)get_total_psram_pages(),
         get_num_tasks()
     );
 
-    esp_rom_printf("CJ-DEBUG115: about to call run_init()\n");
     run_init();
-    esp_rom_printf("CJ-DEBUG115: run_init() returned (should never happen in normal operation)\n");
 
     ESP_LOGE(TAG, "Killed init, rebooting");
     esp_restart();

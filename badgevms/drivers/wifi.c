@@ -447,6 +447,19 @@ static void hermes_do_scan() {
 
 static void hermes(void *ignored) {
     ESP_LOGW("HERMES", "Starting");
+
+    /* C6 flash + WiFi/LoRa bring-up moved here from wifi_create() (see the
+     * comment there) so it runs on this dedicated task instead of blocking
+     * app_main() -- flash_slave_c6_if_needed() alone can take several
+     * seconds (C6_POST_RESET_SETTLE_MS's mandatory 3s settle, plus real
+     * flash-write time whenever a reflash is actually needed), and it used
+     * to run before PANEL0/the compositor were even registered, leaving
+     * the display uninitialized for that whole window on every boot. */
+    ESP_LOGI(TAG, "Flashing C6");
+    flash_slave_c6_if_needed();
+    start_wifi();
+    lora_proto_client_init();
+
     wifi_command_message_t *command;
     while (1) {
         if (xQueueReceive(hermes_queue, &command, portMAX_DELAY) == pdTRUE) {
@@ -699,13 +712,6 @@ static void start_wifi() {
 device_t *wifi_create() {
     ESP_LOGI(TAG, "Initializing");
 
-#if CJ_BADGEVMS_ENABLE_WIFI
-    ESP_LOGI(TAG, "Flashing C6");
-    flash_slave_c6_if_needed();
-#else
-    ESP_LOGW(TAG, "CJ-PATCH: ESP-Hosted/SDIO init SKIPPED -- C6 runs custom firmware");
-#endif
-
     wifi_device_t *dev = malloc(sizeof(wifi_device_t));
     if (!dev) {
         ESP_LOGE(TAG, "Failed to allocate wifi_device_t");
@@ -721,24 +727,31 @@ device_t *wifi_create() {
     base_dev->_lseek = wifi_lseek;
 
 #if CJ_BADGEVMS_ENABLE_WIFI
-    status.status            = WIFI_ENABLED;
-    status.connection_status = WIFI_DISCONNECTED;
+    status.status = WIFI_ENABLED;
 #else
-    status.status            = WIFI_DISABLED;
-    status.connection_status = WIFI_DISCONNECTED;
+    status.status = WIFI_DISABLED;
+    ESP_LOGW(TAG, "CJ-PATCH: ESP-Hosted/SDIO init SKIPPED -- C6 runs custom firmware");
 #endif
+    status.connection_status = WIFI_DISCONNECTED;
 
     wifi_event_group = xEventGroupCreate();
+    status.mutex      = xSemaphoreCreateMutex();
+    hermes_queue      = xQueueCreate(5, sizeof(wifi_command_message_t *));
 
 #if CJ_BADGEVMS_ENABLE_WIFI
-    start_wifi();
-#endif
-
-    status.mutex = xSemaphoreCreateMutex();
-    hermes_queue = xQueueCreate(5, sizeof(wifi_command_message_t *));
-#if CJ_BADGEVMS_ENABLE_WIFI
-    create_kernel_task(hermes, "Hermes", 4096, NULL, 5, &hermes_handle, 0);
-    lora_proto_client_init();
+    /* The actual C6 flash + start_wifi()/lora_proto_client_init() bring-up
+     * now happens inside hermes() itself, before its command loop, instead
+     * of blocking here -- see the comment in hermes() for why. Every
+     * caller-facing entry point in this file and in lora_proto_client.c
+     * already handles "not initialized yet" gracefully: send_command()
+     * enqueues onto hermes_queue (created above) and blocks the caller's
+     * own task on a notify until hermes gets to it, and lora_proto_client.c's
+     * public functions all check `!mutex`/`!reply_sem` up front and return
+     * a clean failure instead of touching an uncreated semaphore. Stack
+     * bumped from the command-loop's original 4096 to 8192 to match what
+     * this init work already ran with safely on the (8192-byte) main task
+     * before this change. */
+    create_kernel_task(hermes, "Hermes", 8192, NULL, 5, &hermes_handle, 0);
 #endif
     return (device_t *)dev;
 }
