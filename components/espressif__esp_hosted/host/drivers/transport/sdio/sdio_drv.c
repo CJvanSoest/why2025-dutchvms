@@ -994,7 +994,18 @@ static esp_err_t sdio_push_data_to_queue(uint8_t * buf, uint32_t buf_len)
 		}
 		/* Allocate rx buffer */
 		pkt_rxbuff = sdio_buffer_alloc(MEMSET_REQUIRED);
-		assert(pkt_rxbuff);
+		if (!pkt_rxbuff) {
+			// CJ-PATCH (why2025-dutchvms): this used to be assert(pkt_rxbuff)
+			// -- buf_mp_g is a small fixed-size mempool the whole system
+			// shares, and it can legitimately run dry under load (same
+			// alloc-failure-kills-the-badge class the sibling RX path,
+			// sdio_rx_get_buffer() above, was already hardened against).
+			// Drop this packet and let the caller retry on the next
+			// transfer instead of taking the whole badge down over one
+			// exhausted pool.
+			ESP_LOGE(TAG, "Dropping packet(s) from stream: buffer pool exhausted");
+			return ESP_FAIL;
+		}
 
 		packet_size = len + offset;
 		if (packet_size > buf_len) {

@@ -55,7 +55,11 @@ static esp_err_t why_pwm_set_duty_percent(ledc_channel_t channel, int duty_perce
     return ledc_update_duty(LEDC_LOW_SPEED_MODE, channel);
 }
 
-static void why_pwm_init_channel(int gpio_num, ledc_channel_t channel, int duty_percent) {
+// Backlight PWM is a nice-to-have peripheral, not a boot-critical one --
+// a transient LEDC init failure here must not abort the whole C6
+// co-processor and take WiFi/BT/LoRa down with it. Returns esp_err_t so
+// the caller can log and keep booting instead.
+static esp_err_t why_pwm_init_channel(int gpio_num, ledc_channel_t channel, int duty_percent) {
     ledc_timer_config_t timer_conf = {
         .speed_mode      = LEDC_LOW_SPEED_MODE,
         .duty_resolution = WHY_PWM_RESOLUTION,
@@ -63,7 +67,10 @@ static void why_pwm_init_channel(int gpio_num, ledc_channel_t channel, int duty_
         .freq_hz         = WHY_PWM_FREQ_HZ,
         .clk_cfg         = WHY_PWM_BASE_CLK,
     };
-    ESP_ERROR_CHECK(ledc_timer_config(&timer_conf));
+    esp_err_t res = ledc_timer_config(&timer_conf);
+    if (res != ESP_OK) {
+        return res;
+    }
 
     ledc_channel_config_t channel_conf = {
         .gpio_num   = gpio_num,
@@ -74,9 +81,12 @@ static void why_pwm_init_channel(int gpio_num, ledc_channel_t channel, int duty_
         .duty       = 0,
         .hpoint     = 0,
     };
-    ESP_ERROR_CHECK(ledc_channel_config(&channel_conf));
+    res = ledc_channel_config(&channel_conf);
+    if (res != ESP_OK) {
+        return res;
+    }
 
-    ESP_ERROR_CHECK(why_pwm_set_duty_percent(channel, duty_percent));
+    return why_pwm_set_duty_percent(channel, duty_percent);
 }
 
 // ---------- Display backlight RPC (task #38) ----------
@@ -177,8 +187,14 @@ void app_main(void) {
     gpio_install_isr_service(0);
 
     // WHY backlight comes up immediately so user sees the screen during boot
-    why_pwm_init_channel(BSP_DISPLAY_BL_GPIO,  LEDC_CHANNEL_0, 10);
-    why_pwm_init_channel(BSP_KEYBOARD_BL_GPIO, LEDC_CHANNEL_1, 10);
+    esp_err_t bl_res = why_pwm_init_channel(BSP_DISPLAY_BL_GPIO, LEDC_CHANNEL_0, 10);
+    if (bl_res != ESP_OK) {
+        ESP_LOGE(TAG, "Failed to init display backlight PWM: %s", esp_err_to_name(bl_res));
+    }
+    bl_res = why_pwm_init_channel(BSP_KEYBOARD_BL_GPIO, LEDC_CHANNEL_1, 10);
+    if (bl_res != ESP_OK) {
+        ESP_LOGE(TAG, "Failed to init keyboard backlight PWM: %s", esp_err_to_name(bl_res));
+    }
 
     // esp-hosted core: SDIO/SPI slave for Wi-Fi/BT/RPC + custom_data channel
     esp_hosted_coprocessor_init();

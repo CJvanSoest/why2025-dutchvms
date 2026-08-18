@@ -24,20 +24,37 @@ static esp_err_t init_ir(void) {
         .gpio_num          = BSP_IR_TX,
     };
 
-    ESP_ERROR_CHECK(rmt_new_tx_channel(&tx_channel_cfg, &tx_channel));
+    // IR is a nice-to-have peripheral -- a transient RMT init failure here
+    // must not abort the whole C6 co-processor and take WiFi/BT/LoRa down
+    // with it. ir_initialize() (below) already propagates our return value
+    // and handles it gracefully; these just need to actually return it
+    // instead of asserting.
+    esp_err_t res = rmt_new_tx_channel(&tx_channel_cfg, &tx_channel);
+    if (res != ESP_OK) {
+        return res;
+    }
 
     rmt_carrier_config_t carrier_cfg = {
         .duty_cycle   = 0.33,
         .frequency_hz = 38000,  // 38KHz
     };
-    ESP_ERROR_CHECK(rmt_apply_carrier(tx_channel, &carrier_cfg));
+    res = rmt_apply_carrier(tx_channel, &carrier_cfg);
+    if (res != ESP_OK) {
+        return res;
+    }
 
     ir_nec_encoder_config_t nec_encoder_cfg = {
         .resolution = 1000000,  // 1MHz, 1 tick = 1us
     };
 
-    ESP_ERROR_CHECK(rmt_new_ir_nec_encoder(&nec_encoder_cfg, &nec_encoder));
-    ESP_ERROR_CHECK(rmt_enable(tx_channel));
+    res = rmt_new_ir_nec_encoder(&nec_encoder_cfg, &nec_encoder);
+    if (res != ESP_OK) {
+        return res;
+    }
+    res = rmt_enable(tx_channel);
+    if (res != ESP_OK) {
+        return res;
+    }
     return ESP_OK;
 }
 

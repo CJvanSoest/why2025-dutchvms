@@ -287,7 +287,11 @@ static void hermes_do_disconnect() {
     status.connection_status = WIFI_DISCONNECTED;
     int retries              = 5;
 again:
-    ESP_ERROR_CHECK(esp_wifi_disconnect());
+    esp_err_t disc_res = esp_wifi_disconnect();
+    if (disc_res != ESP_OK) {
+        ESP_LOGW(TAG, "esp_wifi_disconnect failed: %s", esp_err_to_name(disc_res));
+        return;
+    }
     EventBits_t bits = xEventGroupWaitBits(
         wifi_event_group,
         WIFI_CONNECTED_BIT | WIFI_DISCONNECTED_BIT | WIFI_FAIL_BIT,
@@ -308,8 +312,16 @@ static void hermes_do_connect() {
         return;
     }
 
-    ESP_ERROR_CHECK(esp_wifi_disconnect());
-    ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_STA));
+    esp_err_t disc_res = esp_wifi_disconnect();
+    if (disc_res != ESP_OK) {
+        ESP_LOGW(TAG, "esp_wifi_disconnect failed: %s", esp_err_to_name(disc_res));
+        return;
+    }
+    esp_err_t mode_res = esp_wifi_set_mode(WIFI_MODE_STA);
+    if (mode_res != ESP_OK) {
+        ESP_LOGW(TAG, "esp_wifi_set_mode failed: %s", esp_err_to_name(mode_res));
+        return;
+    }
 
     size_t size;
     char   ssid[32]     = "WHY2025-open";
@@ -410,8 +422,16 @@ static void hermes_do_scan() {
     uint16_t         ap_count = 0;
     memset(ap_info, 0, sizeof(ap_info));
 
-    ESP_ERROR_CHECK(esp_wifi_scan_get_ap_num(&ap_count));
-    ESP_ERROR_CHECK(esp_wifi_scan_get_ap_records(&number, ap_info));
+    esp_err_t num_res = esp_wifi_scan_get_ap_num(&ap_count);
+    if (num_res != ESP_OK) {
+        ESP_LOGW(TAG, "esp_wifi_scan_get_ap_num failed: %s", esp_err_to_name(num_res));
+        return;
+    }
+    esp_err_t rec_res = esp_wifi_scan_get_ap_records(&number, ap_info);
+    if (rec_res != ESP_OK) {
+        ESP_LOGW(TAG, "esp_wifi_scan_get_ap_records failed: %s", esp_err_to_name(rec_res));
+        return;
+    }
 
     ESP_LOGW("HERMES", "Total APs scanned = %u, actual AP number ap_info holds = %u", ap_count, number);
     ap_count = MIN(ap_count, number);
