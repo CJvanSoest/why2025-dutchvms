@@ -60,10 +60,6 @@ void init_pool(allocator_t *allocator, void *mem_start, void *mem_end, uint32_t 
 void print_allocator(allocator_t *allocator);
 
 void  *buddy_allocate(allocator_t *allocator, size_t size, enum block_type type, uint32_t flags);
-// void           *buddy_reallocate(void *ptr, size_t size);
 void   buddy_deallocate(allocator_t *allocator, void *ptr);
-// void            buddy_split_allocated(void *ptr);
-// enum block_type buddy_get_type(void *ptr);
-// size_t          buddy_get_size(void *ptr);
 size_t buddy_get_free_pages(allocator_t *allocator);
 size_t buddy_get_total_pages(allocator_t *allocator);

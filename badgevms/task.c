@@ -321,14 +321,15 @@ void IRAM_ATTR cerberos() {
 void IRAM_ATTR __wrap_xt_unhandled_exception(void *frame) {
     task_info_t *task_info = get_task_info();
     if (task_info && task_info->pid) {
-        // CJ-DEBUG: temporary fault detail dump for the MSC-activation crash
-        // investigation -- frame is the RvExcFrame* pushed by the RISC-V
-        // trap vector (components/riscv/vectors.S), never dereferenced here
-        // before. Remove once the MSC crash is root-caused.
+        // Fault detail dump, generically useful for any task crash (added
+        // during the MSC-activation crash investigation, now resolved --
+        // kept as a permanent diagnostic since it costs nothing except on
+        // an actual crash). frame is the RvExcFrame* pushed by the RISC-V
+        // trap vector (components/riscv/vectors.S).
         RvExcFrame *ef = (RvExcFrame *)frame;
         esp_rom_printf("Task %u caused an unhandled exception, Cerberos will deal with it\n", task_info->pid);
         esp_rom_printf(
-            "CJ-DEBUG: mcause=0x%x mepc=0x%x mtval=0x%x ra=0x%x sp=0x%x a0=0x%x\n",
+            "mcause=0x%x mepc=0x%x mtval=0x%x ra=0x%x sp=0x%x a0=0x%x\n",
             ef->mcause,
             ef->mepc,
             ef->mtval,
@@ -337,7 +338,7 @@ void IRAM_ATTR __wrap_xt_unhandled_exception(void *frame) {
             ef->a0
         );
         if (g_panic_abort && g_panic_abort_details) {
-            esp_rom_printf("CJ-DEBUG: abort details: %s\n", g_panic_abort_details);
+            esp_rom_printf("abort details: %s\n", g_panic_abort_details);
         }
 
         // Send task off to think about what it did until its timeslice runs out

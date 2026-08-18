@@ -188,19 +188,6 @@ static ssize_t tca8418_write(void *dev, int fd, void const *buf, size_t count) {
     return -1;
 }
 
-static void tca8418_keyboard_task(void *pvParameters) {
-    tca8418_device_t *device = pvParameters;
-    // poll keyboard for keypresses
-    while (true) {
-        while (tca8418_get_event_count(device->keyboard) > 0) {
-            sKeyAndChar test = tca8418_get_char(device->keyboard);
-        }
-        vTaskDelay(100 / portTICK_PERIOD_MS);
-    }
-    // If ever exits, cleanup
-    vTaskDelete(NULL);
-}
-
 static ssize_t tca8418_read(void *dev, int fd, void *buf, size_t count) {
     tca8418_device_t *device = dev;
     if (fd)
@@ -269,7 +256,6 @@ device_t *tca8418_keyboard_create() {
     tca8418_flush(dev->keyboard);
 
     ESP_LOGE(TAG, "keyboard initialization success");
-    // xTaskCreate(tca8418_keyboard_task, "tca8418_keyboard_task", 4096, dev, tskIDLE_PRIORITY, NULL);
 
     return (device_t *)dev;
 }

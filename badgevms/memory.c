@@ -602,41 +602,6 @@ uintptr_t page_allocate(size_t size) {
     return 0;
 }
 
-#define BAD_PAGES_MAX 10
-static uintptr_t bad_pages[BAD_PAGES_MAX];
-static int       bad_pages_num = 0;
-
-void reserve_bad_pages(size_t psram_size) {
-    size_t     total_pages = buddy_get_free_pages(&page_allocator);
-    uintptr_t *pages       = calloc(1, total_pages * sizeof(uintptr_t));
-    if (!pages) {
-        ESP_LOGE("memory_init", "Couldn't allocate memory for free page pointers");
-        return;
-    }
-    // Allocate all free pages
-    for (int i = 0; i < total_pages - 1; ++i) {
-        pages[i] = page_allocate(SOC_MMU_PAGE_SIZE);
-    }
-
-    for (int i = 0; i < total_pages - 1; ++i) {
-        bool found = false;
-
-        for (int k = 0; k < bad_pages_num; ++k) {
-            if (bad_pages[k] == i * SOC_MMU_PAGE_SIZE) {
-                found = true;
-                break;
-            }
-        }
-
-        if (found) {
-            ESP_LOGW("memory_init", "Reserving bad page 0x%08X", i * SOC_MMU_PAGE_SIZE);
-        } else {
-            page_deallocate(pages[i]);
-        }
-    }
-    free(pages);
-}
-
 static IRAM_ATTR bool test_psram(intptr_t v_start, size_t size) {
     int volatile *spiram = (int volatile *)v_start;
     size_t        p;
@@ -656,41 +621,16 @@ static IRAM_ATTR bool test_psram(intptr_t v_start, size_t size) {
     ESP_DRAM_LOGW(DRAM_STR("memory_test"), "Starting read");
     for (p = 0; p < (size / sizeof(int)); p += 8) {
         if (spiram[p] != (p ^ 0xAAAAAAAA)) {
-            uintptr_t address = VADDR_START + (p * 4);
-            uintptr_t page    = ((address - VADDR_START) & ~(SOC_MMU_PAGE_SIZE - 1));
-            bool      found   = false;
-
+            // esp_restart() below is unconditional on the first bad page, so
+            // this never gets a chance to accumulate multiple failures --
+            // the bad_pages[]/reserve_bad_pages() machinery that used to
+            // live here for that purpose was dead code and has been
+            // removed. If tolerating (not just detecting) bad PSRAM pages
+            // is ever wanted, that's a real feature to design and test on
+            // hardware, not something to silently restore here.
             spi_flash_enable_interrupts_caches_and_other_cpu();
             ESP_LOGE("memory_test", "Bad pages detected, rebooting");
             esp_restart();
-
-            for (int k = 0; k < 8; ++k) {
-                if (bad_pages[k] == page) {
-                    found = true;
-                    break;
-                }
-            }
-            if (!found) {
-                if (bad_pages_num == BAD_PAGES_MAX) {
-                    ESP_DRAM_LOGE(DRAM_STR("memory_test"), "Too many bad pages");
-                    // esp_system_abort("Too many bad pages in memory test");
-                    spi_flash_enable_interrupts_caches_and_other_cpu();
-                    esp_restart();
-                }
-                ESP_DRAM_LOGE(
-                    DRAM_STR("memory_test"),
-                    "Addres 0x%08lx page 0x%08lx failed, expected 0x%08lx, got 0x%08lx",
-                    address,
-                    page,
-                    p ^ 0xAAAAAAAA,
-                    spiram[p]
-                );
-                bad_pages[bad_pages_num++] = page;
-            }
-            errct++;
-            if (errct == 1) {
-                initial_err = p * 4;
-            }
         }
     }
     if (errct) {
@@ -790,10 +730,6 @@ void IRAM_ATTR memory_init() {
 
     ESP_DRAM_LOGW(DRAM_STR("memory_init"), "Initialzing memory pool");
     init_pool(&page_allocator, (void *)VADDR_START, (void *)VADDR_START + psram_size, 0);
-
-    if (bad_pages_num) {
-        reserve_bad_pages(psram_size);
-    }
 
     uintptr_t framebuffer_page = page_allocate(SOC_MMU_PAGE_SIZE);
 

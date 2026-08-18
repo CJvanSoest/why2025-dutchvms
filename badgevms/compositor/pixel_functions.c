@@ -24,16 +24,6 @@
 
 extern rotation_angle_t rotation;
 
-#if 0
-IRAM_ATTR void draw_pixel_rotated(uint16_t *fb, int x, int y, uint16_t color) {
-    int fb_x = 0, fb_y = 0;
-    rotate_coordinates(x, y, rotation, &fb_x, &fb_y);
-    if (fb_x >= 0 && fb_x < FRAMEBUFFER_MAX_W && fb_y >= 0 && fb_y < FRAMEBUFFER_MAX_H) {
-        fb[fb_y * FRAMEBUFFER_MAX_W + fb_x] = color;
-    }
-}
-#endif
-
 IRAM_ATTR void draw_pixel_rotated(uint16_t *fb, int x, int y, uint16_t color) {
     int fb_x = 0, fb_y = 0;
     rotate_coordinates(x, y, rotation, &fb_x, &fb_y);
