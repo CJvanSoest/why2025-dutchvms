@@ -215,25 +215,15 @@ int app_main(void) {
 
     boot_progress("STARTING INPUT AND SENSORS");
 
-    /* Experiment (issue #96): keeping KEYBOARD0 at its original position
-     * (after WIFI0/SOCKET0) still hard-crashed on hardware with the same
-     * TCA8418 I2C-NACK abort as moving it up with PANEL0 -- so "position in
-     * this sequence" was never the real variable. FLASH0+SD0+WIFI0+SOCKET0
-     * (plus PANEL0, wherever it sits) is the same set of blocking calls
-     * either way, so the *total* elapsed time reaching this point is
-     * order-independent -- yet only the reordered build crashed. That
-     * points at adjacency, not elapsed time: in the original code PANEL0
-     * sat immediately before this call with nothing in between, and moving
-     * PANEL0 away put FLASH0/SD0/WIFI0/SOCKET0 between them. This fixed
-     * delay is a deliberate test of the other hypothesis (TCA8418/I2C0
-     * genuinely needs more wall-clock settle time than any ordering here
-     * provides) -- expected to make no difference if adjacency is the real
-     * cause; if it doesn't help, treat that as confirmation and look at the
-     * adjacency/shared-bus theory instead (see esp_tca8418.c's
-     * i2c_bus_create(I2C_NUM_0, ...) and check what else touches I2C0/its
-     * pins between PANEL0 and here). */
-    vTaskDelay(pdMS_TO_TICKS(500));
-
+    /* KEYBOARD0 stays here, at its original position (after WIFI0/SOCKET0).
+     * The TCA8418 I2C-NACK abort seen when this hard-crashed on hardware
+     * (issue #96) turned out not to be a boot-ordering/settle-time problem
+     * at all -- a fixed vTaskDelay() here masked the symptom without
+     * addressing it (still hard-aborted on any transient NACK later, not
+     * just at startup). Root-caused and fixed properly at the point of
+     * failure instead: esp_tca8418.c's readRegister()/writeRegister() now
+     * retry on a NACK rather than hard-aborting on the very first one, see
+     * that file's comment. */
     if (!device_register("KEYBOARD0", tca8418_keyboard_create())) {
         ESP_LOGE(TAG, "Failed to initialize KEYBOARD0 driver");
         invalidate_ota_partition();
