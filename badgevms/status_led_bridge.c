@@ -16,7 +16,7 @@
 
 /* See badgevms/status_led.h. Thin wrapper around the internal
  * status_led_set/show/clear/set_brightness primitives already implemented
- * in drivers/badgevms_i2c_bus.c (same pattern as led_matrix_bridge.c
+ * in drivers/status_led_ws2812.c (same pattern as led_matrix_bridge.c
  * wrapping led_matrix_clear/pixel/... for the matrix), plus the
  * take()/release() arbitration flag so an app can own the shared 4-LED
  * chain without the firmware's own ws2812_task status indicator fighting

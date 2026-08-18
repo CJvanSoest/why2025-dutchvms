@@ -31,8 +31,10 @@ the traps are in [Pitfalls.md](Pitfalls.md).
 
 ## 3. Verify the change
 
-There's no host-test harness in this repo (unlike the apps-repo-side
-MeshCore protocol code, which does have one) — the actual gate here is:
+There is a host-test harness (`host_tests/`, built with the system gcc, not
+the IDF toolchain — `logical_names_test` + `rect_math_test`, run via `ctest`
+in CI's `host-tests` job), but it only covers modules pure enough to compile
+on the host. For everything else, the actual gate is:
 
 ```sh
 idf.py build                                                              # compiles + links, both P4 and C6

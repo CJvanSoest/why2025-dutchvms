@@ -157,9 +157,9 @@ int bb_pca_readback(int sda, int scl, uint8_t addr7, uint8_t val) {
 }
 /* ---- PCA9698 LED-matrix driver (bit-bang) ----
  * Mapping (from LED_MATRIX.kicad_sch, confirmed via geometry):
- *   rows PB0..PB11 (anodes, drive HIGH) = global IO bit 0..11
+ *   rows PB0..PB11 (cathodes, active row driven LOW) = global IO bit 0..11
  *      = OP0 bit0..7 (PB0..PB7), OP1 bit0..3 (PB8..PB11)
- *   cols PA0..PA19 (cathodes, sink LOW) = global IO bit 12..31
+ *   cols PA0..PA19 (anodes, drive HIGH to light) = global IO bit 12..31
  *      = OP1 bit4..7 (PA0..PA3), OP2 bit0..7 (PA4..PA11), OP3 bit0..7 (PA12..PA19)
  *   IO4 (OP4) unused.
  * Each row has its own 1k series resistor (3x R_Pack04 = 12) -> a row sources

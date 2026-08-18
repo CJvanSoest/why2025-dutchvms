@@ -41,14 +41,14 @@
 #define PHYSMEM_AMOUNT    (32 * 1024 * 1024)
 #define VADDR_START       SOC_EXTRAM_LOW
 #define VADDR_TASK_START  ((SOC_EXTRAM_LOW + PHYSMEM_AMOUNT) & ~(SOC_MMU_PAGE_SIZE - 1))
-// Allocate 10MB of VADDR space for the kernel
+// Allocate 5MB of VADDR space for the kernel
 #define KERNEL_HEAP_SIZE  (((1024 * 1024) * 5) - SOC_MMU_PAGE_SIZE)
 #define KERNEL_HEAP_START SOC_EXTRAM_LOW + SOC_MMU_PAGE_SIZE
 
-// Allocate 15MB of VADDR space for framebuffers
+// Allocate 25MB of VADDR space for framebuffers
 #define FRAMEBUFFER_HEAP_SIZE  (1024 * 1024 * 25)
 #define FRAMEBUFFER_HEAP_START ((SOC_EXTRAM_LOW + (1024 * 1024 * 5)) & ~(SOC_MMU_PAGE_SIZE - 1))
-#define FRAMEBUFFERS_START     FRAMEBUFFFER_HEAP_START + SOC_MMU_PAGE_SIZE
+#define FRAMEBUFFERS_START     FRAMEBUFFER_HEAP_START + SOC_MMU_PAGE_SIZE
 
 #define ADDR_TO_PADDR(a) (a - VADDR_START)
 #define PADDR_TO_ADDR(a) (a + VADDR_START)

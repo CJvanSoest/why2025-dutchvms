@@ -11,7 +11,7 @@ matches what you are about to do:
 - **[Data-Flows.md](Data-Flows.md)**: cold start, the P4↔C6 LoRa RPC, and the
   app install/launch flow, with real function names.
 - **[Build-And-CI.md](Build-And-CI.md)**: build invocation, the NAS-docker
-  build pattern, and what the 5 CI jobs check.
+  build pattern, and what the 4 CI jobs check.
 - **[Workflow.md](Workflow.md)**: how to carry a change from first read to a
   green, physically-verified commit.
 - **[Pitfalls.md](Pitfalls.md)**: traps that already cost real time or
@@ -91,6 +91,11 @@ symptom is actually on before picking a file.
 
 - **Do not modify vendored code.** `badgevms/thirdparty/*` is a third-party
   drop (cJSON, dlmalloc, tomlc17, khash). Leave it as-is.
+  **Exception:** `components/` holds 15+ locally-forked ESP-IDF components
+  (freertos, esp_psram, esp_lcd, elf_loader, …) that this fork intentionally
+  patches — see `components/CHANGES` for the override log; that's the place
+  to check before assuming a file there is untouchable, and to update when
+  adding a new patch.
 - **The P4↔C6 wire protocol has no version negotiation.** Structs like
   `lora_protocol_config_params_t` are shared *by convention*, not by a
   common header — extending one means appending fields at the end (never
@@ -112,10 +117,11 @@ symptom is actually on before picking a file.
   isolation for a corrupted kernel data structure) but logs a reason via
   `esp_system_abort()` instead of an undiagnosable bare abort.
 - **Physical hardware is the real gate, CI is necessary but not
-  sufficient.** The 5 CI jobs (clang-format, host tests, P4/C6 wire sync,
-  ESP-IDF build ×2, stack-usage) prove the code compiles, links, keeps the
-  pure logic correct, keeps the two sides of the LoRa wire format agreeing,
-  and doesn't blow a function's stack frame.
+  sufficient.** The 4 CI jobs (clang-format, host tests, P4/C6 wire sync,
+  ESP-IDF build — stack-usage is a step inside the build job, not its own
+  job) prove the code compiles, links, keeps the pure logic correct, keeps
+  the two sides of the LoRa wire format agreeing, and doesn't blow a
+  function's stack frame.
   They do not prove a driver initializes correctly against real silicon, a
   radio packet actually round-trips to another MeshCore node, or the badge
   boots past a given driver at all — several real bugs this session
