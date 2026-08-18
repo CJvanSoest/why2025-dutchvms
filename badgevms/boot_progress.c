@@ -36,40 +36,42 @@ static char const *TAG = "boot_progress";
  * touching the shared, kernel-wide draw_text_rotated() other callers
  * still use at 1x. */
 #define BOOT_PROGRESS_SCALE 3
-#define BOOT_PROGRESS_BAR_H (FONT_HEIGHT * BOOT_PROGRESS_SCALE + 20)
-#define BOOT_PROGRESS_COLOR_BG   0x0000 /* black */
 #define BOOT_PROGRESS_COLOR_TEXT 0xFFFF /* white */
 
-/* Real boot work between stages can take well under a second (e.g. when
- * WIFI0 skips the C6 reflash because it's already current) -- without a
- * floor, a message can be overwritten by the next one before it's even
- * readable. Hardware-tested at 400ms (issue #96): the one message that
- * happened to stay up several real seconds (WIFI0 doing an actual C6
- * reflash that run) photographed perfectly readable once the camera
- * settled, while the four ~400ms ones looked "garbled" -- that was motion
- * blur from the transition, not a rendering bug, confirming 400ms just
- * isn't enough dwell time for a camera (or an eye scanning the screen) to
- * resolve it. Bumped to 700ms. This blocks boot by up to this much per
- * call (5 calls, worst case +3.5s total) -- a deliberate legibility/speed
- * tradeoff for a UX feature, not something perf-sensitive code should ever
- * do. */
-#define BOOT_PROGRESS_MIN_VISIBLE_MS 700
+/* v1: a single line, cleared and redrawn on every call, held up by a fixed
+ * vTaskDelay() so it stayed on screen long enough to read. Hardware
+ * feedback (issue #96) at both 400ms and 700ms: still "unreadable" for
+ * every message except the last ("STARTING DUTCHVMS") -- which was never
+ * about the delay being too short. That message is simply followed by
+ * slower, non-boot_progress()-gated work (app scanning, ELF loading,
+ * compositor setup) before anything overwrites it, so it naturally stays
+ * up far longer than any of the tuned delays; the other four are cleared
+ * the moment the NEXT call lands, however long that took. No fixed delay
+ * value fixes that -- it only trades boot latency for a slightly longer
+ * chance to catch a message before it's erased.
+ *
+ * v2 (this version): stop erasing. Each call appends a new line below the
+ * previous ones instead of clearing and overwriting the same strip -- a
+ * boot log, not a status line. A line's real dwell time becomes "until
+ * boot finishes" (several seconds, whatever the actual work takes) rather
+ * than a hand-tuned constant, so legibility no longer depends on getting
+ * that constant right. BOOT_LOG_MIN_STEP_MS below is now purely cosmetic
+ * pacing (so 5 lines landing within the same 50ms on a fast boot don't
+ * all slam onto screen in one frame), not a legibility mechanism -- safe
+ * to trim or drop entirely without making anything harder to read. */
+#define BOOT_LOG_MAX_LINES  8
+#define BOOT_LOG_LEFT_X     40
+#define BOOT_LOG_LINE_H     (FONT_HEIGHT * BOOT_PROGRESS_SCALE + 14)
+#define BOOT_LOG_TOP_Y      ((FRAMEBUFFER_MAX_H - BOOT_LOG_MAX_LINES * BOOT_LOG_LINE_H) / 2)
+#define BOOT_LOG_MIN_STEP_MS 150
+
+static int boot_log_next_line = 0;
 
 /* font_data only covers A-Z/0-9/space (see font.h) -- anything else
  * (lowercase is remapped by char_to_font_index(), but '.', '+', etc are
  * not) silently draws as a blank space. Callers should stick to
  * A-Z/0-9/space in boot_progress() messages; this only guards against a
  * garbage character index, not against those gaps. */
-static int text_width(char const *text) {
-    int len = (int)strlen(text);
-    if (len == 0) {
-        return 0;
-    }
-    /* Each glyph is FONT_WIDTH wide plus a 1px gap, except the trailing
-     * gap after the last glyph, which is never drawn. */
-    return len * (FONT_WIDTH + 1) * BOOT_PROGRESS_SCALE - BOOT_PROGRESS_SCALE;
-}
-
 static void draw_text_3x(uint16_t *fb, char const *text, int x, int y, uint16_t color) {
     for (int i = 0; text[i]; i++) {
         int font_idx = char_to_font_index(text[i]);
@@ -106,44 +108,41 @@ void boot_progress(char const *msg) {
         return;
     }
 
-    /* Vertically centered, not a bottom strip -- the bottom strip was hard
-     * to read even at 2x (cramped against the panel edge). Horizontally
-     * centered on this message's own width, since messages vary in length. */
-    int bar_y  = (FRAMEBUFFER_MAX_H - BOOT_PROGRESS_BAR_H) / 2;
-    int text_y = bar_y + (BOOT_PROGRESS_BAR_H - FONT_HEIGHT * BOOT_PROGRESS_SCALE) / 2;
-    int text_x = (FRAMEBUFFER_MAX_W - text_width(msg)) / 2;
+    if (boot_log_next_line >= BOOT_LOG_MAX_LINES) {
+        // More boot_progress() calls than the log has room for -- drop
+        // silently rather than overflow into whatever's below the block.
+        // Callers are a short, fixed list in why2025_firmware.c today; if
+        // that ever grows past BOOT_LOG_MAX_LINES, raise the constant.
+        ESP_LOGW(TAG, "boot log full, dropping: %s", msg);
+        return;
+    }
 
-    /* Clear the whole strip first -- msg lengths vary between calls, and
-     * we're not tracking the previous line's width to do a narrower clear. */
-    draw_filled_rect_rotated(fb, 0, bar_y, FRAMEBUFFER_MAX_W, BOOT_PROGRESS_BAR_H, BOOT_PROGRESS_COLOR_BG);
-    draw_text_3x(fb, msg, text_x, text_y, BOOT_PROGRESS_COLOR_TEXT);
+    int line_y = BOOT_LOG_TOP_Y + boot_log_next_line * BOOT_LOG_LINE_H;
+    boot_log_next_line++;
 
-    /* Push just the strip we touched, not the whole 720x720 frame -- this
-     * is called several times during boot and each call already blocks on
-     * the panel DMA (see st7703.c's draw()/esp_lcd_panel_draw_bitmap()), no
-     * need to push pixels nothing changed. Safe to call directly like this
-     * (bypassing window_present()/the compositor queue entirely): the
-     * compositor task's own render path is gated on a non-empty
-     * window_stack (see compositor.c), which is guaranteed empty for the
-     * entire window boot_progress() is used in -- the first window is
-     * created once run_init() (the last thing app_main() calls) spawns the
-     * launcher app.
+    draw_text_3x(fb, msg, BOOT_LOG_LEFT_X, line_y, BOOT_PROGRESS_COLOR_TEXT);
+
+    /* Push just the line we touched, not the whole 720x720 frame -- see
+     * the module comment for why bypassing window_present()/the
+     * compositor queue here is safe (no window exists yet to race with).
      *
      * _draw()'s 3rd/4th args are END coordinates (esp_lcd_panel_draw_bitmap()
      * takes x_start/y_start/x_end/y_end, exclusive), not width/height --
      * confirmed against components/esp_lcd/include/esp_lcd_panel_ops.h.
      * compositor.c's only call site (0, 0, FRAMEBUFFER_MAX_W,
      * FRAMEBUFFER_MAX_H) can't disambiguate the two conventions since it
-     * always draws the full frame from the origin; this strip is not at the
+     * always draws the full frame from the origin; this line is not at the
      * origin, so getting this wrong would draw nothing or the wrong rows. */
     lcd->_draw(
         (void *)lcd,
         0,
-        bar_y,
+        line_y,
         FRAMEBUFFER_MAX_W,
-        bar_y + BOOT_PROGRESS_BAR_H,
-        fb + (size_t)bar_y * FRAMEBUFFER_MAX_W
+        line_y + FONT_HEIGHT * BOOT_PROGRESS_SCALE,
+        fb + (size_t)line_y * FRAMEBUFFER_MAX_W
     );
 
-    vTaskDelay(pdMS_TO_TICKS(BOOT_PROGRESS_MIN_VISIBLE_MS));
+    // Cosmetic pacing only -- see the module comment. Not load-bearing for
+    // legibility the way the old fixed hold-delay was.
+    vTaskDelay(pdMS_TO_TICKS(BOOT_LOG_MIN_STEP_MS));
 }
