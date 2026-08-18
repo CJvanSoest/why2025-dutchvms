@@ -122,9 +122,9 @@ static void extract_host_from_url(char const *url, char *host_buf, size_t host_b
     host_buf[0] = '\0';
     if (!url)
         return;
-    char const *p     = strstr(url, "://");
-    p                 = p ? p + 3 : url;
-    size_t      i     = 0;
+    char const *p = strstr(url, "://");
+    p             = p ? p + 3 : url;
+    size_t i      = 0;
     while (p[i] && p[i] != '/' && p[i] != ':' && p[i] != '?' && i < host_buf_size - 1) {
         host_buf[i] = p[i];
         i++;

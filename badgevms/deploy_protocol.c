@@ -125,8 +125,8 @@ static void rx_blocking(uint8_t *buf, size_t n) {
  * timeout (partial data, if any, is left in `buf` -- caller must treat
  * the frame as failed either way). */
 static bool rx_blocking_timeout(uint8_t *buf, size_t n, uint32_t timeout_ms) {
-    size_t          got      = 0;
-    TickType_t      deadline = xTaskGetTickCount() + pdMS_TO_TICKS(timeout_ms);
+    size_t     got      = 0;
+    TickType_t deadline = xTaskGetTickCount() + pdMS_TO_TICKS(timeout_ms);
     while (got < n) {
         TickType_t now = xTaskGetTickCount();
         if (now >= deadline)
@@ -376,7 +376,7 @@ static void handle_put_streamed(uint8_t const hdr[5], uint32_t len) {
      * PUT_CHUNK_BYTES chunk takes ~356ms at 115200 baud, so 5s is a large
      * margin over legitimate wire jitter while still bounding a sender that
      * declared more than it actually sends (see rx_blocking_timeout()). */
-    bool rx_ok = true;
+    bool           rx_ok    = true;
     while (remain > 0) {
         uint32_t n = remain < sizeof(chunk) ? remain : sizeof(chunk);
         if (!rx_blocking_timeout(chunk, n, 5000)) {
