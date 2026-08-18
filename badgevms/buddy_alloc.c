@@ -247,6 +247,13 @@ static buddy_block_t *try_merge_buddy(memory_pool_t *pool, buddy_block_t *block)
 
 void free_block(allocator_t *allocator, memory_pool_t *pool, buddy_block_t *block) {
     xSemaphoreTake(allocator->memory_pool_mutex, portMAX_DELAY);
+
+    // Merging (below) only ever combines two already-free blocks into one
+    // larger one -- it doesn't change the total free page count, so the
+    // page count freed here is exactly this block's own order, computed
+    // once before `block` gets reassigned by the merge loop.
+    pool->free_pages += (1 << block->order);
+
     buddy_block_t *free_block = block;
 
     while ((block = try_merge_buddy(pool, block))) {
@@ -500,11 +507,12 @@ void IRAM_ATTR *buddy_allocate(allocator_t *allocator, size_t size, enum block_t
             --pool->max_order_free;
     }
 
+    pool->free_pages -= (1 << block->order);
+
     xSemaphoreGive(allocator->memory_pool_mutex);
 
-    pool->free_pages -= (1 << block->order);
-    block->type       = type;
-    void *retval      = block_to_address(pool, block);
+    block->type  = type;
+    void *retval = block_to_address(pool, block);
 
     ESP_LOGD(TAG, "buddy_allocate(%zi) returning %p", size, retval);
     return retval;
@@ -555,7 +563,7 @@ void buddy_deallocate(allocator_t *allocator, void *ptr) {
         return;
     }
 
-    pool->free_pages += (1 << block->order);
-    block->type       = BLOCK_TYPE_FREE;
+    // free_pages is now accounted for inside free_block(), under the lock.
+    block->type = BLOCK_TYPE_FREE;
     free_block(allocator, pool, block);
 }
