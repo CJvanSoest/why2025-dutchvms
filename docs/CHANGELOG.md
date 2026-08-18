@@ -21,6 +21,49 @@ Entries from here on are the source of truth going forward.
 
 ## [Unreleased]
 
+## [1.5.5] - 2026-08-18
+
+### Changed
+- **Debug instrumentation from past investigations no longer runs on every boot** (PR #92) —
+  a task #115 diagnostic wrote two NVS blobs on every single boot to track down a suspected
+  `validate_ota_partition()` silent-skip bug; that's real flash wear over a badge's lifetime for
+  an investigation whose only production risk was already neutralized by disabling bootloader
+  rollback in v1.3.17. Removed. The OTA-validation trace logs from the same investigation are
+  kept but downgraded from always-visible to debug-level (KNOWN_ISSUES.md #11 is still open).
+- **Transient WiFi, SDIO, and IR/backlight errors no longer reboot the whole badge** (PR #91,
+  PR #93) — several driver paths used `ESP_ERROR_CHECK`, which aborts the entire chip on any
+  failure. Connecting/disconnecting/scanning WiFi, a shared SDIO buffer pool running temporarily
+  dry under load, and IR or backlight PWM init failing now log and fail gracefully instead;
+  boot-time WiFi/netif bring-up (genuinely unrecoverable) still aborts as before.
+
+### Fixed
+- **Kernel could dereference NULL under PID exhaustion or memory pressure** (PR #91) — starting
+  a new process that failed before a task info struct existed still tried to clean one up.
+- **A bad or already-closed file descriptor could crash the kernel** (PR #91) — `close()`/`lseek()`
+  didn't fully validate the fd before touching its device pointer.
+- **A crafted path could escape its intended device root** (PR #91) — path parsing didn't reject
+  `.`/`..`/empty path components.
+- **A malformed UART deploy PUT could hang the deploy listener forever** (PR #91) — the payload
+  read had no timeout, so a sender declaring more data than it actually sends wedged it
+  permanently; bounded to 5s per chunk, aborting the frame on timeout.
+- **A sensor read failure permanently stuck the BME690 environmental sensor in stale-cache mode**
+  (PR #91) — one failed measurement never released its reentrancy lock.
+- **`buddy_alloc`'s free-page accounting could lose updates under concurrent alloc/dealloc**
+  (PR #93) — the counter was mutated outside the pool lock on both sides, racing against a
+  locked reader; both sides now update it under the lock.
+- **`FRAMEBUFFER_BYTES` used width×width instead of width×height** (PR #90) — harmless on the
+  current square 720×720 panel, but a latent buffer over/under-run on the documented non-square
+  Tanmatsu port.
+- Several stale/incorrect comments (LED-matrix row/column polarity, memory-region size
+  comments, a couple of bridge-file cross-references) that contradicted the code beneath them
+  (PR #90).
+
+### Security
+- **Cookies set by one host could be sent to any other host over the curl shim** (PR #91) — the
+  cookie jar hardcoded every cookie's domain and sent the full jar on every request regardless
+  of domain, path, secure flag, or expiry. Cookies now default to the actual request host and
+  are filtered against the target request before being sent.
+
 ## [1.5.4] - 2026-08-17
 
 ### Changed
