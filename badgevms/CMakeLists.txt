@@ -2,6 +2,7 @@ idf_component_register(
     SRCS
      ${CMAKE_CURRENT_BINARY_DIR}/generated_symbols.c
      "application.c"
+     "boot_progress.c"
      "buddy_alloc.c"
      "compositor/compositor.c"
      "compositor/pixel_functions.c"

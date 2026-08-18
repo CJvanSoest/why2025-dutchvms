@@ -26,6 +26,7 @@
 #include "badgevms/ota.h"
 #include "badgevms/process.h"
 #include "badgevms_config.h"
+#include "boot_progress.h"
 #include "compositor/compositor_private.h"
 #include "deploy_protocol.h"
 #include "device_private.h"
@@ -119,6 +120,42 @@ int app_main(void) {
         ret = nvs_flash_init();
     }
 
+    /* PANEL0/KEYBOARD0/compositor_init() moved up here, before FLASH0/SD0/
+     * WIFI0 -- see GitHub issue #96 and Nicolai-Electronics/tanmatsu-
+     * launcher's own app_main() for the pattern this follows: bring the
+     * display up as close to the start of boot as its own dependencies
+     * allow, so every later step (mounting storage, the C6 flash+WiFi
+     * bring-up, which can run for several seconds) has a real screen to
+     * show progress on via boot_progress() below, instead of leaving the
+     * panel in whatever undefined state the bootloader left it in for that
+     * whole window. Checked before moving: neither st7703_create() nor
+     * tca8418_keyboard_create() looks up another device or touches NVS/the
+     * default event loop, so this is a pure reorder, not a behavior change
+     * for either driver. compositor_init() only needs PANEL0/KEYBOARD0
+     * (both registered immediately above it), and its own render path
+     * can't touch the panel until a window exists -- gated on a non-empty
+     * window_stack in compositor.c -- which won't happen until run_init()
+     * (the last thing app_main() calls) spawns the launcher app. That's
+     * also why calling boot_progress() below (a direct, compositor-
+     * bypassing panel write -- see boot_progress.c) is safe: nothing else
+     * is touching the panel during this whole window. */
+    if (!device_register("PANEL0", st7703_create())) {
+        ESP_LOGE(TAG, "Failed to initialize PANEL0 driver");
+        invalidate_ota_partition();
+    }
+
+    if (!device_register("KEYBOARD0", tca8418_keyboard_create())) {
+        ESP_LOGE(TAG, "Failed to initialize KEYBOARD0 driver");
+        invalidate_ota_partition();
+    }
+
+    if (!compositor_init("PANEL0", "KEYBOARD0")) {
+        ESP_LOGE(TAG, "Failed to initialize compositor");
+        invalidate_ota_partition();
+    }
+
+    boot_progress("Mounting storage...");
+
     /* FLASH0 is mounted through usb_msc.c's esp_tinyusb-managed path, not
      * fatfs_create_spi() directly, so USB mass-storage mode can later hand
      * this same mount off to a USB host without a second, competing FAT
@@ -141,6 +178,8 @@ int app_main(void) {
     // Allowed to fail
     device_register("SD0", fatfs_create_sd("SD0", true));
 
+    boot_progress("Scanning apps...");
+
     if (device_get("SD0")) {
         logical_name_set("STORAGE:", "SD0:, FLASH0:", false);
         logical_name_set("APPS:", "SD0:[BADGEVMS.APPS], FLASH0:[BADGEVMS.APPS]", false);
@@ -150,6 +189,8 @@ int app_main(void) {
         logical_name_set("APPS:", "FLASH0:[BADGEVMS.APPS]", false);
         application_init("APPS:", NULL, "FLASH0:[BADGEVMS.APPS]");
     }
+
+    boot_progress("Starting WiFi + C6 co-processor...");
 
     if (!device_register("WIFI0", wifi_create())) {
         ESP_LOGE(TAG, "Failed to initialize WIFI0 driver");
@@ -161,15 +202,7 @@ int app_main(void) {
         invalidate_ota_partition();
     }
 
-    if (!device_register("PANEL0", st7703_create())) {
-        ESP_LOGE(TAG, "Failed to initialize PANEL0 driver");
-        invalidate_ota_partition();
-    }
-
-    if (!device_register("KEYBOARD0", tca8418_keyboard_create())) {
-        ESP_LOGE(TAG, "Failed to initialize KEYBOARD0 driver");
-        invalidate_ota_partition();
-    }
+    boot_progress("Starting input + sensors...");
 
     if (!device_register("TT01", tty_create(true, true))) {
         ESP_LOGE(TAG, "Failed to initialize TT01 driver");
@@ -210,11 +243,6 @@ int app_main(void) {
         // invalidate_ota_partition();
     }
 
-    if (!compositor_init("PANEL0", "KEYBOARD0")) {
-        ESP_LOGE(TAG, "Failed to initialize compositor");
-        invalidate_ota_partition();
-    }
-
     logical_name_set("SEARCH", "FLASH0:[SUBDIR], FLASH0:[SUBDIR.ANOTHER]", false);
 
     /* CJ-PATCH: start UART deploy protocol listener (Phase A: echo stub).
@@ -234,27 +262,19 @@ int app_main(void) {
         ESP_LOGW(TAG, "usb_device_init failed (non-fatal)");
     }
 
-    /* CJ-DEBUG task #115: the ESP_LOGE/printf lines that used to sit here
-     * (and throughout run_init()) NEVER reached the serial capture on
-     * hardware, despite run_init()'s observable effects (apps launching)
-     * clearly happening -- while esp_rom_printf() elsewhere in this codebase
-     * (task.c's exception handler) reliably does. Switching to
-     * esp_rom_printf() here is a differential test: a direct ROM-level UART
-     * write, bypassing the ESP-IDF log/stdio buffering layers entirely, to
-     * see whether THAT shows up where the normal calls didn't. */
-    esp_rom_printf("CJ-DEBUG115: DutchVMS is ready\n");
+    boot_progress("Starting DutchVMS...");
+
     free_ram = heap_caps_get_free_size(MALLOC_CAP_DEFAULT);
-    esp_rom_printf(
-        "CJ-DEBUG115: Free main memory: %d, free PSRAM pages: %d/%d, running processes %u\n",
+    ESP_LOGI(
+        TAG,
+        "DutchVMS is ready. Free main memory: %d, free PSRAM pages: %d/%d, running processes %u",
         (int)free_ram,
         (int)get_free_psram_pages(),
         (int)get_total_psram_pages(),
         get_num_tasks()
     );
 
-    esp_rom_printf("CJ-DEBUG115: about to call run_init()\n");
     run_init();
-    esp_rom_printf("CJ-DEBUG115: run_init() returned (should never happen in normal operation)\n");
 
     ESP_LOGE(TAG, "Killed init, rebooting");
     esp_restart();
