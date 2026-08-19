@@ -123,16 +123,16 @@ bool usb_msc_init(char const *devname, wl_handle_t *out_wl_handle) {
  * never run against the same live mount at once. Keep these constants in
  * sync with fatfs.c's SD_ and SDCARD_ defines if the board's SD wiring
  * ever changes -- see fatfs.c's own copy of this comment. */
-#define SD_MSC_DATA0_GPIO 39
-#define SD_MSC_DATA1_GPIO 40
-#define SD_MSC_DATA2_GPIO 41
-#define SD_MSC_DATA3_GPIO 42
-#define SD_MSC_CLK_GPIO   43
-#define SD_MSC_CMD_GPIO   44
+#define SD_MSC_DATA0_GPIO         39
+#define SD_MSC_DATA1_GPIO         40
+#define SD_MSC_DATA2_GPIO         41
+#define SD_MSC_DATA3_GPIO         42
+#define SD_MSC_CLK_GPIO           43
+#define SD_MSC_CMD_GPIO           44
 #define SD_MSC_PWR_CTRL_LDO_IO_ID 4
 
-static sdmmc_card_t               *sd_card_handle     = NULL;
-static sd_pwr_ctrl_handle_t        sd_pwr_ctrl_handle  = NULL;
+static sdmmc_card_t                *sd_card_handle     = NULL;
+static sd_pwr_ctrl_handle_t         sd_pwr_ctrl_handle = NULL;
 static tinyusb_msc_storage_handle_t sd_msc_handle      = NULL;
 static char                         sd_msc_base_path[16];
 
@@ -161,9 +161,9 @@ bool usb_msc_init_sd(char const *devname, sdmmc_card_t **out_card) {
     }
 
     sdmmc_slot_config_t slot_config = SDMMC_SLOT_CONFIG_DEFAULT();
-    slot_config.gpio_cd = SDMMC_SLOT_NO_CD;
-    slot_config.gpio_wp = SDMMC_SLOT_NO_WP;
-    slot_config.width   = 4;
+    slot_config.gpio_cd             = SDMMC_SLOT_NO_CD;
+    slot_config.gpio_wp             = SDMMC_SLOT_NO_WP;
+    slot_config.width               = 4;
 #ifdef CONFIG_SOC_SDMMC_USE_GPIO_MATRIX
     slot_config.clk = SD_MSC_CLK_GPIO;
     slot_config.cmd = SD_MSC_CMD_GPIO;
@@ -194,7 +194,7 @@ bool usb_msc_init_sd(char const *devname, sdmmc_card_t **out_card) {
     }
 
     tinyusb_msc_driver_config_t driver_cfg = {0};
-    err = tinyusb_msc_install_driver(&driver_cfg);
+    err                                    = tinyusb_msc_install_driver(&driver_cfg);
     // ESP_ERR_INVALID_STATE just means FLASH0's usb_msc_init() already
     // installed the (shared, driver-wide) MSC driver -- not an error here.
     if (err != ESP_OK && err != ESP_ERR_INVALID_STATE) {

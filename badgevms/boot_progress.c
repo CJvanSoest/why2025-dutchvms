@@ -35,7 +35,7 @@ static char const *TAG = "boot_progress";
  * (font.h) and draw_filled_rect_rotated() (pixel_functions.h) instead of
  * touching the shared, kernel-wide draw_text_rotated() other callers
  * still use at 1x. */
-#define BOOT_PROGRESS_SCALE 3
+#define BOOT_PROGRESS_SCALE      3
 #define BOOT_PROGRESS_COLOR_TEXT 0xFFFF /* white */
 
 /* v1: a single line, cleared and redrawn on every call, held up by a fixed
@@ -59,10 +59,10 @@ static char const *TAG = "boot_progress";
  * pacing (so 5 lines landing within the same 50ms on a fast boot don't
  * all slam onto screen in one frame), not a legibility mechanism -- safe
  * to trim or drop entirely without making anything harder to read. */
-#define BOOT_LOG_MAX_LINES  8
-#define BOOT_LOG_LEFT_X     40
-#define BOOT_LOG_LINE_H     (FONT_HEIGHT * BOOT_PROGRESS_SCALE + 14)
-#define BOOT_LOG_TOP_Y      ((FRAMEBUFFER_MAX_H - BOOT_LOG_MAX_LINES * BOOT_LOG_LINE_H) / 2)
+#define BOOT_LOG_MAX_LINES   8
+#define BOOT_LOG_LEFT_X      40
+#define BOOT_LOG_LINE_H      (FONT_HEIGHT * BOOT_PROGRESS_SCALE + 14)
+#define BOOT_LOG_TOP_Y       ((FRAMEBUFFER_MAX_H - BOOT_LOG_MAX_LINES * BOOT_LOG_LINE_H) / 2)
 #define BOOT_LOG_MIN_STEP_MS 150
 
 static int boot_log_next_line = 0;
